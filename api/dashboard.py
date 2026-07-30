@@ -48,6 +48,9 @@ SQUAD_DISPLAY = {"mgm": "Olympus", "elite": "Elite", "sniper": "Sniper"}
 SQUADS_FINANCEIROS = ["mgm", "elite"]     # closers (valor em R$)
 SQUAD_SDR = "sniper"                       # reuniões
 
+# Pessoas que nunca devem contar, mesmo que apareçam em alguma base (divergência de cadastro etc.)
+EXCLUSOES_FIXAS = {"priscila ribeiro"}
+
 # GM: vendas dela são redistribuídas por funil (pipeline) pro squad correspondente
 GM_NOME_NORMALIZADO = None  # preencher com norm("Nome da GM") — ver README
 FUNIL_PARA_SQUAD = {
@@ -218,6 +221,8 @@ def carregar_colaboradores(mes, ano):
 
     colaboradores = {}
     for nome, r in dedup.items():
+        if nome in EXCLUSOES_FIXAS:
+            continue
         status = norm(r.get(col_status, ""))
         if status != "ativo":
             continue
@@ -430,16 +435,22 @@ def squad_do_deal(deal, colaboradores, users_map):
 
 
 def buscar_activities(ano, mes):
+    """v2 não reconhece este filter_id ('Filter not found') — usamos v1, que funciona."""
     alvo = f"{ano:04d}-{mes:02d}"
-    todas = pd_v2_paginado("/activities", FILTER_ACTIVITIES)
+    todas = pd_v1_paginado("/activities", FILTER_ACTIVITIES)
     return [a for a in todas if (a.get("due_date") or "")[:7] == alvo]
 
 
-def extrair_owner_id(deal):
-    v = deal.get("owner_id")
+def campo_owner_id(obj):
+    """Extrai o id do dono, cobrindo o formato v1 (user_id, às vezes dict) e v2 (owner_id, int)."""
+    v = obj.get("user_id", obj.get("owner_id"))
     if isinstance(v, dict):
         return v.get("value") or v.get("id")
     return v
+
+
+def extrair_owner_id(deal):
+    return campo_owner_id(deal)
 
 
 def montar_deals_rv_owner_map(deals_rv):
@@ -451,7 +462,7 @@ def reuniao_valida_sdr(atividade, deals_rv_owner_map):
     concluida = atividade.get("done") is True or atividade.get("status") == "done"
     if not concluida:
         return False
-    responsavel = atividade.get("owner_id")
+    responsavel = campo_owner_id(atividade)
     deal_id = atividade.get("deal_id")
     if deal_id:
         # deal precisa estar na whitelist (senão não dá pra saber o dono, e a regra exige RV)
@@ -559,7 +570,7 @@ def montar_painel():
 
     # ---- Sniper: reuniões ----
     activities = buscar_activities(ano, mes)
-    deals_rv = pd_v2_paginado("/deals", FILTER_DEALS_RV)
+    deals_rv = pd_v1_paginado("/deals", FILTER_DEALS_RV, extra_params={"status": "all_not_deleted"})
     deals_rv_owner_map = montar_deals_rv_owner_map(deals_rv)
 
     validadas_total = 0
@@ -570,7 +581,7 @@ def montar_painel():
         if not reuniao_valida_sdr(a, deals_rv_owner_map):
             continue
         # escopo só sniper: precisaria mapear owner->squad; aqui assume-se filtro já traz o universo certo
-        nome_resp = norm(users_map.get(a.get("owner_id"), ""))
+        nome_resp = norm(users_map.get(campo_owner_id(a), ""))
         if colaboradores.get(nome_resp, {}).get("subarea") != SQUAD_SDR:
             continue
         validadas_total += 1
