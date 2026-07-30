@@ -438,7 +438,8 @@ def buscar_activities(ano, mes):
     """v2 não reconhece este filter_id ('Filter not found') — usamos v1, que funciona."""
     alvo = f"{ano:04d}-{mes:02d}"
     todas = pd_v1_paginado("/activities", FILTER_ACTIVITIES)
-    return [a for a in todas if (a.get("due_date") or "")[:7] == alvo]
+    filtradas = [a for a in todas if (a.get("due_date") or "")[:7] == alvo]
+    return filtradas, len(todas)
 
 
 def campo_owner_id(obj):
@@ -569,7 +570,7 @@ def montar_painel():
     }
 
     # ---- Sniper: reuniões ----
-    activities = buscar_activities(ano, mes)
+    activities, total_bruto_activities = buscar_activities(ano, mes)
     deals_rv = pd_v1_paginado("/deals", FILTER_DEALS_RV, extra_params={"status": "all_not_deleted"})
     deals_rv_owner_map = montar_deals_rv_owner_map(deals_rv)
 
@@ -637,6 +638,7 @@ def montar_painel():
         "proximo_dia_util": prox_dia_util.isoformat(),
     }
     resultado["debug_sniper"] = {
+        "total_activities_bruto_sem_filtro_mes": total_bruto_activities,
         "total_activities_no_mes": len(activities),
         "concluidas": dbg_concluidas,
         "com_deal_id": dbg_com_deal,
