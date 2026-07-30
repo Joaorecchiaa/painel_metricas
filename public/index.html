@@ -109,22 +109,22 @@
         <th rowspan="2">Meta Dia</th>
         <th rowspan="2">Realizado Bruto</th>
         <th rowspan="2">Realizado Multiplicador</th>
-        <th rowspan="2">Deveria (100%)</th>
-        <th rowspan="2">Deveria (40%)</th>
+        <th rowspan="2">Deveria (100%) - MTD</th>
+        <th rowspan="2">Deveria (40%) - MTD</th>
         <th rowspan="2">Atingimento</th>
         <th rowspan="2">Gap 100%</th>
         <th rowspan="2">Gap 40%</th>
         <th rowspan="2">Meta/Dia 40%</th>
         <th rowspan="2">Meta/Dia 100%</th>
         <th rowspan="2">Meta/Dia 100% (Bruto)</th>
-        <th colspan="2" class="grupo-hoje grupo-inicio">Hoje</th>
         <th colspan="2" class="grupo-ontem grupo-inicio">Dia útil anterior</th>
+        <th colspan="2" class="grupo-hoje grupo-inicio">Hoje</th>
       </tr>
       <tr>
-        <th class="grupo-hoje grupo-inicio">Previsto</th>
-        <th class="grupo-hoje">Entrou</th>
         <th class="grupo-ontem grupo-inicio">Previsto</th>
         <th class="grupo-ontem">Entrou</th>
+        <th class="grupo-hoje grupo-inicio">Previsto</th>
+        <th class="grupo-hoje">Entrou</th>
       </tr>
     </thead>
     <tbody id="tabelaFinanceiro"></tbody>
@@ -140,8 +140,8 @@
         <th>Meta Mês</th>
         <th>Meta Dia</th>
         <th>Realizado</th>
-        <th>Deveria (100%)</th>
-        <th>Deveria (40%)</th>
+        <th>Deveria (100%) - MTD</th>
+        <th>Deveria (40%) - MTD</th>
         <th>Atingimento</th>
         <th>Gap 100%</th>
         <th>Gap 40%</th>
@@ -192,10 +192,10 @@ function linhaFinanceiro(nome, d, isTotal) {
       <td>${fmtMoeda(d.meta_dia_40)}</td>
       <td>${fmtMoeda(d.meta_dia_100)}</td>
       <td>${fmtMoeda(d.meta_dia_100_bruto)}</td>
-      <td class="grupo-hoje grupo-inicio">${fmtMoeda(d.previsto_hoje)}</td>
-      <td class="grupo-hoje">${fmtMoeda(d.hoje)}</td>
       <td class="grupo-ontem grupo-inicio">${fmtMoeda(d.previsto_ontem)}</td>
       <td class="grupo-ontem">${fmtMoeda(d.ontem)}</td>
+      <td class="grupo-hoje grupo-inicio">${fmtMoeda(d.previsto_hoje)}</td>
+      <td class="grupo-hoje">${fmtMoeda(d.hoje)}</td>
     </tr>`;
 }
 
