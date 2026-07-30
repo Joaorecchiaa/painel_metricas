@@ -80,6 +80,10 @@
   .pill.bad { background: #fee2e2; color: var(--bad); }
   #erro { color: var(--bad); font-size: 13px; margin-top: 20px; display: none; }
   .tabela-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
+  th.grupo-hoje, td.grupo-hoje { background: #eff6ff; }
+  th.grupo-ontem, td.grupo-ontem { background: #f9fafb; }
+  th.grupo-inicio, td.grupo-inicio { border-left: 2px solid var(--border); }
+  thead tr:first-child th { border-bottom: 1px solid var(--border); }
 </style>
 </head>
 <body>
@@ -100,23 +104,27 @@
   <table>
     <thead>
       <tr>
-        <th>Squad</th>
-        <th>Meta Mês</th>
-        <th>Meta Dia</th>
-        <th>Realizado Bruto</th>
-        <th>Realizado Multiplicador</th>
-        <th>Deveria (100%)</th>
-        <th>Deveria (40%)</th>
-        <th>Atingimento</th>
-        <th>Gap 100%</th>
-        <th>Gap 40%</th>
-        <th>Meta/Dia 40%</th>
-        <th>Meta/Dia 100%</th>
-        <th>Meta/Dia 100% (Bruto)</th>
-        <th>Previsto Hoje</th>
-        <th>Entrou Hoje</th>
-        <th>Previsto Ontem</th>
-        <th>Entrou Ontem</th>
+        <th rowspan="2">Squad</th>
+        <th rowspan="2">Meta Mês</th>
+        <th rowspan="2">Meta Dia</th>
+        <th rowspan="2">Realizado Bruto</th>
+        <th rowspan="2">Realizado Multiplicador</th>
+        <th rowspan="2">Deveria (100%)</th>
+        <th rowspan="2">Deveria (40%)</th>
+        <th rowspan="2">Atingimento</th>
+        <th rowspan="2">Gap 100%</th>
+        <th rowspan="2">Gap 40%</th>
+        <th rowspan="2">Meta/Dia 40%</th>
+        <th rowspan="2">Meta/Dia 100%</th>
+        <th rowspan="2">Meta/Dia 100% (Bruto)</th>
+        <th colspan="2" class="grupo-hoje grupo-inicio">Hoje</th>
+        <th colspan="2" class="grupo-ontem grupo-inicio">Dia útil anterior</th>
+      </tr>
+      <tr>
+        <th class="grupo-hoje grupo-inicio">Previsto</th>
+        <th class="grupo-hoje">Entrou</th>
+        <th class="grupo-ontem grupo-inicio">Previsto</th>
+        <th class="grupo-ontem">Entrou</th>
       </tr>
     </thead>
     <tbody id="tabelaFinanceiro"></tbody>
@@ -139,8 +147,8 @@
         <th>Gap 40%</th>
         <th>Meta/Dia 40%</th>
         <th>Meta/Dia 100%</th>
-        <th>Hoje</th>
-        <th>Dia útil anterior</th>
+        <th>Realizadas Hoje</th>
+        <th>Realizadas Ontem</th>
       </tr>
     </thead>
     <tbody id="tabelaSniper"></tbody>
@@ -184,10 +192,10 @@ function linhaFinanceiro(nome, d, isTotal) {
       <td>${fmtMoeda(d.meta_dia_40)}</td>
       <td>${fmtMoeda(d.meta_dia_100)}</td>
       <td>${fmtMoeda(d.meta_dia_100_bruto)}</td>
-      <td>${fmtMoeda(d.previsto_hoje)}</td>
-      <td>${fmtMoeda(d.hoje)}</td>
-      <td>${fmtMoeda(d.previsto_ontem)}</td>
-      <td>${fmtMoeda(d.ontem)}</td>
+      <td class="grupo-hoje grupo-inicio">${fmtMoeda(d.previsto_hoje)}</td>
+      <td class="grupo-hoje">${fmtMoeda(d.hoje)}</td>
+      <td class="grupo-ontem grupo-inicio">${fmtMoeda(d.previsto_ontem)}</td>
+      <td class="grupo-ontem">${fmtMoeda(d.ontem)}</td>
     </tr>`;
 }
 
