@@ -148,8 +148,8 @@
         <th>Gap 40%</th>
         <th>Meta/Dia 40%</th>
         <th>Meta/Dia 100%</th>
-        <th class="grupo-hoje grupo-inicio">Realizadas Hoje</th>
         <th class="grupo-ontem grupo-inicio">Realizadas Ontem</th>
+        <th class="grupo-hoje grupo-inicio">Realizadas Hoje</th>
       </tr>
     </thead>
     <tbody id="tabelaSniper"></tbody>
@@ -214,8 +214,8 @@ function linhaSniper(d) {
       <td>${fmtNum(d.gap_40)}</td>
       <td>${fmtNum(d.meta_dia_40)}</td>
       <td>${fmtNum(d.meta_dia_100)}</td>
-      <td class="grupo-hoje grupo-inicio">${d.reunioes_hoje}</td>
       <td class="grupo-ontem grupo-inicio">${d.dia_anterior_reunioes}</td>
+      <td class="grupo-hoje grupo-inicio">${d.reunioes_hoje}</td>
     </tr>`;
 }
 
