@@ -239,8 +239,8 @@ def carregar_metas(mes, ano):
             continue
         meta_reu = parse_num_br(r.get(col_reu, 0))
         meta_fin = parse_num_br(r.get(col_fin, 0))
-        if meta_fin == 0:
-            continue  # pessoa some do cálculo (regra confirmada)
+        if meta_fin == 0 and meta_reu == 0:
+            continue  # sem meta nenhuma no mês = pessoa some do cálculo
         papel = "closer" if meta_reu == 0 else "sdr"
         metas[nome] = {
             "meta_reu": meta_reu,
@@ -416,36 +416,35 @@ def squad_do_deal(deal, colaboradores, users_map):
 
 
 def buscar_activities(ano, mes):
-    itens, start = [], 0
     alvo = f"{ano:04d}-{mes:02d}"
-    while True:
-        params = {"api_token": PD_TOKEN, "filter_id": FILTER_ACTIVITIES, "limit": 500, "start": start}
-        # v2 usa cursor, mantemos v1-style aqui só se a conta ainda expuser; caso contrário trocar por pd_v2_paginado
-        try:
-            data = http_get_json(f"{V2_BASE}/activities?{urlencode({'filter_id': FILTER_ACTIVITIES, 'limit': 500})}",
-                                  headers={"x-api-token": PD_TOKEN})
-        except Exception:
-            data = {}
-        chunk = data.get("data") or []
-        itens.extend([a for a in chunk if (a.get("due_date") or "")[:7] == alvo])
-        cursor = (data.get("additional_data") or {}).get("next_cursor")
-        if not cursor:
-            break
-    return itens
+    todas = pd_v2_paginado("/activities", FILTER_ACTIVITIES)
+    return [a for a in todas if (a.get("due_date") or "")[:7] == alvo]
 
 
-def reuniao_valida_sdr(atividade, deals_rv_ids, users_map):
+def extrair_owner_id(deal):
+    v = deal.get("owner_id")
+    if isinstance(v, dict):
+        return v.get("value") or v.get("id")
+    return v
+
+
+def montar_deals_rv_owner_map(deals_rv):
+    """Mapa deal_id -> owner_id, só dos deals que estão na whitelist FILTER_DEALS_RV."""
+    return {d.get("id"): extrair_owner_id(d) for d in deals_rv}
+
+
+def reuniao_valida_sdr(atividade, deals_rv_owner_map):
     concluida = atividade.get("done") is True or atividade.get("status") == "done"
     if not concluida:
         return False
     responsavel = atividade.get("owner_id")
     deal_id = atividade.get("deal_id")
     if deal_id:
-        # dono do deal vinculado != responsável pela atividade
-        dono_deal = atividade.get("deal_owner_id") or responsavel
-        if dono_deal == responsavel:
+        # deal precisa estar na whitelist (senão não dá pra saber o dono, e a regra exige RV)
+        if deal_id not in deals_rv_owner_map:
             return False
-        if deal_id not in deals_rv_ids:
+        dono_deal = deals_rv_owner_map[deal_id]
+        if dono_deal == responsavel:
             return False
     return True
 
@@ -525,17 +524,36 @@ def montar_painel():
             "ontem": round(squads_fin[squad_interno]["ontem"], 2),
         }
 
+    total_meta_mes = sum(resultado["squads"][SQUAD_DISPLAY[s]]["meta_mes"] for s in SQUADS_FINANCEIROS)
+    total_bruto = sum(resultado["squads"][SQUAD_DISPLAY[s]]["realizado_bruto"] for s in SQUADS_FINANCEIROS)
+    total_multi = sum(resultado["squads"][SQUAD_DISPLAY[s]]["realizado_multiplicador"] for s in SQUADS_FINANCEIROS)
+    total_ontem = sum(resultado["squads"][SQUAD_DISPLAY[s]]["ontem"] for s in SQUADS_FINANCEIROS)
+    total_gap_40 = max(0.0, (PCT_GAP_INTERMEDIARIO * total_meta_mes) - total_multi)
+    resultado["squads"]["Total"] = {
+        "meta_mes": round(total_meta_mes, 2),
+        "meta_dia": round(safe_div(total_meta_mes, du["total"]), 2),
+        "realizado_bruto": round(total_bruto, 2),
+        "realizado_multiplicador": round(total_multi, 2),
+        "onde_deveria_100": round(total_meta_mes * ritmo_100, 2),
+        "onde_deveria_40": round((PCT_GAP_INTERMEDIARIO * total_meta_mes) * ritmo_prazo, 2),
+        "atingimento": round(safe_div(total_multi, total_meta_mes) * 100, 2),
+        "gap_100": round(max(0.0, total_meta_mes - total_multi), 2),
+        "gap_40": round(total_gap_40, 2),
+        "meta_dia_40": round(safe_div(total_gap_40, restantes_prazo), 2),
+        "ontem": round(total_ontem, 2),
+    }
+
     # ---- Sniper: reuniões ----
     activities = buscar_activities(ano, mes)
     deals_rv = pd_v2_paginado("/deals", FILTER_DEALS_RV)
-    deals_rv_ids = {d.get("id") for d in deals_rv}
+    deals_rv_owner_map = montar_deals_rv_owner_map(deals_rv)
 
     validadas_total = 0
     validadas_ontem = 0
     validadas_dia_anterior_util = 0
     d_ontem_util = dia_util_anterior(hoje, feriados)
     for a in activities:
-        if not reuniao_valida_sdr(a, deals_rv_ids, users_map):
+        if not reuniao_valida_sdr(a, deals_rv_owner_map):
             continue
         # escopo só sniper: precisaria mapear owner->squad; aqui assume-se filtro já traz o universo certo
         nome_resp = norm(users_map.get(a.get("owner_id"), ""))
