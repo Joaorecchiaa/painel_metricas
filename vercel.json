@@ -1,7 +1,7 @@
 {
   "functions": {
     "api/dashboard.py": {
-      "runtime": "@vercel/python@4.3.1"
+      "runtime": "python3.12"
     }
   },
   "rewrites": [
