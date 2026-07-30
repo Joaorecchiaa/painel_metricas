@@ -14,7 +14,8 @@
     --ok: #15803d;
     --warn: #b45309;
     --bad: #b91c1c;
-    --card-bg: #fafafa;
+    --head-bg: #f3f4f6;
+    --total-bg: #f9fafb;
   }
   * { box-sizing: border-box; }
   body {
@@ -33,6 +34,7 @@
     margin-bottom: 28px;
   }
   h1 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+  h2.titulo-tabela { font-size: 14px; font-weight: 600; margin: 32px 0 10px; color: var(--ink); }
   .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
   button#refresh {
     background: var(--accent);
@@ -45,40 +47,39 @@
   }
   button#refresh:disabled { opacity: 0.5; cursor: default; }
   .meta-info { font-size: 12px; color: var(--muted); text-align: right; margin-top: 6px; }
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 20px;
-  }
-  .card {
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 20px 22px;
-    background: var(--card-bg);
-  }
-  .card h2 { font-size: 15px; font-weight: 600; margin: 0 0 14px; }
-  .row {
-    display: flex;
-    justify-content: space-between;
-    padding: 6px 0;
+  table {
+    width: 100%;
+    border-collapse: collapse;
     font-size: 13px;
-    border-bottom: 1px solid var(--border);
   }
-  .row:last-child { border-bottom: none; }
-  .row .label { color: var(--muted); }
-  .row .value { font-weight: 500; font-variant-numeric: tabular-nums; }
+  th, td {
+    padding: 9px 12px;
+    text-align: right;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  th:first-child, td:first-child { text-align: left; }
+  thead th {
+    background: var(--head-bg);
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+  tr.total td { background: var(--total-bg); font-weight: 600; }
   .pill {
     display: inline-block;
     font-size: 11px;
     font-weight: 600;
     padding: 2px 8px;
     border-radius: 999px;
-    margin-left: 8px;
   }
   .pill.ok { background: #dcfce7; color: var(--ok); }
   .pill.warn { background: #fef3c7; color: var(--warn); }
   .pill.bad { background: #fee2e2; color: var(--bad); }
   #erro { color: var(--bad); font-size: 13px; margin-top: 20px; display: none; }
+  .tabela-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
 </style>
 </head>
 <body>
@@ -94,7 +95,51 @@
   </div>
 </header>
 
-<div class="grid" id="grid"></div>
+<h2 class="titulo-tabela">Financeiro — Olympus &amp; Elite</h2>
+<div class="tabela-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Squad</th>
+        <th>Meta Mês</th>
+        <th>Meta Dia</th>
+        <th>Realizado Bruto</th>
+        <th>Realizado Multiplicador</th>
+        <th>Deveria (100%)</th>
+        <th>Deveria (40%)</th>
+        <th>Atingimento</th>
+        <th>Gap 100%</th>
+        <th>Gap 40%</th>
+        <th>Meta/Dia 40%</th>
+        <th>Ontem</th>
+      </tr>
+    </thead>
+    <tbody id="tabelaFinanceiro"></tbody>
+  </table>
+</div>
+
+<h2 class="titulo-tabela">Sniper — SDR's (meta de reuniões)</h2>
+<div class="tabela-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Métrica</th>
+        <th>Meta Mês</th>
+        <th>Meta Dia</th>
+        <th>Realizado</th>
+        <th>Deveria (100%)</th>
+        <th>Deveria (40%)</th>
+        <th>Atingimento</th>
+        <th>Gap 100%</th>
+        <th>Gap 40%</th>
+        <th>Meta/Dia 40%</th>
+        <th>Dia útil anterior</th>
+      </tr>
+    </thead>
+    <tbody id="tabelaSniper"></tbody>
+  </table>
+</div>
+
 <div id="erro"></div>
 
 <script>
@@ -104,44 +149,51 @@ const INTERVALO_MS = 10 * 60 * 1000; // 10 minutos
 function fmtMoeda(v) {
   return (v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 }
-function fmtPct(v) {
-  return (v ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + "%";
+function fmtNum(v) {
+  return (v ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 });
 }
 function pillClasse(pct) {
   if (pct >= 100) return "ok";
   if (pct >= 70) return "warn";
   return "bad";
 }
-
-function cardFinanceiro(nome, d) {
-  return `
-    <div class="card">
-      <h2>${nome} <span class="pill ${pillClasse(d.atingimento)}">${fmtPct(d.atingimento)}</span></h2>
-      <div class="row"><span class="label">Meta do mês</span><span class="value">${fmtMoeda(d.meta_mes)}</span></div>
-      <div class="row"><span class="label">Realizado (multiplicador)</span><span class="value">${fmtMoeda(d.realizado_multiplicador)}</span></div>
-      <div class="row"><span class="label">Realizado (bruto)</span><span class="value">${fmtMoeda(d.realizado_bruto)}</span></div>
-      <div class="row"><span class="label">Onde deveríamos estar (100%)</span><span class="value">${fmtMoeda(d.onde_deveria_100)}</span></div>
-      <div class="row"><span class="label">Onde deveríamos estar (40%)</span><span class="value">${fmtMoeda(d.onde_deveria_40)}</span></div>
-      <div class="row"><span class="label">Gap p/ 100%</span><span class="value">${fmtMoeda(d.gap_100)}</span></div>
-      <div class="row"><span class="label">Gap p/ 40%</span><span class="value">${fmtMoeda(d.gap_40)}</span></div>
-      <div class="row"><span class="label">Meta/dia p/ 40%</span><span class="value">${fmtMoeda(d.meta_dia_40)}</span></div>
-      <div class="row"><span class="label">Ontem</span><span class="value">${fmtMoeda(d.ontem)}</span></div>
-    </div>`;
+function pill(pct) {
+  return `<span class="pill ${pillClasse(pct)}">${fmtNum(pct)}%</span>`;
 }
 
-function cardSniper(d) {
+function linhaFinanceiro(nome, d, isTotal) {
   return `
-    <div class="card">
-      <h2>Sniper (reuniões) <span class="pill ${pillClasse(d.atingimento)}">${fmtPct(d.atingimento)}</span></h2>
-      <div class="row"><span class="label">Meta do mês</span><span class="value">${d.meta_mes_reunioes}</span></div>
-      <div class="row"><span class="label">Realizado (validadas)</span><span class="value">${d.realizado_reunioes}</span></div>
-      <div class="row"><span class="label">Onde deveríamos estar (100%)</span><span class="value">${d.onde_deveria_100.toFixed(1)}</span></div>
-      <div class="row"><span class="label">Onde deveríamos estar (40%)</span><span class="value">${d.onde_deveria_40.toFixed(1)}</span></div>
-      <div class="row"><span class="label">Gap p/ 100%</span><span class="value">${d.gap_100.toFixed(1)}</span></div>
-      <div class="row"><span class="label">Gap p/ 40%</span><span class="value">${d.gap_40.toFixed(1)}</span></div>
-      <div class="row"><span class="label">Meta/dia p/ 40%</span><span class="value">${d.meta_dia_40.toFixed(1)}</span></div>
-      <div class="row"><span class="label">Dia útil anterior</span><span class="value">${d.dia_anterior_reunioes}</span></div>
-    </div>`;
+    <tr class="${isTotal ? 'total' : ''}">
+      <td>${nome}</td>
+      <td>${fmtMoeda(d.meta_mes)}</td>
+      <td>${fmtMoeda(d.meta_dia)}</td>
+      <td>${fmtMoeda(d.realizado_bruto)}</td>
+      <td>${fmtMoeda(d.realizado_multiplicador)}</td>
+      <td>${fmtMoeda(d.onde_deveria_100)}</td>
+      <td>${fmtMoeda(d.onde_deveria_40)}</td>
+      <td>${pill(d.atingimento)}</td>
+      <td>${fmtMoeda(d.gap_100)}</td>
+      <td>${fmtMoeda(d.gap_40)}</td>
+      <td>${fmtMoeda(d.meta_dia_40)}</td>
+      <td>${fmtMoeda(d.ontem)}</td>
+    </tr>`;
+}
+
+function linhaSniper(d) {
+  return `
+    <tr>
+      <td>Reuniões Validadas</td>
+      <td>${d.meta_mes_reunioes}</td>
+      <td>${fmtNum(d.meta_dia_reunioes)}</td>
+      <td>${d.realizado_reunioes}</td>
+      <td>${fmtNum(d.onde_deveria_100)}</td>
+      <td>${fmtNum(d.onde_deveria_40)}</td>
+      <td>${pill(d.atingimento)}</td>
+      <td>${fmtNum(d.gap_100)}</td>
+      <td>${fmtNum(d.gap_40)}</td>
+      <td>${fmtNum(d.meta_dia_40)}</td>
+      <td>${d.dia_anterior_reunioes}</td>
+    </tr>`;
 }
 
 async function atualizar() {
@@ -155,11 +207,12 @@ async function atualizar() {
     const data = await resp.json();
     if (data.erro) throw new Error(data.erro);
 
-    const grid = document.getElementById("grid");
-    grid.innerHTML =
-      cardFinanceiro("Olympus", data.squads.Olympus) +
-      cardFinanceiro("Elite", data.squads.Elite) +
-      cardSniper(data.squads.Sniper);
+    document.getElementById("tabelaFinanceiro").innerHTML =
+      linhaFinanceiro("Olympus", data.squads.Olympus, false) +
+      linhaFinanceiro("Elite", data.squads.Elite, false) +
+      linhaFinanceiro("Total Consolidado", data.squads.Total, true);
+
+    document.getElementById("tabelaSniper").innerHTML = linhaSniper(data.squads.Sniper);
 
     document.getElementById("ultimaAtualizacao").textContent =
       "Atualizado às " + new Date(data.geradoEm).toLocaleTimeString("pt-BR");
