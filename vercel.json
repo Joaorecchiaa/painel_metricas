@@ -1,9 +1,4 @@
 {
-  "functions": {
-    "api/dashboard.py": {
-      "runtime": "python3.12"
-    }
-  },
   "rewrites": [
     { "source": "/", "destination": "/public/index.html" }
   ]
