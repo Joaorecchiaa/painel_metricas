@@ -112,7 +112,11 @@
         <th>Gap 40%</th>
         <th>Meta/Dia 40%</th>
         <th>Meta/Dia 100%</th>
-        <th>Ontem</th>
+        <th>Meta/Dia 100% (Bruto)</th>
+        <th>Previsto Hoje</th>
+        <th>Entrou Hoje</th>
+        <th>Previsto Ontem</th>
+        <th>Entrou Ontem</th>
       </tr>
     </thead>
     <tbody id="tabelaFinanceiro"></tbody>
@@ -135,6 +139,7 @@
         <th>Gap 40%</th>
         <th>Meta/Dia 40%</th>
         <th>Meta/Dia 100%</th>
+        <th>Hoje</th>
         <th>Dia útil anterior</th>
       </tr>
     </thead>
@@ -178,6 +183,10 @@ function linhaFinanceiro(nome, d, isTotal) {
       <td>${fmtMoeda(d.gap_40)}</td>
       <td>${fmtMoeda(d.meta_dia_40)}</td>
       <td>${fmtMoeda(d.meta_dia_100)}</td>
+      <td>${fmtMoeda(d.meta_dia_100_bruto)}</td>
+      <td>${fmtMoeda(d.previsto_hoje)}</td>
+      <td>${fmtMoeda(d.hoje)}</td>
+      <td>${fmtMoeda(d.previsto_ontem)}</td>
       <td>${fmtMoeda(d.ontem)}</td>
     </tr>`;
 }
@@ -196,6 +205,7 @@ function linhaSniper(d) {
       <td>${fmtNum(d.gap_40)}</td>
       <td>${fmtNum(d.meta_dia_40)}</td>
       <td>${fmtNum(d.meta_dia_100)}</td>
+      <td>${d.reunioes_hoje}</td>
       <td>${d.dia_anterior_reunioes}</td>
     </tr>`;
 }
