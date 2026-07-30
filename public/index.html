@@ -23,40 +23,41 @@
     background: var(--bg);
     color: var(--ink);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-    padding: 32px 40px 60px;
+    padding: 20px 24px 30px;
   }
   header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
     border-bottom: 1px solid var(--border);
-    padding-bottom: 20px;
-    margin-bottom: 28px;
+    padding-bottom: 14px;
+    margin-bottom: 18px;
   }
-  h1 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
-  h2.titulo-tabela { font-size: 14px; font-weight: 600; margin: 32px 0 10px; color: var(--ink); }
-  .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  h1 { font-size: 18px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+  h2.titulo-tabela { font-size: 13px; font-weight: 600; margin: 18px 0 8px; color: var(--ink); }
+  .sub { color: var(--muted); font-size: 12px; margin-top: 4px; }
   button#refresh {
     background: var(--accent);
     color: #fff;
     border: none;
-    padding: 9px 16px;
+    padding: 8px 14px;
     border-radius: 6px;
-    font-size: 13px;
+    font-size: 12px;
     cursor: pointer;
   }
   button#refresh:disabled { opacity: 0.5; cursor: default; }
-  .meta-info { font-size: 12px; color: var(--muted); text-align: right; margin-top: 6px; }
+  .meta-info { font-size: 11px; color: var(--muted); text-align: right; margin-top: 5px; }
   table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 13px;
+    font-size: 11px;
+    table-layout: fixed;
   }
   th, td {
-    padding: 9px 12px;
+    padding: 5px 6px;
     text-align: right;
     border-bottom: 1px solid var(--border);
-    white-space: nowrap;
+    overflow-wrap: break-word;
   }
   th:first-child, td:first-child { text-align: left; }
   thead th {
@@ -70,16 +71,16 @@
   tr.total td { background: var(--total-bg); font-weight: 600; }
   .pill {
     display: inline-block;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 600;
-    padding: 2px 8px;
+    padding: 1px 6px;
     border-radius: 999px;
   }
   .pill.ok { background: #dcfce7; color: var(--ok); }
   .pill.warn { background: #fef3c7; color: var(--warn); }
   .pill.bad { background: #fee2e2; color: var(--bad); }
   #erro { color: var(--bad); font-size: 13px; margin-top: 20px; display: none; }
-  .tabela-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
+  .tabela-wrap { border: 1px solid var(--border); border-radius: 8px; }
   th.grupo-hoje, td.grupo-hoje { background: #eff6ff; }
   th.grupo-ontem, td.grupo-ontem { background: #f9fafb; }
   th.grupo-inicio, td.grupo-inicio { border-left: 2px solid var(--border); }
@@ -147,8 +148,8 @@
         <th>Gap 40%</th>
         <th>Meta/Dia 40%</th>
         <th>Meta/Dia 100%</th>
-        <th>Realizadas Hoje</th>
-        <th>Realizadas Ontem</th>
+        <th class="grupo-hoje grupo-inicio">Realizadas Hoje</th>
+        <th class="grupo-ontem grupo-inicio">Realizadas Ontem</th>
       </tr>
     </thead>
     <tbody id="tabelaSniper"></tbody>
@@ -213,8 +214,8 @@ function linhaSniper(d) {
       <td>${fmtNum(d.gap_40)}</td>
       <td>${fmtNum(d.meta_dia_40)}</td>
       <td>${fmtNum(d.meta_dia_100)}</td>
-      <td>${d.reunioes_hoje}</td>
-      <td>${d.dia_anterior_reunioes}</td>
+      <td class="grupo-hoje grupo-inicio">${d.reunioes_hoje}</td>
+      <td class="grupo-ontem grupo-inicio">${d.dia_anterior_reunioes}</td>
     </tr>`;
 }
 
