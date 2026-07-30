@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Acompanhamento de Meta — Julho 2026</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --ink: #1a1d21;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --accent: #111827;
+    --ok: #15803d;
+    --warn: #b45309;
+    --bad: #b91c1c;
+    --card-bg: #fafafa;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    padding: 32px 40px 60px;
+  }
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 20px;
+    margin-bottom: 28px;
+  }
+  h1 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  button#refresh {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    padding: 9px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  button#refresh:disabled { opacity: 0.5; cursor: default; }
+  .meta-info { font-size: 12px; color: var(--muted); text-align: right; margin-top: 6px; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+  }
+  .card {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 22px;
+    background: var(--card-bg);
+  }
+  .card h2 { font-size: 15px; font-weight: 600; margin: 0 0 14px; }
+  .row {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    font-size: 13px;
+    border-bottom: 1px solid var(--border);
+  }
+  .row:last-child { border-bottom: none; }
+  .row .label { color: var(--muted); }
+  .row .value { font-weight: 500; font-variant-numeric: tabular-nums; }
+  .pill {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    margin-left: 8px;
+  }
+  .pill.ok { background: #dcfce7; color: var(--ok); }
+  .pill.warn { background: #fef3c7; color: var(--warn); }
+  .pill.bad { background: #fee2e2; color: var(--bad); }
+  #erro { color: var(--bad); font-size: 13px; margin-top: 20px; display: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Acompanhamento de Meta — Julho 2026</h1>
+    <div class="sub">Board Academy · Squads Olympus, Elite e Sniper</div>
+  </div>
+  <div>
+    <button id="refresh" onclick="atualizar()">Atualizar painel</button>
+    <div class="meta-info" id="ultimaAtualizacao">—</div>
+  </div>
+</header>
+
+<div class="grid" id="grid"></div>
+<div id="erro"></div>
+
+<script>
+const API_URL = "/api/dashboard";
+const INTERVALO_MS = 10 * 60 * 1000; // 10 minutos
+
+function fmtMoeda(v) {
+  return (v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+}
+function fmtPct(v) {
+  return (v ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + "%";
+}
+function pillClasse(pct) {
+  if (pct >= 100) return "ok";
+  if (pct >= 70) return "warn";
+  return "bad";
+}
+
+function cardFinanceiro(nome, d) {
+  return `
+    <div class="card">
+      <h2>${nome} <span class="pill ${pillClasse(d.atingimento)}">${fmtPct(d.atingimento)}</span></h2>
+      <div class="row"><span class="label">Meta do mês</span><span class="value">${fmtMoeda(d.meta_mes)}</span></div>
+      <div class="row"><span class="label">Realizado (multiplicador)</span><span class="value">${fmtMoeda(d.realizado_multiplicador)}</span></div>
+      <div class="row"><span class="label">Realizado (bruto)</span><span class="value">${fmtMoeda(d.realizado_bruto)}</span></div>
+      <div class="row"><span class="label">Onde deveríamos estar (100%)</span><span class="value">${fmtMoeda(d.onde_deveria_100)}</span></div>
+      <div class="row"><span class="label">Onde deveríamos estar (40%)</span><span class="value">${fmtMoeda(d.onde_deveria_40)}</span></div>
+      <div class="row"><span class="label">Gap p/ 100%</span><span class="value">${fmtMoeda(d.gap_100)}</span></div>
+      <div class="row"><span class="label">Gap p/ 40%</span><span class="value">${fmtMoeda(d.gap_40)}</span></div>
+      <div class="row"><span class="label">Meta/dia p/ 40%</span><span class="value">${fmtMoeda(d.meta_dia_40)}</span></div>
+      <div class="row"><span class="label">Ontem</span><span class="value">${fmtMoeda(d.ontem)}</span></div>
+    </div>`;
+}
+
+function cardSniper(d) {
+  return `
+    <div class="card">
+      <h2>Sniper (reuniões) <span class="pill ${pillClasse(d.atingimento)}">${fmtPct(d.atingimento)}</span></h2>
+      <div class="row"><span class="label">Meta do mês</span><span class="value">${d.meta_mes_reunioes}</span></div>
+      <div class="row"><span class="label">Realizado (validadas)</span><span class="value">${d.realizado_reunioes}</span></div>
+      <div class="row"><span class="label">Onde deveríamos estar (100%)</span><span class="value">${d.onde_deveria_100.toFixed(1)}</span></div>
+      <div class="row"><span class="label">Onde deveríamos estar (40%)</span><span class="value">${d.onde_deveria_40.toFixed(1)}</span></div>
+      <div class="row"><span class="label">Gap p/ 100%</span><span class="value">${d.gap_100.toFixed(1)}</span></div>
+      <div class="row"><span class="label">Gap p/ 40%</span><span class="value">${d.gap_40.toFixed(1)}</span></div>
+      <div class="row"><span class="label">Meta/dia p/ 40%</span><span class="value">${d.meta_dia_40.toFixed(1)}</span></div>
+      <div class="row"><span class="label">Dia útil anterior</span><span class="value">${d.dia_anterior_reunioes}</span></div>
+    </div>`;
+}
+
+async function atualizar() {
+  const btn = document.getElementById("refresh");
+  const erroBox = document.getElementById("erro");
+  btn.disabled = true;
+  btn.textContent = "Atualizando...";
+  erroBox.style.display = "none";
+  try {
+    const resp = await fetch(API_URL, { cache: "no-store" });
+    const data = await resp.json();
+    if (data.erro) throw new Error(data.erro);
+
+    const grid = document.getElementById("grid");
+    grid.innerHTML =
+      cardFinanceiro("Olympus", data.squads.Olympus) +
+      cardFinanceiro("Elite", data.squads.Elite) +
+      cardSniper(data.squads.Sniper);
+
+    document.getElementById("ultimaAtualizacao").textContent =
+      "Atualizado às " + new Date(data.geradoEm).toLocaleTimeString("pt-BR");
+  } catch (e) {
+    erroBox.textContent = "Erro ao atualizar: " + e.message;
+    erroBox.style.display = "block";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Atualizar painel";
+  }
+}
+
+atualizar();
+setInterval(atualizar, INTERVALO_MS);
+</script>
+
+</body>
+</html>

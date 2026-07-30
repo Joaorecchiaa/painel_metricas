@@ -1,0 +1,600 @@
+"""
+Acompanhamento de Meta — Julho/2026 (Olympus/MGM, Elite, Sniper)
+Backend serverless (Vercel) — busca Pipedrive + Google Sheets e calcula
+tudo que a planilha "Acompanhamento_Meta_Julho2026_V1.xlsx" fazia via fórmula.
+
+Fontes:
+- Pipedrive API v1 (deals ganhos) e v2 (forecast aberto, activities)
+- Google Sheets publicados em CSV: COLAB, METAS, FERIADOS
+
+Sem cache: cada chamada refaz tudo (decisão do time, ver /areas/acompanhamento-meta-dashboard.md).
+"""
+
+import os
+import csv
+import io
+import json
+import unicodedata
+import datetime as dt
+from http.server import BaseHTTPRequestHandler
+from urllib.request import Request, urlopen
+from urllib.parse import urlencode
+
+# ---------------------------------------------------------------------------
+# CONFIG
+# ---------------------------------------------------------------------------
+
+PD_DOMAIN = "boardacademy.pipedrive.com"
+PD_TOKEN = os.environ.get("PIPEDRIVE_API_TOKEN", "")
+
+V1_BASE = f"https://{PD_DOMAIN}/api/v1"
+V2_BASE = f"https://{PD_DOMAIN}/api/v2"
+
+FILTER_DEALS = 74674          # vendas ganhas
+FILTER_DEALS_RV = 1431880     # deals com reunião válida (whitelist SDR)
+FILTER_ACTIVITIES = 1310451   # atividades / reuniões
+FILTER_FORECAST = 1490240     # pipeline aberto (forecast)
+FILTER_REFERIDOS = 1562285    # indicações (não usado neste painel por ora)
+
+CF_MULTIPLICADOR = "7e0e43c2734751f77be292a72527f638a850ad50"
+CF_QUALIFICADOR = "a6f13cc27c8d041f3af4091283ce0d4fe0913875"
+
+SHEET_COLAB = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=1782440078&single=true&output=csv"
+SHEET_METAS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=0&single=true&output=csv"
+SHEET_FERIADOS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=1010928978&single=true&output=csv"
+
+# Mapa interno -> exibição. Chave interna "mgm" (funis Olympus + Navigator) exibe como "Olympus".
+SQUAD_DISPLAY = {"mgm": "Olympus", "elite": "Elite", "sniper": "Sniper"}
+SQUADS_FINANCEIROS = ["mgm", "elite"]     # closers (valor em R$)
+SQUAD_SDR = "sniper"                       # reuniões
+
+# GM: vendas dela são redistribuídas por funil (pipeline) pro squad correspondente
+GM_NOME_NORMALIZADO = None  # preencher com norm("Nome da GM") — ver README
+FUNIL_PARA_SQUAD = {
+    "elite": "elite",
+    "sniper": "sniper",
+    "olympus": "mgm",
+    "mgm": "mgm",
+    "navigator": "mgm",
+}
+
+# ⚠️ Parâmetros que NÃO vêm de nenhuma das 3 abas do Sheets (COLAB/METAS/FERIADOS):
+# percentual do "gap intermediário" e a data-prazo (ex.: 40% até 16/07/2026).
+# Por ora como constantes — mover pro Sheets se o time preferir editar sem deploy.
+PCT_GAP_INTERMEDIARIO = 0.40
+PRAZO_GAP_INTERMEDIARIO = dt.date(2026, 7, 16)
+
+TZ_OFFSET_HORAS = 3  # Pipedrive retorna UTC; BRT = UTC - 3h (sem horário de verão)
+
+
+# ---------------------------------------------------------------------------
+# UTILS
+# ---------------------------------------------------------------------------
+
+def norm(s):
+    if s is None:
+        return ""
+    s = str(s).strip().lower()
+    s = unicodedata.normalize("NFD", s).encode("ascii", "ignore").decode()
+    return s
+
+
+def parse_num_br(v):
+    if v is None:
+        return 0.0
+    s = str(v).strip()
+    if s == "":
+        return 0.0
+    s = s.replace("R$", "").strip()
+    s = s.replace(".", "").replace(",", ".")
+    try:
+        return float(s)
+    except ValueError:
+        return 0.0
+
+
+def safe_div(a, b):
+    try:
+        if b == 0:
+            return 0.0
+        v = a / b
+        if v != v or v in (float("inf"), float("-inf")):  # NaN/Inf
+            return 0.0
+        return round(v, 4)
+    except Exception:
+        return 0.0
+
+
+def to_brt(iso_ts):
+    """Pipedrive timestamp (UTC) -> datetime BRT (subtrai 3h fixas)."""
+    if not iso_ts:
+        return None
+    ts = iso_ts.replace("Z", "")
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            d = dt.datetime.strptime(ts[:19], fmt)
+            return d - dt.timedelta(hours=TZ_OFFSET_HORAS)
+        except ValueError:
+            continue
+    return None
+
+
+def http_get_json(url, headers=None):
+    req = Request(url, headers=headers or {})
+    with urlopen(req, timeout=25) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def http_get_text(url):
+    req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urlopen(req, timeout=25) as resp:
+        return resp.read().decode("utf-8")
+
+
+def find_col(fieldnames, exact=None, contains=None, contains_all=None):
+    norm_map = {norm(f): f for f in fieldnames}
+    if exact:
+        return norm_map.get(norm(exact))
+    if contains:
+        for nf, orig in norm_map.items():
+            if contains in nf:
+                return orig
+    if contains_all:
+        for nf, orig in norm_map.items():
+            if all(c in nf for c in contains_all):
+                return orig
+    return None
+
+
+# ---------------------------------------------------------------------------
+# GOOGLE SHEETS
+# ---------------------------------------------------------------------------
+
+def read_csv(url):
+    text = http_get_text(url)
+    return list(csv.DictReader(io.StringIO(text)))
+
+
+def carregar_feriados():
+    rows = read_csv(SHEET_FERIADOS)
+    if not rows:
+        return set()
+    first_key = list(rows[0].keys())[0]
+    feriados = set()
+    for r in rows:
+        raw = (r.get(first_key) or "").strip()
+        if not raw:
+            continue
+        for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%m/%d/%Y"):
+            try:
+                feriados.add(dt.datetime.strptime(raw, fmt).date())
+                break
+            except ValueError:
+                continue
+    return feriados
+
+
+def carregar_colaboradores(mes, ano):
+    rows = read_csv(SHEET_COLAB)
+    if not rows:
+        return {}
+    fields = rows[0].keys()
+    col_nome = find_col(fields, exact="nome")
+    col_subarea = find_col(fields, exact="subarea")
+    col_status = find_col(fields, contains="status")
+    col_head = find_col(fields, contains="head")
+    col_lider = find_col(fields, contains_all=["lider", "team"])
+    col_mes_ref = find_col(fields, contains_all=["mes", "ref"])
+    col_ano_ref = find_col(fields, contains_all=["ano", "ref"])
+
+    def filtra_mes(data):
+        if not (col_mes_ref and col_ano_ref):
+            return data
+        out = [r for r in data if str(r.get(col_mes_ref, "")).strip() == str(mes)
+               and str(r.get(col_ano_ref, "")).strip() == str(ano)]
+        return out if out else data  # fallback silencioso (igual ao sistema grande)
+
+    filtrado = filtra_mes(rows)
+
+    dedup = {}
+    for r in filtrado:
+        nome = norm(r.get(col_nome, ""))
+        if nome and nome not in dedup:
+            dedup[nome] = r
+
+    colaboradores = {}
+    for nome, r in dedup.items():
+        status = norm(r.get(col_status, ""))
+        if status != "ativo":
+            continue
+        colaboradores[nome] = {
+            "nome_exibicao": r.get(col_nome, ""),
+            "subarea": norm(r.get(col_subarea, "")),
+            "head": norm(r.get(col_head, "")) if col_head else "",
+            "lider": norm(r.get(col_lider, "")) if col_lider else "",
+        }
+    return colaboradores
+
+
+def carregar_metas(mes, ano):
+    rows = read_csv(SHEET_METAS)
+    if not rows:
+        return {}
+    fields = rows[0].keys()
+    col_ano = find_col(fields, exact="ano")
+    col_mes = find_col(fields, exact="mes")
+    col_nome = find_col(fields, exact="nome")
+    col_reu = find_col(fields, contains_all=["reuni", "meta"])
+    col_fin = find_col(fields, contains="financ")
+    col_util = find_col(fields, contains="util")
+
+    metas = {}
+    for r in rows:
+        if str(r.get(col_ano, "")).strip() != str(ano):
+            continue
+        if str(r.get(col_mes, "")).strip() != str(mes):
+            continue
+        nome = norm(r.get(col_nome, ""))
+        if not nome:
+            continue
+        meta_reu = parse_num_br(r.get(col_reu, 0))
+        meta_fin = parse_num_br(r.get(col_fin, 0))
+        if meta_fin == 0:
+            continue  # pessoa some do cálculo (regra confirmada)
+        papel = "closer" if meta_reu == 0 else "sdr"
+        metas[nome] = {
+            "meta_reu": meta_reu,
+            "meta_fin": meta_fin,
+            "dias_uteis_override": parse_num_br(r.get(col_util, 0)) if col_util else 0,
+            "papel": papel,
+        }
+    return metas
+
+
+# ---------------------------------------------------------------------------
+# DIAS ÚTEIS
+# ---------------------------------------------------------------------------
+
+def eh_dia_util(d, feriados):
+    return d.weekday() < 5 and d not in feriados
+
+
+def dias_uteis_mes(ano, mes, feriados):
+    primeiro = dt.date(ano, mes, 1)
+    if mes == 12:
+        ultimo = dt.date(ano, 12, 31)
+    else:
+        ultimo = dt.date(ano, mes + 1, 1) - dt.timedelta(days=1)
+    d, total = primeiro, 0
+    while d <= ultimo:
+        if eh_dia_util(d, feriados):
+            total += 1
+        d += dt.timedelta(days=1)
+    return total, ultimo
+
+
+def calcular_dias_uteis(ano, mes, feriados, hoje=None):
+    hoje = hoje or dt.date.today()
+    total, ultimo_dia = dias_uteis_mes(ano, mes, feriados)
+
+    if (ano, mes) < (hoje.year, hoje.month):
+        return {"total": total, "passados": total, "restantes": 0}
+
+    limite = min(hoje.day, ultimo_dia.day) if (ano, mes) == (hoje.year, hoje.month) else 0
+    d, passados = dt.date(ano, mes, 1), 0
+    while d.day <= limite:
+        if eh_dia_util(d, feriados):
+            passados += 1
+        if d == ultimo_dia:
+            break
+        d += dt.timedelta(days=1)
+    passados = max(passados, 1)  # piso de 1 (nunca zero)
+
+    restantes = 0
+    d = dt.date(ano, mes, limite + 1) if limite < ultimo_dia.day else None
+    while d and d <= ultimo_dia:
+        if eh_dia_util(d, feriados):
+            restantes += 1
+        d += dt.timedelta(days=1)
+
+    return {"total": total, "passados": passados, "restantes": restantes}
+
+
+def proximo_dia_util(a_partir_de, feriados):
+    d = a_partir_de + dt.timedelta(days=1)
+    while not eh_dia_util(d, feriados):
+        d += dt.timedelta(days=1)
+    return d
+
+
+def dia_util_anterior(a_partir_de, feriados):
+    d = a_partir_de - dt.timedelta(days=1)
+    while not eh_dia_util(d, feriados):
+        d -= dt.timedelta(days=1)
+    return d
+
+
+# ---------------------------------------------------------------------------
+# PIPEDRIVE
+# ---------------------------------------------------------------------------
+
+def pd_v1_paginado(path, filter_id, extra_params=None):
+    itens, start = [], 0
+    while True:
+        params = {"api_token": PD_TOKEN, "filter_id": filter_id, "limit": 500, "start": start}
+        params.update(extra_params or {})
+        data = http_get_json(f"{V1_BASE}{path}?{urlencode(params)}")
+        chunk = data.get("data") or []
+        itens.extend(chunk)
+        pag = (data.get("additional_data") or {}).get("pagination") or {}
+        if not pag.get("more_items_in_collection"):
+            break
+        start = pag.get("next_start", start + 500)
+    return itens
+
+
+def pd_v2_paginado(path, filter_id, extra_params=None):
+    itens, cursor = [], None
+    while True:
+        params = {"filter_id": filter_id, "limit": 500}
+        if cursor:
+            params["cursor"] = cursor
+        params.update(extra_params or {})
+        headers = {"x-api-token": PD_TOKEN}
+        data = http_get_json(f"{V2_BASE}{path}?{urlencode(params)}", headers=headers)
+        itens.extend(data.get("data") or [])
+        cursor = (data.get("additional_data") or {}).get("next_cursor")
+        if not cursor:
+            break
+    return itens
+
+
+def pd_users():
+    data = http_get_json(f"{V1_BASE}/users?{urlencode({'api_token': PD_TOKEN})}")
+    return {u["id"]: u.get("name", "") for u in (data.get("data") or [])}
+
+
+def cf_valor(deal, hash_):
+    v = deal.get(hash_)
+    if isinstance(v, dict):
+        return v.get("value")
+    return v
+
+
+def owner_nome(deal, users_map):
+    owner = deal.get("user_id")
+    if isinstance(owner, dict):
+        return owner.get("name", "")
+    return users_map.get(owner, "")
+
+
+def buscar_deals_ganhos(ano, mes, users_map):
+    """FILTER_DEALS, status=won, sort won_time desc — filtra por mês (BRT) com corte na paginação."""
+    itens = []
+    start = 0
+    alvo = f"{ano:04d}-{mes:02d}"
+    while True:
+        params = {
+            "api_token": PD_TOKEN, "filter_id": FILTER_DEALS, "status": "won",
+            "sort": "won_time DESC", "limit": 500, "start": start,
+        }
+        data = http_get_json(f"{V1_BASE}/deals?{urlencode(params)}")
+        chunk = data.get("data") or []
+        parou = False
+        for deal in chunk:
+            won_brt = to_brt(deal.get("won_time"))
+            if not won_brt:
+                continue
+            chave_mes = won_brt.strftime("%Y-%m")
+            if chave_mes < alvo:
+                parou = True
+                break
+            if chave_mes == alvo:
+                itens.append(deal)
+        if parou:
+            break
+        pag = (data.get("additional_data") or {}).get("pagination") or {}
+        if not pag.get("more_items_in_collection"):
+            break
+        start = pag.get("next_start", start + 500)
+    return itens
+
+
+def squad_do_deal(deal, colaboradores, users_map):
+    """Retorna squad interno (mgm/elite/sniper/...) via dono normalizado, com exceção da GM."""
+    nome_dono = norm(owner_nome(deal, users_map))
+    if GM_NOME_NORMALIZADO and nome_dono == GM_NOME_NORMALIZADO:
+        funil = norm((deal.get("pipeline_name") or deal.get("pipeline_id") or ""))
+        return FUNIL_PARA_SQUAD.get(funil)
+    colaborador = colaboradores.get(nome_dono)
+    if not colaborador:
+        return None
+    subarea = colaborador["subarea"]
+    if subarea.startswith("lic"):
+        return None
+    return subarea
+
+
+def buscar_activities(ano, mes):
+    itens, start = [], 0
+    alvo = f"{ano:04d}-{mes:02d}"
+    while True:
+        params = {"api_token": PD_TOKEN, "filter_id": FILTER_ACTIVITIES, "limit": 500, "start": start}
+        # v2 usa cursor, mantemos v1-style aqui só se a conta ainda expuser; caso contrário trocar por pd_v2_paginado
+        try:
+            data = http_get_json(f"{V2_BASE}/activities?{urlencode({'filter_id': FILTER_ACTIVITIES, 'limit': 500})}",
+                                  headers={"x-api-token": PD_TOKEN})
+        except Exception:
+            data = {}
+        chunk = data.get("data") or []
+        itens.extend([a for a in chunk if (a.get("due_date") or "")[:7] == alvo])
+        cursor = (data.get("additional_data") or {}).get("next_cursor")
+        if not cursor:
+            break
+    return itens
+
+
+def reuniao_valida_sdr(atividade, deals_rv_ids, users_map):
+    concluida = atividade.get("done") is True or atividade.get("status") == "done"
+    if not concluida:
+        return False
+    responsavel = atividade.get("owner_id")
+    deal_id = atividade.get("deal_id")
+    if deal_id:
+        # dono do deal vinculado != responsável pela atividade
+        dono_deal = atividade.get("deal_owner_id") or responsavel
+        if dono_deal == responsavel:
+            return False
+        if deal_id not in deals_rv_ids:
+            return False
+    return True
+
+
+# ---------------------------------------------------------------------------
+# MONTAGEM DO PAINEL
+# ---------------------------------------------------------------------------
+
+def montar_painel():
+    hoje = dt.date.today()
+    ano, mes = hoje.year, hoje.month
+
+    feriados = carregar_feriados()
+    colaboradores = carregar_colaboradores(mes, ano)
+    metas = carregar_metas(mes, ano)
+    du = calcular_dias_uteis(ano, mes, feriados)
+
+    users_map = pd_users()
+    deals_ganhos = buscar_deals_ganhos(ano, mes, users_map)
+
+    ontem = dia_util_anterior(hoje, feriados)
+    prox_dia_util = proximo_dia_util(hoje, feriados)
+
+    # ---- Financeiro: Olympus (mgm) e Elite ----
+    squads_fin = {s: {"bruto": 0.0, "multi": 0.0, "ontem": 0.0} for s in SQUADS_FINANCEIROS}
+    for deal in deals_ganhos:
+        squad = squad_do_deal(deal, colaboradores, users_map)
+        if squad not in squads_fin:
+            continue
+        bruto = float(deal.get("value") or 0)
+        multi = float(cf_valor(deal, CF_MULTIPLICADOR) or 0)
+        squads_fin[squad]["bruto"] += bruto
+        squads_fin[squad]["multi"] += multi
+        won_brt = to_brt(deal.get("won_time"))
+        if won_brt and won_brt.date() == ontem:
+            squads_fin[squad]["ontem"] += multi
+
+    def meta_squad(squad_interno):
+        return sum(m["meta_fin"] for nome, m in metas.items()
+                   if colaboradores.get(nome, {}).get("subarea") == squad_interno)
+
+    ritmo_100 = safe_div(du["passados"], du["total"])
+    dias_ate_prazo = max((PRAZO_GAP_INTERMEDIARIO - hoje).days, 0) if PRAZO_GAP_INTERMEDIARIO >= hoje else 0
+    # dias úteis restantes até o prazo dos 40% (aprox. via feriados)
+    restantes_prazo = 0
+    d = hoje + dt.timedelta(days=1)
+    while d <= PRAZO_GAP_INTERMEDIARIO:
+        if eh_dia_util(d, feriados):
+            restantes_prazo += 1
+        d += dt.timedelta(days=1)
+    ritmo_prazo = safe_div(du["passados"], du["passados"] + restantes_prazo)
+
+    resultado = {"squads": {}, "geradoEm": dt.datetime.now().isoformat()}
+
+    for squad_interno in SQUADS_FINANCEIROS:
+        meta_mes = meta_squad(squad_interno)
+        meta_dia = safe_div(meta_mes, du["total"])
+        bruto = squads_fin[squad_interno]["bruto"]
+        multi = squads_fin[squad_interno]["multi"]
+        onde_100 = meta_mes * ritmo_100
+        onde_40 = (PCT_GAP_INTERMEDIARIO * meta_mes) * ritmo_prazo
+        gap_100 = max(0.0, meta_mes - multi)
+        gap_40 = max(0.0, (PCT_GAP_INTERMEDIARIO * meta_mes) - multi)
+        meta_dia_40 = safe_div(gap_40, restantes_prazo)
+
+        resultado["squads"][SQUAD_DISPLAY[squad_interno]] = {
+            "meta_mes": round(meta_mes, 2),
+            "meta_dia": round(meta_dia, 2),
+            "realizado_bruto": round(bruto, 2),
+            "realizado_multiplicador": round(multi, 2),
+            "onde_deveria_100": round(onde_100, 2),
+            "onde_deveria_40": round(onde_40, 2),
+            "atingimento": round(safe_div(multi, meta_mes) * 100, 2),
+            "gap_100": round(gap_100, 2),
+            "gap_40": round(gap_40, 2),
+            "meta_dia_40": round(meta_dia_40, 2),
+            "ontem": round(squads_fin[squad_interno]["ontem"], 2),
+        }
+
+    # ---- Sniper: reuniões ----
+    activities = buscar_activities(ano, mes)
+    deals_rv = pd_v2_paginado("/deals", FILTER_DEALS_RV)
+    deals_rv_ids = {d.get("id") for d in deals_rv}
+
+    validadas_total = 0
+    validadas_ontem = 0
+    validadas_dia_anterior_util = 0
+    d_ontem_util = dia_util_anterior(hoje, feriados)
+    for a in activities:
+        if not reuniao_valida_sdr(a, deals_rv_ids, users_map):
+            continue
+        # escopo só sniper: precisaria mapear owner->squad; aqui assume-se filtro já traz o universo certo
+        nome_resp = norm(users_map.get(a.get("owner_id"), ""))
+        if colaboradores.get(nome_resp, {}).get("subarea") != SQUAD_SDR:
+            continue
+        validadas_total += 1
+        due = a.get("due_date")
+        if due == hoje.isoformat():
+            pass
+        if due == d_ontem_util.isoformat():
+            validadas_dia_anterior_util += 1
+
+    meta_reunioes = sum(m["meta_reu"] for nome, m in metas.items()
+                         if colaboradores.get(nome, {}).get("subarea") == SQUAD_SDR)
+    meta_dia_reu = safe_div(meta_reunioes, du["total"])
+    onde_100_reu = meta_reunioes * ritmo_100
+    onde_40_reu = (PCT_GAP_INTERMEDIARIO * meta_reunioes) * ritmo_prazo
+    gap_100_reu = max(0.0, meta_reunioes - validadas_total)
+    gap_40_reu = max(0.0, (PCT_GAP_INTERMEDIARIO * meta_reunioes) - validadas_total)
+    meta_dia_40_reu = safe_div(gap_40_reu, restantes_prazo)
+
+    resultado["squads"]["Sniper"] = {
+        "meta_mes_reunioes": meta_reunioes,
+        "meta_dia_reunioes": round(meta_dia_reu, 2),
+        "realizado_reunioes": validadas_total,
+        "onde_deveria_100": round(onde_100_reu, 2),
+        "onde_deveria_40": round(onde_40_reu, 2),
+        "atingimento": round(safe_div(validadas_total, meta_reunioes) * 100, 2),
+        "gap_100": round(gap_100_reu, 2),
+        "gap_40": round(gap_40_reu, 2),
+        "meta_dia_40": round(meta_dia_40_reu, 2),
+        "dia_anterior_reunioes": validadas_dia_anterior_util,
+    }
+
+    resultado["premissas"] = {
+        "dias_uteis_total": du["total"],
+        "dias_uteis_passados": du["passados"],
+        "dias_uteis_restantes": du["restantes"],
+        "prazo_gap_intermediario": PRAZO_GAP_INTERMEDIARIO.isoformat(),
+        "percentual_gap_intermediario": PCT_GAP_INTERMEDIARIO,
+        "proximo_dia_util": prox_dia_util.isoformat(),
+    }
+    return resultado
+
+
+# ---------------------------------------------------------------------------
+# HANDLER (Vercel Python runtime)
+# ---------------------------------------------------------------------------
+
+class handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        try:
+            payload = montar_painel()
+            body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+        except Exception as e:
+            body = json.dumps({"erro": str(e)}, ensure_ascii=False).encode("utf-8")
+            self.send_response(500)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(body)

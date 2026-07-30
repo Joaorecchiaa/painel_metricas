@@ -1,0 +1,1 @@
+# Só biblioteca padrão do Python é usada (urllib, csv, json, datetime) — sem dependências externas.
