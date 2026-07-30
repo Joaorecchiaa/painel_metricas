@@ -544,6 +544,7 @@ def montar_painel():
         gap_100 = max(0.0, meta_mes - multi)
         gap_40 = max(0.0, (PCT_GAP_INTERMEDIARIO * meta_mes) - multi)
         meta_dia_40 = safe_div(gap_40, restantes_prazo)
+        meta_dia_100 = safe_div(gap_100, du["restantes"])  # gap / dias úteis restantes até o fim do mês
 
         resultado["squads"][SQUAD_DISPLAY[squad_interno]] = {
             "meta_mes": round(meta_mes, 2),
@@ -556,6 +557,7 @@ def montar_painel():
             "gap_100": round(gap_100, 2),
             "gap_40": round(gap_40, 2),
             "meta_dia_40": round(meta_dia_40, 2),
+            "meta_dia_100": round(meta_dia_100, 2),
             "ontem": round(squads_fin[squad_interno]["ontem"], 2),
         }
 
@@ -575,6 +577,7 @@ def montar_painel():
         "gap_100": round(max(0.0, total_meta_mes - total_multi), 2),
         "gap_40": round(total_gap_40, 2),
         "meta_dia_40": round(safe_div(total_gap_40, restantes_prazo), 2),
+        "meta_dia_100": round(safe_div(max(0.0, total_meta_mes - total_multi), du["restantes"]), 2),
         "ontem": round(total_ontem, 2),
     }
 
@@ -624,6 +627,7 @@ def montar_painel():
     gap_100_reu = max(0.0, meta_reunioes - validadas_total)
     gap_40_reu = max(0.0, (PCT_GAP_INTERMEDIARIO * meta_reunioes) - validadas_total)
     meta_dia_40_reu = safe_div(gap_40_reu, restantes_prazo)
+    meta_dia_100_reu = safe_div(gap_100_reu, du["restantes"])
 
     resultado["squads"]["Sniper"] = {
         "meta_mes_reunioes": meta_reunioes,
@@ -635,6 +639,7 @@ def montar_painel():
         "gap_100": round(gap_100_reu, 2),
         "gap_40": round(gap_40_reu, 2),
         "meta_dia_40": round(meta_dia_40_reu, 2),
+        "meta_dia_100": round(meta_dia_100_reu, 2),
         "dia_anterior_reunioes": validadas_dia_anterior_util,
     }
 
