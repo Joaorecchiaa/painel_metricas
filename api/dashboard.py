@@ -488,6 +488,36 @@ def reuniao_valida_sdr(atividade, deals_rv_owner_map):
 # MONTAGEM DO PAINEL
 # ---------------------------------------------------------------------------
 
+def buscar_forecast_deals():
+    """Pipeline aberto (FILTER_FORECAST) — v1."""
+    return pd_v1_paginado("/deals", FILTER_FORECAST)
+
+
+def valor_previsto_por_squad(pool, colaboradores, users_map, data_alvo):
+    """Soma o valor (bruto) dos negócios com expected_close_date == data_alvo
+    e probability em {20, 50, 70} (comparação exata), por squad financeiro."""
+    soma = {s: 0.0 for s in SQUADS_FINANCEIROS}
+    vistos = set()
+    alvo_iso = data_alvo.isoformat()
+    for d in pool:
+        did = d.get("id")
+        if did in vistos:
+            continue
+        vistos.add(did)
+        if (d.get("expected_close_date") or "")[:10] != alvo_iso:
+            continue
+        try:
+            prob = int(float(d.get("probability")))
+        except (TypeError, ValueError):
+            continue
+        if prob not in (20, 50, 70):
+            continue
+        squad = squad_do_deal(d, colaboradores, users_map)
+        if squad in soma:
+            soma[squad] += float(d.get("value") or 0)
+    return soma
+
+
 def montar_painel():
     hoje = dt.date.today()
     ano, mes = hoje.year, hoje.month
@@ -504,7 +534,7 @@ def montar_painel():
     prox_dia_util = proximo_dia_util(hoje, feriados)
 
     # ---- Financeiro: Olympus (mgm) e Elite ----
-    squads_fin = {s: {"bruto": 0.0, "multi": 0.0, "ontem": 0.0} for s in SQUADS_FINANCEIROS}
+    squads_fin = {s: {"bruto": 0.0, "multi": 0.0, "ontem": 0.0, "hoje": 0.0} for s in SQUADS_FINANCEIROS}
     for deal in deals_ganhos:
         squad = squad_do_deal(deal, colaboradores, users_map)
         if squad not in squads_fin:
@@ -516,6 +546,17 @@ def montar_painel():
         won_brt = to_brt(deal.get("won_time"))
         if won_brt and won_brt.date() == ontem:
             squads_fin[squad]["ontem"] += multi
+        if won_brt and won_brt.date() == hoje:
+            squads_fin[squad]["hoje"] += multi
+
+    # ---- Previsto (forecast) hoje/ontem ----
+    # Sem snapshot histórico: "previsto para ontem" olha o pipeline aberto de hoje
+    # + os negócios já ganhos este mês (cobre quem fechou); negócios perdidos com
+    # aquela data prevista não entram aqui (limitação conhecida, sem persistência).
+    forecast_abertos = buscar_forecast_deals()
+    pool_previsto = forecast_abertos + deals_ganhos
+    previsto_hoje = valor_previsto_por_squad(pool_previsto, colaboradores, users_map, hoje)
+    previsto_ontem = valor_previsto_por_squad(pool_previsto, colaboradores, users_map, ontem)
 
     def meta_squad(squad_interno):
         return sum(m["meta_fin"] for nome, m in metas.items()
@@ -545,6 +586,8 @@ def montar_painel():
         gap_40 = max(0.0, (PCT_GAP_INTERMEDIARIO * meta_mes) - multi)
         meta_dia_40 = safe_div(gap_40, restantes_prazo)
         meta_dia_100 = safe_div(gap_100, du["restantes"])  # gap / dias úteis restantes até o fim do mês
+        gap_100_bruto = max(0.0, meta_mes - bruto)
+        meta_dia_100_bruto = safe_div(gap_100_bruto, du["restantes"])
 
         resultado["squads"][SQUAD_DISPLAY[squad_interno]] = {
             "meta_mes": round(meta_mes, 2),
@@ -558,13 +601,21 @@ def montar_painel():
             "gap_40": round(gap_40, 2),
             "meta_dia_40": round(meta_dia_40, 2),
             "meta_dia_100": round(meta_dia_100, 2),
+            "gap_100_bruto": round(gap_100_bruto, 2),
+            "meta_dia_100_bruto": round(meta_dia_100_bruto, 2),
             "ontem": round(squads_fin[squad_interno]["ontem"], 2),
+            "hoje": round(squads_fin[squad_interno]["hoje"], 2),
+            "previsto_hoje": round(previsto_hoje.get(squad_interno, 0.0), 2),
+            "previsto_ontem": round(previsto_ontem.get(squad_interno, 0.0), 2),
         }
 
     total_meta_mes = sum(resultado["squads"][SQUAD_DISPLAY[s]]["meta_mes"] for s in SQUADS_FINANCEIROS)
     total_bruto = sum(resultado["squads"][SQUAD_DISPLAY[s]]["realizado_bruto"] for s in SQUADS_FINANCEIROS)
     total_multi = sum(resultado["squads"][SQUAD_DISPLAY[s]]["realizado_multiplicador"] for s in SQUADS_FINANCEIROS)
     total_ontem = sum(resultado["squads"][SQUAD_DISPLAY[s]]["ontem"] for s in SQUADS_FINANCEIROS)
+    total_hoje = sum(resultado["squads"][SQUAD_DISPLAY[s]]["hoje"] for s in SQUADS_FINANCEIROS)
+    total_previsto_hoje = sum(resultado["squads"][SQUAD_DISPLAY[s]]["previsto_hoje"] for s in SQUADS_FINANCEIROS)
+    total_previsto_ontem = sum(resultado["squads"][SQUAD_DISPLAY[s]]["previsto_ontem"] for s in SQUADS_FINANCEIROS)
     total_gap_40 = max(0.0, (PCT_GAP_INTERMEDIARIO * total_meta_mes) - total_multi)
     resultado["squads"]["Total"] = {
         "meta_mes": round(total_meta_mes, 2),
@@ -578,7 +629,12 @@ def montar_painel():
         "gap_40": round(total_gap_40, 2),
         "meta_dia_40": round(safe_div(total_gap_40, restantes_prazo), 2),
         "meta_dia_100": round(safe_div(max(0.0, total_meta_mes - total_multi), du["restantes"]), 2),
+        "gap_100_bruto": round(max(0.0, total_meta_mes - total_bruto), 2),
+        "meta_dia_100_bruto": round(safe_div(max(0.0, total_meta_mes - total_bruto), du["restantes"]), 2),
         "ontem": round(total_ontem, 2),
+        "hoje": round(total_hoje, 2),
+        "previsto_hoje": round(total_previsto_hoje, 2),
+        "previsto_ontem": round(total_previsto_ontem, 2),
     }
 
     # ---- Sniper: reuniões ----
@@ -587,6 +643,7 @@ def montar_painel():
     deals_rv_owner_map = montar_deals_rv_owner_map(deals_rv)
 
     validadas_total = 0
+    validadas_hoje = 0
     validadas_ontem = 0
     validadas_dia_anterior_util = 0
     d_ontem_util = dia_util_anterior(hoje, feriados)
@@ -615,7 +672,7 @@ def montar_painel():
         validadas_total += 1
         due = a.get("due_date")
         if due == hoje.isoformat():
-            pass
+            validadas_hoje += 1
         if due == d_ontem_util.isoformat():
             validadas_dia_anterior_util += 1
 
@@ -640,6 +697,7 @@ def montar_painel():
         "gap_40": round(gap_40_reu, 2),
         "meta_dia_40": round(meta_dia_40_reu, 2),
         "meta_dia_100": round(meta_dia_100_reu, 2),
+        "reunioes_hoje": validadas_hoje,
         "dia_anterior_reunioes": validadas_dia_anterior_util,
     }
 
