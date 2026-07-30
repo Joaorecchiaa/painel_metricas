@@ -434,7 +434,13 @@ def squad_do_deal(deal, colaboradores, users_map):
     return subarea
 
 
-def buscar_activities(ano, mes):
+def teste_activities_sem_filtro():
+    """Chama /v1/activities sem filter_id nenhum, só pra confirmar se o endpoint/token funciona."""
+    params = {"api_token": PD_TOKEN, "limit": 5, "start": 0}
+    data = http_get_json(f"{V1_BASE}/activities?{urlencode(params)}")
+    itens = data.get("data") or []
+    amostra = list(itens[0].keys()) if itens else []
+    return {"total_sem_filtro": len(itens), "chaves_exemplo": amostra}
     """v2 não reconhece este filter_id ('Filter not found') — usamos v1, que funciona."""
     alvo = f"{ano:04d}-{mes:02d}"
     todas = pd_v1_paginado("/activities", FILTER_ACTIVITIES)
@@ -638,6 +644,7 @@ def montar_painel():
         "proximo_dia_util": prox_dia_util.isoformat(),
     }
     resultado["debug_sniper"] = {
+        "teste_sem_filtro": teste_activities_sem_filtro(),
         "total_activities_bruto_sem_filtro_mes": total_bruto_activities,
         "total_activities_no_mes": len(activities),
         "concluidas": dbg_concluidas,
