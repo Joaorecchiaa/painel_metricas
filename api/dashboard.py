@@ -577,13 +577,28 @@ def montar_painel():
     validadas_ontem = 0
     validadas_dia_anterior_util = 0
     d_ontem_util = dia_util_anterior(hoje, feriados)
+
+    dbg_concluidas = 0
+    dbg_com_deal = 0
+    dbg_passou_valida_sdr = 0
+    dbg_subarea_sniper = 0
+    nomes_sem_match = set()
+
     for a in activities:
+        if a.get("done") is True or a.get("status") == "done":
+            dbg_concluidas += 1
+        if a.get("deal_id"):
+            dbg_com_deal += 1
         if not reuniao_valida_sdr(a, deals_rv_owner_map):
             continue
+        dbg_passou_valida_sdr += 1
         # escopo só sniper: precisaria mapear owner->squad; aqui assume-se filtro já traz o universo certo
         nome_resp = norm(users_map.get(campo_owner_id(a), ""))
         if colaboradores.get(nome_resp, {}).get("subarea") != SQUAD_SDR:
+            if nome_resp:
+                nomes_sem_match.add(nome_resp)
             continue
+        dbg_subarea_sniper += 1
         validadas_total += 1
         due = a.get("due_date")
         if due == hoje.isoformat():
@@ -620,6 +635,15 @@ def montar_painel():
         "prazo_gap_intermediario": PRAZO_GAP_INTERMEDIARIO.isoformat(),
         "percentual_gap_intermediario": PCT_GAP_INTERMEDIARIO,
         "proximo_dia_util": prox_dia_util.isoformat(),
+    }
+    resultado["debug_sniper"] = {
+        "total_activities_no_mes": len(activities),
+        "concluidas": dbg_concluidas,
+        "com_deal_id": dbg_com_deal,
+        "deals_rv_total": len(deals_rv),
+        "passou_validacao_sdr": dbg_passou_valida_sdr,
+        "com_subarea_sniper": dbg_subarea_sniper,
+        "nomes_sem_match_no_colab": sorted(nomes_sem_match)[:15],
     }
     return resultado
 
