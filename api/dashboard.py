@@ -441,6 +441,9 @@ def teste_activities_sem_filtro():
     itens = data.get("data") or []
     amostra = list(itens[0].keys()) if itens else []
     return {"total_sem_filtro": len(itens), "chaves_exemplo": amostra}
+
+
+def buscar_activities(ano, mes):
     """v2 não reconhece este filter_id ('Filter not found') — usamos v1, que funciona."""
     alvo = f"{ano:04d}-{mes:02d}"
     todas = pd_v1_paginado("/activities", FILTER_ACTIVITIES)
