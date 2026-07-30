@@ -31,7 +31,7 @@ V1_BASE = f"https://{PD_DOMAIN}/api/v1"
 V2_BASE = f"https://{PD_DOMAIN}/api/v2"
 
 FILTER_DEALS = 74674          # vendas ganhas
-FILTER_DEALS_RV = 1431880     # deals com reunião válida (whitelist SDR)
+FILTER_DEALS_RV = 1466157     # deals com reunião válida (whitelist SDR) — confirmado funcional no dashboard de referência
 FILTER_ACTIVITIES = 1310451   # atividades / reuniões
 FILTER_FORECAST = 1490240     # pipeline aberto (forecast)
 FILTER_REFERIDOS = 1562285    # indicações (não usado neste painel por ora)
@@ -444,9 +444,9 @@ def teste_activities_sem_filtro():
 
 
 def buscar_activities(ano, mes):
-    """v2 não reconhece este filter_id ('Filter not found') — usamos v1, que funciona."""
+    """v2, paginação por cursor — confirmado funcional (o filtro só precisava estar compartilhado/token com acesso)."""
     alvo = f"{ano:04d}-{mes:02d}"
-    todas = pd_v1_paginado("/activities", FILTER_ACTIVITIES)
+    todas = pd_v2_paginado("/activities", FILTER_ACTIVITIES)
     filtradas = [a for a in todas if (a.get("due_date") or "")[:7] == alvo]
     return filtradas, len(todas)
 
