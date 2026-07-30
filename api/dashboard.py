@@ -119,16 +119,30 @@ def to_brt(iso_ts):
     return None
 
 
+from urllib.error import HTTPError, URLError
+
 def http_get_json(url, headers=None):
     req = Request(url, headers=headers or {})
-    with urlopen(req, timeout=25) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+    try:
+        with urlopen(req, timeout=25) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except HTTPError as e:
+        detalhe = e.read().decode("utf-8", errors="ignore")
+        raise RuntimeError(f"Erro HTTP {e.code} em {url}: {detalhe[:600]}") from e
+    except URLError as e:
+        raise RuntimeError(f"Falha de conexão em {url}: {e.reason}") from e
 
 
 def http_get_text(url):
     req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    with urlopen(req, timeout=25) as resp:
-        return resp.read().decode("utf-8")
+    try:
+        with urlopen(req, timeout=25) as resp:
+            return resp.read().decode("utf-8")
+    except HTTPError as e:
+        detalhe = e.read().decode("utf-8", errors="ignore")
+        raise RuntimeError(f"Erro HTTP {e.code} em {url}: {detalhe[:600]}") from e
+    except URLError as e:
+        raise RuntimeError(f"Falha de conexão em {url}: {e.reason}") from e
 
 
 def find_col(fieldnames, exact=None, contains=None, contains_all=None):
