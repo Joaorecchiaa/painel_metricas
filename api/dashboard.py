@@ -494,9 +494,24 @@ def buscar_forecast_deals():
     return pd_v1_paginado("/deals", FILTER_FORECAST, extra_params={"status": "all_not_deleted"})
 
 
-def valor_previsto_por_squad(pool, colaboradores, users_map, data_alvo):
+def buscar_probabilidade_por_stage():
+    """Mapa stage_id -> deal_probability da etapa (probabilidade "original" configurada
+    no funil). Usado pra negócios ganhos/perdidos, cujo campo probability o próprio
+    Pipedrive costuma sobrescrever (geralmente pra 100% ou 0%) na hora do fechamento."""
+    data = http_get_json(f"{V1_BASE}/stages?{urlencode({'api_token': PD_TOKEN})}")
+    mapa = {}
+    for s in (data.get("data") or []):
+        prob = s.get("deal_probability")
+        if prob is not None:
+            mapa[s.get("id")] = prob
+    return mapa
+
+
+def valor_previsto_por_squad(pool, colaboradores, users_map, data_alvo, stage_prob_map):
     """Por squad financeiro: soma bruta separada por bucket de probabilidade
-    (20/50/70, comparação exata) + a média ponderada (bruto x probabilidade)."""
+    (20/50/70, comparação exata) + a média ponderada (bruto x probabilidade).
+    Pra negócios ganhos/perdidos, usa a probabilidade da ETAPA (stage) em vez do
+    campo probability do negócio, que o Pipedrive costuma sobrescrever no fechamento."""
     buckets = {s: {20: 0.0, 50: 0.0, 70: 0.0} for s in SQUADS_FINANCEIROS}
     vistos = set()
     alvo_iso = data_alvo.isoformat()
@@ -507,8 +522,14 @@ def valor_previsto_por_squad(pool, colaboradores, users_map, data_alvo):
         vistos.add(did)
         if (d.get("expected_close_date") or "")[:10] != alvo_iso:
             continue
+
+        prob_bruta = d.get("probability")
+        if d.get("status") in ("won", "lost"):
+            prob_etapa = stage_prob_map.get(d.get("stage_id"))
+            if prob_etapa is not None:
+                prob_bruta = prob_etapa
         try:
-            prob = int(float(d.get("probability")))
+            prob = int(float(prob_bruta))
         except (TypeError, ValueError):
             continue
         if prob not in (20, 50, 70):
@@ -564,8 +585,9 @@ def montar_painel():
     # aquela data prevista não entram aqui (limitação conhecida, sem persistência).
     forecast_abertos = buscar_forecast_deals()
     pool_previsto = forecast_abertos + deals_ganhos
-    previsto_hoje = valor_previsto_por_squad(pool_previsto, colaboradores, users_map, hoje)
-    previsto_ontem = valor_previsto_por_squad(pool_previsto, colaboradores, users_map, ontem)
+    stage_prob_map = buscar_probabilidade_por_stage()
+    previsto_hoje = valor_previsto_por_squad(pool_previsto, colaboradores, users_map, hoje, stage_prob_map)
+    previsto_ontem = valor_previsto_por_squad(pool_previsto, colaboradores, users_map, ontem, stage_prob_map)
 
     def meta_squad(squad_interno):
         return sum(m["meta_fin"] for nome, m in metas.items()
@@ -746,6 +768,11 @@ def montar_painel():
         "proximo_dia_util": prox_dia_util.isoformat(),
         "ritmo_100_pct": round(ritmo_100 * 100, 1),
         "ritmo_40_pct": round(ritmo_prazo * 100, 1),
+    }
+    resultado["debug_forecast"] = {
+        "stages_com_probabilidade_mapeada": len(stage_prob_map),
+        "total_pool_previsto": len(pool_previsto),
+        "total_forecast_abertos_todos_status": len(forecast_abertos),
     }
     resultado["debug_sniper"] = {
         "teste_sem_filtro": teste_activities_sem_filtro(),
