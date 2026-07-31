@@ -38,6 +38,9 @@ FILTER_REFERIDOS = 1562285    # indicações (não usado neste painel por ora)
 
 CF_MULTIPLICADOR = "7e0e43c2734751f77be292a72527f638a850ad50"
 CF_QUALIFICADOR = "a6f13cc27c8d041f3af4091283ce0d4fe0913875"
+CF_UTM_CAMPAIGN = "ae03fa460a108b8cdfa87e97ebca24379d2779d6"
+
+PRODUTOS = ["PFCC", "CES", "LEAN", "ABP"]
 
 SHEET_COLAB = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=1782440078&single=true&output=csv"
 SHEET_METAS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=0&single=true&output=csv"
@@ -586,6 +589,43 @@ def valor_abertos_por_squad(pool, colaboradores, users_map, data_alvo):
     return soma
 
 
+def classificar_produto(deal):
+    """Classifica o produto pela utm_campaign (contém a palavra, sem diferenciar maiúsculas/minúsculas)."""
+    utm = norm(cf_valor(deal, CF_UTM_CAMPAIGN) or "")
+    if "pfcc" in utm:
+        return "PFCC"
+    if "lean" in utm:
+        return "LEAN"
+    if "ces" in utm:
+        return "CES"
+    if "abp" in utm:  # suposição — confirmar a palavra-chave real da utm pro ABP
+        return "ABP"
+    return None
+
+
+def produtos_em_aberto_por_squad(pool, colaboradores, users_map):
+    """Quantos negócios em aberto de cada produto, por squad (Olympus/Elite)."""
+    contagem = {s: {p: 0 for p in PRODUTOS} for s in SQUADS_FINANCEIROS}
+    nao_classificados = {s: 0 for s in SQUADS_FINANCEIROS}
+    vistos = set()
+    for d in pool:
+        did = d.get("id")
+        if did in vistos:
+            continue
+        vistos.add(did)
+        if d.get("status") != "open":
+            continue
+        squad = squad_do_deal(d, colaboradores, users_map)
+        if squad not in contagem:
+            continue
+        produto = classificar_produto(d)
+        if produto:
+            contagem[squad][produto] += 1
+        else:
+            nao_classificados[squad] += 1
+    return contagem, nao_classificados
+
+
 def montar_painel():
     hoje = dt.date.today()
     ano, mes = hoje.year, hoje.month
@@ -813,6 +853,12 @@ def montar_painel():
         "ritmo_100_pct": round(ritmo_100 * 100, 1),
         "ritmo_40_pct": round(ritmo_prazo * 100, 1),
     }
+    produtos_por_squad, produtos_nao_classificados = produtos_em_aberto_por_squad(pool_previsto, colaboradores, users_map)
+    resultado["produtos_em_aberto"] = {
+        SQUAD_DISPLAY[s]: {**produtos_por_squad[s], "Não classificado": produtos_nao_classificados[s]}
+        for s in SQUADS_FINANCEIROS
+    }
+
     resultado["debug_forecast"] = {
         "stages_com_probabilidade_mapeada": len(stage_prob_map),
         "total_pool_previsto": len(pool_previsto),
