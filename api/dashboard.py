@@ -603,10 +603,14 @@ def classificar_produto(deal):
     return None
 
 
+PRODUTOS_TODOS = PRODUTOS + ["Não classificado"]
+
+
 def produtos_em_aberto_por_squad(pool, colaboradores, users_map):
-    """Quantos negócios em aberto de cada produto, por squad (Olympus/Elite)."""
-    contagem = {s: {p: 0 for p in PRODUTOS} for s in SQUADS_FINANCEIROS}
-    nao_classificados = {s: 0 for s in SQUADS_FINANCEIROS}
+    """Quantos negócios em aberto de cada produto, por squad (Olympus/Elite),
+    e a lista de negócios (pra montar o dropdown com link pro Pipedrive)."""
+    contagem = {s: {p: 0 for p in PRODUTOS_TODOS} for s in SQUADS_FINANCEIROS}
+    detalhes = {s: {p: [] for p in PRODUTOS_TODOS} for s in SQUADS_FINANCEIROS}
     vistos = set()
     for d in pool:
         did = d.get("id")
@@ -618,12 +622,15 @@ def produtos_em_aberto_por_squad(pool, colaboradores, users_map):
         squad = squad_do_deal(d, colaboradores, users_map)
         if squad not in contagem:
             continue
-        produto = classificar_produto(d)
-        if produto:
-            contagem[squad][produto] += 1
-        else:
-            nao_classificados[squad] += 1
-    return contagem, nao_classificados
+        produto = classificar_produto(d) or "Não classificado"
+        contagem[squad][produto] += 1
+        detalhes[squad][produto].append({
+            "id": did,
+            "titulo": d.get("title") or f"Negócio {did}",
+            "valor": float(d.get("value") or 0),
+            "url": f"https://{PD_DOMAIN}/deal/{did}",
+        })
+    return contagem, detalhes
 
 
 def montar_painel():
@@ -853,10 +860,12 @@ def montar_painel():
         "ritmo_100_pct": round(ritmo_100 * 100, 1),
         "ritmo_40_pct": round(ritmo_prazo * 100, 1),
     }
-    produtos_por_squad, produtos_nao_classificados = produtos_em_aberto_por_squad(pool_previsto, colaboradores, users_map)
+    produtos_por_squad, produtos_detalhes = produtos_em_aberto_por_squad(pool_previsto, colaboradores, users_map)
     resultado["produtos_em_aberto"] = {
-        SQUAD_DISPLAY[s]: {**produtos_por_squad[s], "Não classificado": produtos_nao_classificados[s]}
-        for s in SQUADS_FINANCEIROS
+        SQUAD_DISPLAY[s]: produtos_por_squad[s] for s in SQUADS_FINANCEIROS
+    }
+    resultado["produtos_em_aberto_detalhes"] = {
+        SQUAD_DISPLAY[s]: produtos_detalhes[s] for s in SQUADS_FINANCEIROS
     }
 
     resultado["debug_forecast"] = {
