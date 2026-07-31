@@ -526,6 +526,9 @@ def montar_painel():
     colaboradores = carregar_colaboradores(mes, ano)
     metas = carregar_metas(mes, ano)
     du = calcular_dias_uteis(ano, mes, feriados)
+    # Se não sobra nenhum dia útil DEPOIS de hoje, mas hoje ainda é dia útil,
+    # considera hoje como "1 dia" pra não zerar o Meta/Dia 100% no último dia do mês.
+    dias_restantes_p100 = du["restantes"] if du["restantes"] > 0 else (1 if eh_dia_util(hoje, feriados) else 0)
 
     users_map = pd_users()
     deals_ganhos = buscar_deals_ganhos(ano, mes, users_map)
@@ -585,9 +588,9 @@ def montar_painel():
         gap_100 = max(0.0, meta_mes - multi)
         gap_40 = max(0.0, (PCT_GAP_INTERMEDIARIO * meta_mes) - multi)
         meta_dia_40 = safe_div(gap_40, restantes_prazo)
-        meta_dia_100 = safe_div(gap_100, du["restantes"])  # gap / dias úteis restantes até o fim do mês
+        meta_dia_100 = safe_div(gap_100, dias_restantes_p100)  # gap / dias úteis restantes até o fim do mês (hoje conta se for o último)
         gap_100_bruto = max(0.0, meta_mes - bruto)
-        meta_dia_100_bruto = safe_div(gap_100_bruto, du["restantes"])
+        meta_dia_100_bruto = safe_div(gap_100_bruto, dias_restantes_p100)
 
         resultado["squads"][SQUAD_DISPLAY[squad_interno]] = {
             "meta_mes": round(meta_mes, 2),
@@ -628,9 +631,9 @@ def montar_painel():
         "gap_100": round(max(0.0, total_meta_mes - total_multi), 2),
         "gap_40": round(total_gap_40, 2),
         "meta_dia_40": round(safe_div(total_gap_40, restantes_prazo), 2),
-        "meta_dia_100": round(safe_div(max(0.0, total_meta_mes - total_multi), du["restantes"]), 2),
+        "meta_dia_100": round(safe_div(max(0.0, total_meta_mes - total_multi), dias_restantes_p100), 2),
         "gap_100_bruto": round(max(0.0, total_meta_mes - total_bruto), 2),
-        "meta_dia_100_bruto": round(safe_div(max(0.0, total_meta_mes - total_bruto), du["restantes"]), 2),
+        "meta_dia_100_bruto": round(safe_div(max(0.0, total_meta_mes - total_bruto), dias_restantes_p100), 2),
         "ontem": round(total_ontem, 2),
         "hoje": round(total_hoje, 2),
         "previsto_hoje": round(total_previsto_hoje, 2),
@@ -684,7 +687,7 @@ def montar_painel():
     gap_100_reu = max(0.0, meta_reunioes - validadas_total)
     gap_40_reu = max(0.0, (PCT_GAP_INTERMEDIARIO * meta_reunioes) - validadas_total)
     meta_dia_40_reu = safe_div(gap_40_reu, restantes_prazo)
-    meta_dia_100_reu = safe_div(gap_100_reu, du["restantes"])
+    meta_dia_100_reu = safe_div(gap_100_reu, dias_restantes_p100)
 
     resultado["squads"]["Sniper"] = {
         "meta_mes_reunioes": meta_reunioes,
@@ -705,6 +708,7 @@ def montar_painel():
         "dias_uteis_total": du["total"],
         "dias_uteis_passados": du["passados"],
         "dias_uteis_restantes": du["restantes"],
+        "dias_restantes_p100": dias_restantes_p100,
         "prazo_gap_intermediario": PRAZO_GAP_INTERMEDIARIO.isoformat(),
         "percentual_gap_intermediario": PCT_GAP_INTERMEDIARIO,
         "proximo_dia_util": prox_dia_util.isoformat(),
