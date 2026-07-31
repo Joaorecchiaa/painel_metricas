@@ -494,9 +494,9 @@ def buscar_forecast_deals():
 
 
 def valor_previsto_por_squad(pool, colaboradores, users_map, data_alvo):
-    """Soma (valor bruto x probabilidade) dos negócios com expected_close_date == data_alvo
-    e probability em {20, 50, 70} (comparação exata), por squad financeiro."""
-    soma = {s: 0.0 for s in SQUADS_FINANCEIROS}
+    """Por squad financeiro: soma bruta separada por bucket de probabilidade
+    (20/50/70, comparação exata) + a média ponderada (bruto x probabilidade)."""
+    buckets = {s: {20: 0.0, 50: 0.0, 70: 0.0} for s in SQUADS_FINANCEIROS}
     vistos = set()
     alvo_iso = data_alvo.isoformat()
     for d in pool:
@@ -513,9 +513,14 @@ def valor_previsto_por_squad(pool, colaboradores, users_map, data_alvo):
         if prob not in (20, 50, 70):
             continue
         squad = squad_do_deal(d, colaboradores, users_map)
-        if squad in soma:
-            soma[squad] += float(d.get("value") or 0) * (prob / 100)
-    return soma
+        if squad in buckets:
+            buckets[squad][prob] += float(d.get("value") or 0)
+
+    resultado = {}
+    for squad, b in buckets.items():
+        media = b[20] * 0.20 + b[50] * 0.50 + b[70] * 0.70
+        resultado[squad] = {"p20": b[20], "p50": b[50], "p70": b[70], "media": media}
+    return resultado
 
 
 def montar_painel():
@@ -608,8 +613,14 @@ def montar_painel():
             "meta_dia_100_bruto": round(meta_dia_100_bruto, 2),
             "ontem": round(squads_fin[squad_interno]["ontem"], 2),
             "hoje": round(squads_fin[squad_interno]["hoje"], 2),
-            "previsto_hoje": round(previsto_hoje.get(squad_interno, 0.0), 2),
-            "previsto_ontem": round(previsto_ontem.get(squad_interno, 0.0), 2),
+            "previsto_hoje_20": round(previsto_hoje.get(squad_interno, {}).get("p20", 0.0), 2),
+            "previsto_hoje_50": round(previsto_hoje.get(squad_interno, {}).get("p50", 0.0), 2),
+            "previsto_hoje_70": round(previsto_hoje.get(squad_interno, {}).get("p70", 0.0), 2),
+            "previsto_hoje_media": round(previsto_hoje.get(squad_interno, {}).get("media", 0.0), 2),
+            "previsto_ontem_20": round(previsto_ontem.get(squad_interno, {}).get("p20", 0.0), 2),
+            "previsto_ontem_50": round(previsto_ontem.get(squad_interno, {}).get("p50", 0.0), 2),
+            "previsto_ontem_70": round(previsto_ontem.get(squad_interno, {}).get("p70", 0.0), 2),
+            "previsto_ontem_media": round(previsto_ontem.get(squad_interno, {}).get("media", 0.0), 2),
         }
 
     total_meta_mes = sum(resultado["squads"][SQUAD_DISPLAY[s]]["meta_mes"] for s in SQUADS_FINANCEIROS)
@@ -617,8 +628,12 @@ def montar_painel():
     total_multi = sum(resultado["squads"][SQUAD_DISPLAY[s]]["realizado_multiplicador"] for s in SQUADS_FINANCEIROS)
     total_ontem = sum(resultado["squads"][SQUAD_DISPLAY[s]]["ontem"] for s in SQUADS_FINANCEIROS)
     total_hoje = sum(resultado["squads"][SQUAD_DISPLAY[s]]["hoje"] for s in SQUADS_FINANCEIROS)
-    total_previsto_hoje = sum(resultado["squads"][SQUAD_DISPLAY[s]]["previsto_hoje"] for s in SQUADS_FINANCEIROS)
-    total_previsto_ontem = sum(resultado["squads"][SQUAD_DISPLAY[s]]["previsto_ontem"] for s in SQUADS_FINANCEIROS)
+    campos_previsto = ["previsto_hoje_20", "previsto_hoje_50", "previsto_hoje_70", "previsto_hoje_media",
+                        "previsto_ontem_20", "previsto_ontem_50", "previsto_ontem_70", "previsto_ontem_media"]
+    totais_previsto = {
+        campo: sum(resultado["squads"][SQUAD_DISPLAY[s]][campo] for s in SQUADS_FINANCEIROS)
+        for campo in campos_previsto
+    }
     total_gap_40 = max(0.0, (PCT_GAP_INTERMEDIARIO * total_meta_mes) - total_multi)
     resultado["squads"]["Total"] = {
         "meta_mes": round(total_meta_mes, 2),
@@ -636,8 +651,7 @@ def montar_painel():
         "meta_dia_100_bruto": round(safe_div(max(0.0, total_meta_mes - total_bruto), dias_restantes_p100), 2),
         "ontem": round(total_ontem, 2),
         "hoje": round(total_hoje, 2),
-        "previsto_hoje": round(total_previsto_hoje, 2),
-        "previsto_ontem": round(total_previsto_ontem, 2),
+        **{k: round(v, 2) for k, v in totais_previsto.items()},
     }
 
     # ---- Sniper: reuniões ----
@@ -649,6 +663,8 @@ def montar_painel():
     validadas_hoje = 0
     validadas_ontem = 0
     validadas_dia_anterior_util = 0
+    previsto_hoje_reu = 0
+    previsto_ontem_reu = 0
     d_ontem_util = dia_util_anterior(hoje, feriados)
 
     dbg_concluidas = 0
@@ -662,6 +678,17 @@ def montar_painel():
             dbg_concluidas += 1
         if a.get("deal_id"):
             dbg_com_deal += 1
+
+        # "Previsto" = agendada pra aquele dia (qualquer status), independente de validação —
+        # olha só o dono da atividade e a subarea dele, sem exigir Reunião Válida.
+        nome_resp_previsto = norm(users_map.get(campo_owner_id(a), ""))
+        if colaboradores.get(nome_resp_previsto, {}).get("subarea") == SQUAD_SDR:
+            due_previsto = a.get("due_date")
+            if due_previsto == hoje.isoformat():
+                previsto_hoje_reu += 1
+            if due_previsto == d_ontem_util.isoformat():
+                previsto_ontem_reu += 1
+
         if not reuniao_valida_sdr(a, deals_rv_owner_map):
             continue
         dbg_passou_valida_sdr += 1
@@ -702,6 +729,10 @@ def montar_painel():
         "meta_dia_100": round(meta_dia_100_reu, 2),
         "reunioes_hoje": validadas_hoje,
         "dia_anterior_reunioes": validadas_dia_anterior_util,
+        "previsto_hoje": previsto_hoje_reu,
+        "previsto_ontem": previsto_ontem_reu,
+        "gap_hoje": max(0, previsto_hoje_reu - validadas_hoje),
+        "gap_ontem": max(0, previsto_ontem_reu - validadas_dia_anterior_util),
     }
 
     resultado["premissas"] = {
@@ -712,6 +743,8 @@ def montar_painel():
         "prazo_gap_intermediario": PRAZO_GAP_INTERMEDIARIO.isoformat(),
         "percentual_gap_intermediario": PCT_GAP_INTERMEDIARIO,
         "proximo_dia_util": prox_dia_util.isoformat(),
+        "ritmo_100_pct": round(ritmo_100 * 100, 1),
+        "ritmo_40_pct": round(ritmo_prazo * 100, 1),
     }
     resultado["debug_sniper"] = {
         "teste_sem_filtro": teste_activities_sem_filtro(),
