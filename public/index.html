@@ -68,7 +68,7 @@
     text-transform: uppercase;
     letter-spacing: 0.02em;
   }
-  tr.total td { background: var(--total-bg); font-weight: 600; }
+  td.total, th:nth-child(4) { background: var(--total-bg); font-weight: 600; border-left: 2px solid var(--border); }
   .pill {
     display: inline-block;
     font-size: 10px;
@@ -105,27 +105,10 @@
   <table>
     <thead>
       <tr>
-        <th rowspan="2">Squad</th>
-        <th rowspan="2">Meta Mês</th>
-        <th rowspan="2">Meta Dia</th>
-        <th rowspan="2">Realizado Bruto</th>
-        <th rowspan="2">Realizado Multiplicador</th>
-        <th rowspan="2">Deveria (100%) - MTD</th>
-        <th rowspan="2">Deveria (40%) - MTD</th>
-        <th rowspan="2">Atingimento</th>
-        <th rowspan="2">Gap 100%</th>
-        <th rowspan="2">Gap 40%</th>
-        <th rowspan="2">Meta/Dia 40%</th>
-        <th rowspan="2">Meta/Dia 100%</th>
-        <th rowspan="2">Meta/Dia 100% (Bruto)</th>
-        <th colspan="2" class="grupo-ontem grupo-inicio">Dia útil anterior</th>
-        <th colspan="2" class="grupo-hoje grupo-inicio">Hoje</th>
-      </tr>
-      <tr>
-        <th class="grupo-ontem grupo-inicio">Previsto</th>
-        <th class="grupo-ontem">Entrou</th>
-        <th class="grupo-hoje grupo-inicio">Previsto</th>
-        <th class="grupo-hoje">Entrou</th>
+        <th>Métrica</th>
+        <th>Olympus</th>
+        <th>Elite</th>
+        <th>Total Consolidado</th>
       </tr>
     </thead>
     <tbody id="tabelaFinanceiro"></tbody>
@@ -138,18 +121,7 @@
     <thead>
       <tr>
         <th>Métrica</th>
-        <th>Meta Mês</th>
-        <th>Meta Dia</th>
-        <th>Realizado</th>
-        <th>Deveria (100%) - MTD</th>
-        <th>Deveria (40%) - MTD</th>
-        <th>Atingimento</th>
-        <th>Gap 100%</th>
-        <th>Gap 40%</th>
-        <th>Meta/Dia 40%</th>
-        <th>Meta/Dia 100%</th>
-        <th class="grupo-ontem grupo-inicio">Realizadas Ontem</th>
-        <th class="grupo-hoje grupo-inicio">Realizadas Hoje</th>
+        <th>Sniper</th>
       </tr>
     </thead>
     <tbody id="tabelaSniper"></tbody>
@@ -177,46 +149,52 @@ function pill(pct) {
   return `<span class="pill ${pillClasse(pct)}">${fmtNum(pct)}%</span>`;
 }
 
-function linhaFinanceiro(nome, d, isTotal) {
-  return `
-    <tr class="${isTotal ? 'total' : ''}">
-      <td>${nome}</td>
-      <td>${fmtMoeda(d.meta_mes)}</td>
-      <td>${fmtMoeda(d.meta_dia)}</td>
-      <td>${fmtMoeda(d.realizado_bruto)}</td>
-      <td>${fmtMoeda(d.realizado_multiplicador)}</td>
-      <td>${fmtMoeda(d.onde_deveria_100)}</td>
-      <td>${fmtMoeda(d.onde_deveria_40)}</td>
-      <td>${pill(d.atingimento)}</td>
-      <td>${fmtMoeda(d.gap_100)}</td>
-      <td>${fmtMoeda(d.gap_40)}</td>
-      <td>${fmtMoeda(d.meta_dia_40)}</td>
-      <td>${fmtMoeda(d.meta_dia_100)}</td>
-      <td>${fmtMoeda(d.meta_dia_100_bruto)}</td>
-      <td class="grupo-ontem grupo-inicio">${fmtMoeda(d.previsto_ontem)}</td>
-      <td class="grupo-ontem">${fmtMoeda(d.ontem)}</td>
-      <td class="grupo-hoje grupo-inicio">${fmtMoeda(d.previsto_hoje)}</td>
-      <td class="grupo-hoje">${fmtMoeda(d.hoje)}</td>
-    </tr>`;
+const METRICAS_FINANCEIRO = [
+  { label: "Meta Mês",                   key: "meta_mes",                fmt: fmtMoeda },
+  { label: "Meta Dia",                   key: "meta_dia",                 fmt: fmtMoeda },
+  { label: "Realizado Bruto",            key: "realizado_bruto",          fmt: fmtMoeda },
+  { label: "Realizado Multiplicador",    key: "realizado_multiplicador",  fmt: fmtMoeda },
+  { label: "Deveria (100%) - MTD",       key: "onde_deveria_100",         fmt: fmtMoeda },
+  { label: "Deveria (40%) - MTD",        key: "onde_deveria_40",          fmt: fmtMoeda },
+  { label: "Atingimento",                key: "atingimento",              fmt: pill },
+  { label: "Gap 100%",                   key: "gap_100",                  fmt: fmtMoeda },
+  { label: "Gap 40%",                    key: "gap_40",                   fmt: fmtMoeda },
+  { label: "Meta/Dia 40%",               key: "meta_dia_40",              fmt: fmtMoeda },
+  { label: "Meta/Dia 100%",              key: "meta_dia_100",             fmt: fmtMoeda },
+  { label: "Meta/Dia 100% (Bruto)",      key: "meta_dia_100_bruto",       fmt: fmtMoeda },
+  { label: "Previsto Ontem",             key: "previsto_ontem",           fmt: fmtMoeda, grupo: "ontem" },
+  { label: "Entrou Ontem",               key: "ontem",                    fmt: fmtMoeda, grupo: "ontem" },
+  { label: "Previsto Hoje",              key: "previsto_hoje",            fmt: fmtMoeda, grupo: "hoje" },
+  { label: "Entrou Hoje",                key: "hoje",                     fmt: fmtMoeda, grupo: "hoje" },
+];
+
+const METRICAS_SNIPER = [
+  { label: "Meta Mês",             key: "meta_mes_reunioes",    fmt: v => v },
+  { label: "Meta Dia",             key: "meta_dia_reunioes",    fmt: fmtNum },
+  { label: "Realizado",            key: "realizado_reunioes",   fmt: v => v },
+  { label: "Deveria (100%) - MTD", key: "onde_deveria_100",     fmt: fmtNum },
+  { label: "Deveria (40%) - MTD",  key: "onde_deveria_40",      fmt: fmtNum },
+  { label: "Atingimento",          key: "atingimento",          fmt: pill },
+  { label: "Gap 100%",             key: "gap_100",              fmt: fmtNum },
+  { label: "Gap 40%",              key: "gap_40",               fmt: fmtNum },
+  { label: "Meta/Dia 40%",         key: "meta_dia_40",          fmt: fmtNum },
+  { label: "Meta/Dia 100%",        key: "meta_dia_100",         fmt: fmtNum },
+  { label: "Realizadas Ontem",     key: "dia_anterior_reunioes", fmt: v => v, grupo: "ontem" },
+  { label: "Realizadas Hoje",      key: "reunioes_hoje",         fmt: v => v, grupo: "hoje" },
+];
+
+function classesGrupo(grupo) {
+  if (!grupo) return "";
+  return `grupo-${grupo} grupo-inicio`;
 }
 
-function linhaSniper(d) {
-  return `
+function tabelaTransposta(metricas, colunas) {
+  // colunas: [{label, dados, isTotal}]
+  return metricas.map(m => `
     <tr>
-      <td>Reuniões Validadas</td>
-      <td>${d.meta_mes_reunioes}</td>
-      <td>${fmtNum(d.meta_dia_reunioes)}</td>
-      <td>${d.realizado_reunioes}</td>
-      <td>${fmtNum(d.onde_deveria_100)}</td>
-      <td>${fmtNum(d.onde_deveria_40)}</td>
-      <td>${pill(d.atingimento)}</td>
-      <td>${fmtNum(d.gap_100)}</td>
-      <td>${fmtNum(d.gap_40)}</td>
-      <td>${fmtNum(d.meta_dia_40)}</td>
-      <td>${fmtNum(d.meta_dia_100)}</td>
-      <td class="grupo-ontem grupo-inicio">${d.dia_anterior_reunioes}</td>
-      <td class="grupo-hoje grupo-inicio">${d.reunioes_hoje}</td>
-    </tr>`;
+      <td class="${classesGrupo(m.grupo)}">${m.label}</td>
+      ${colunas.map(c => `<td class="${c.isTotal ? 'total ' : ''}${classesGrupo(m.grupo)}">${m.fmt(c.dados[m.key])}</td>`).join("")}
+    </tr>`).join("");
 }
 
 async function atualizar() {
@@ -230,12 +208,15 @@ async function atualizar() {
     const data = await resp.json();
     if (data.erro) throw new Error(data.erro);
 
-    document.getElementById("tabelaFinanceiro").innerHTML =
-      linhaFinanceiro("Olympus", data.squads.Olympus, false) +
-      linhaFinanceiro("Elite", data.squads.Elite, false) +
-      linhaFinanceiro("Total Consolidado", data.squads.Total, true);
+    document.getElementById("tabelaFinanceiro").innerHTML = tabelaTransposta(METRICAS_FINANCEIRO, [
+      { dados: data.squads.Olympus },
+      { dados: data.squads.Elite },
+      { dados: data.squads.Total, isTotal: true },
+    ]);
 
-    document.getElementById("tabelaSniper").innerHTML = linhaSniper(data.squads.Sniper);
+    document.getElementById("tabelaSniper").innerHTML = tabelaTransposta(METRICAS_SNIPER, [
+      { dados: data.squads.Sniper },
+    ]);
 
     document.getElementById("ultimaAtualizacao").textContent =
       "Atualizado às " + new Date(data.geradoEm).toLocaleTimeString("pt-BR");
