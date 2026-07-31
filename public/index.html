@@ -153,22 +153,30 @@ function pill(pct) {
   return `<span class="pill ${pillClasse(pct)}">${fmtNum(pct)}%</span>`;
 }
 
+let premissasAtual = {};
+function fmtMoedaComPct(pctKey) {
+  return (v) => `${fmtMoeda(v)} <span style="color:var(--muted);font-size:11px;">(${fmtNum(premissasAtual[pctKey] ?? 0)}%)</span>`;
+}
+function fmtNumComPct(pctKey) {
+  return (v) => `${fmtNum(v)} <span style="color:var(--muted);font-size:11px;">(${fmtNum(premissasAtual[pctKey] ?? 0)}%)</span>`;
+}
+
 const METRICAS_FINANCEIRO = [
   { label: "Meta Mês",                   key: "meta_mes",                fmt: fmtMoeda },
   { label: "Meta Dia",                   key: "meta_dia",                 fmt: fmtMoeda },
   { label: "Realizado Bruto",            key: "realizado_bruto",          fmt: fmtMoeda },
   { label: "Realizado Multiplicador",    key: "realizado_multiplicador",  fmt: fmtMoeda },
-  { label: "Deveria (100%) - MTD",       key: "onde_deveria_100",         fmt: fmtMoeda },
-  { label: "Deveria (40%) - MTD",        key: "onde_deveria_40",          fmt: fmtMoeda },
+  { label: "Deveria (100%) - MTD",       key: "onde_deveria_100",         fmt: fmtMoedaComPct("ritmo_100_pct") },
+  { label: "Deveria (40%) - MTD",        key: "onde_deveria_40",          fmt: fmtMoedaComPct("ritmo_40_pct") },
   { label: "Atingimento",                key: "atingimento",              fmt: pill },
   { label: "Gap 100%",                   key: "gap_100",                  fmt: fmtMoeda },
   { label: "Gap 40%",                    key: "gap_40",                   fmt: fmtMoeda },
   { label: "Meta/Dia 40%",               key: "meta_dia_40",              fmt: fmtMoeda },
   { label: "Meta/Dia 100%",              key: "meta_dia_100",             fmt: fmtMoeda },
   { label: "Meta/Dia 100% (Bruto)",      key: "meta_dia_100_bruto",       fmt: fmtMoeda },
-  { label: "Previsto Ontem",             key: "previsto_ontem",           fmt: fmtMoeda, grupo: "ontem" },
+  { label: "Previsto Ontem",             key: "previsto_ontem_media",     fmt: fmtMoeda, grupo: "ontem" },
   { label: "Entrou Ontem",               key: "ontem",                    fmt: fmtMoeda, grupo: "ontem" },
-  { label: "Previsto Hoje",              key: "previsto_hoje",            fmt: fmtMoeda, grupo: "hoje" },
+  { label: "Previsto Hoje",              key: "previsto_hoje_media",      fmt: fmtMoeda, grupo: "hoje" },
   { label: "Entrou Hoje",                key: "hoje",                     fmt: fmtMoeda, grupo: "hoje" },
 ];
 
@@ -176,15 +184,19 @@ const METRICAS_SNIPER = [
   { label: "Meta Mês",             key: "meta_mes_reunioes",    fmt: v => v },
   { label: "Meta Dia",             key: "meta_dia_reunioes",    fmt: fmtNum },
   { label: "Realizado",            key: "realizado_reunioes",   fmt: v => v },
-  { label: "Deveria (100%) - MTD", key: "onde_deveria_100",     fmt: fmtNum },
-  { label: "Deveria (40%) - MTD",  key: "onde_deveria_40",      fmt: fmtNum },
+  { label: "Deveria (100%) - MTD", key: "onde_deveria_100",     fmt: fmtNumComPct("ritmo_100_pct") },
+  { label: "Deveria (40%) - MTD",  key: "onde_deveria_40",      fmt: fmtNumComPct("ritmo_40_pct") },
   { label: "Atingimento",          key: "atingimento",          fmt: pill },
   { label: "Gap 100%",             key: "gap_100",              fmt: fmtNum },
   { label: "Gap 40%",              key: "gap_40",               fmt: fmtNum },
   { label: "Meta/Dia 40%",         key: "meta_dia_40",          fmt: fmtNum },
   { label: "Meta/Dia 100%",        key: "meta_dia_100",         fmt: fmtNum },
+  { label: "Previsto Ontem",       key: "previsto_ontem",        fmt: v => v, grupo: "ontem" },
   { label: "Realizadas Ontem",     key: "dia_anterior_reunioes", fmt: v => v, grupo: "ontem" },
+  { label: "Gap Ontem",            key: "gap_ontem",             fmt: v => v, grupo: "ontem" },
+  { label: "Previsto Hoje",        key: "previsto_hoje",         fmt: v => v, grupo: "hoje" },
   { label: "Realizadas Hoje",      key: "reunioes_hoje",         fmt: v => v, grupo: "hoje" },
+  { label: "Gap Hoje",             key: "gap_hoje",              fmt: v => v, grupo: "hoje" },
 ];
 
 function classesGrupo(grupo) {
@@ -211,6 +223,7 @@ async function atualizar() {
     const resp = await fetch(API_URL, { cache: "no-store" });
     const data = await resp.json();
     if (data.erro) throw new Error(data.erro);
+    premissasAtual = data.premissas || {};
 
     document.getElementById("tabelaFinanceiro").innerHTML = tabelaTransposta(METRICAS_FINANCEIRO, [
       { dados: data.squads.Olympus },
