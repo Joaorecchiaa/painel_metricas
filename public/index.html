@@ -132,6 +132,20 @@
   </table>
 </div>
 
+<h2 class="titulo-tabela">Produtos em Aberto — Olympus &amp; Elite</h2>
+<div class="tabela-wrap">
+  <table id="tabela-produtos">
+    <thead>
+      <tr>
+        <th>Produto</th>
+        <th>Olympus</th>
+        <th>Elite</th>
+      </tr>
+    </thead>
+    <tbody id="tabelaProdutos"></tbody>
+  </table>
+</div>
+
 <div id="erro"></div>
 
 <script>
@@ -235,6 +249,15 @@ async function atualizar() {
     document.getElementById("tabelaSniper").innerHTML = tabelaTransposta(METRICAS_SNIPER, [
       { dados: data.squads.Sniper },
     ]);
+
+    const produtos = data.produtos_em_aberto || {};
+    const linhasProdutos = ["PFCC", "CES", "LEAN", "ABP", "Não classificado"];
+    document.getElementById("tabelaProdutos").innerHTML = linhasProdutos.map(p => `
+      <tr>
+        <td>${p}</td>
+        <td>${(produtos.Olympus || {})[p] ?? 0}</td>
+        <td>${(produtos.Elite || {})[p] ?? 0}</td>
+      </tr>`).join("");
 
     document.getElementById("ultimaAtualizacao").textContent =
       "Atualizado às " + new Date(data.geradoEm).toLocaleTimeString("pt-BR");
