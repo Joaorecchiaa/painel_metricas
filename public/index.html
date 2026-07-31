@@ -175,8 +175,10 @@ const METRICAS_FINANCEIRO = [
   { label: "Meta/Dia 100%",              key: "meta_dia_100",             fmt: fmtMoeda },
   { label: "Meta/Dia 100% (Bruto)",      key: "meta_dia_100_bruto",       fmt: fmtMoeda },
   { label: "Previsto Ontem",             key: "previsto_ontem_media",     fmt: fmtMoeda, grupo: "ontem" },
+  { label: "Em Aberto Ontem",            key: "em_aberto_ontem",          fmt: v => v,    grupo: "ontem" },
   { label: "Entrou Ontem",               key: "ontem",                    fmt: fmtMoeda, grupo: "ontem" },
   { label: "Previsto Hoje",              key: "previsto_hoje_media",      fmt: fmtMoeda, grupo: "hoje" },
+  { label: "Em Aberto Hoje",             key: "em_aberto_hoje",           fmt: v => v,    grupo: "hoje" },
   { label: "Entrou Hoje",                key: "hoje",                     fmt: fmtMoeda, grupo: "hoje" },
 ];
 
