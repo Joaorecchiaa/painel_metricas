@@ -494,7 +494,7 @@ def buscar_forecast_deals():
 
 
 def valor_previsto_por_squad(pool, colaboradores, users_map, data_alvo):
-    """Soma o valor (bruto) dos negócios com expected_close_date == data_alvo
+    """Soma (valor bruto x probabilidade) dos negócios com expected_close_date == data_alvo
     e probability em {20, 50, 70} (comparação exata), por squad financeiro."""
     soma = {s: 0.0 for s in SQUADS_FINANCEIROS}
     vistos = set()
@@ -514,7 +514,7 @@ def valor_previsto_por_squad(pool, colaboradores, users_map, data_alvo):
             continue
         squad = squad_do_deal(d, colaboradores, users_map)
         if squad in soma:
-            soma[squad] += float(d.get("value") or 0)
+            soma[squad] += float(d.get("value") or 0) * (prob / 100)
     return soma
 
 
