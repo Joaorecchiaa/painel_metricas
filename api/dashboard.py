@@ -545,9 +545,9 @@ def valor_previsto_por_squad(pool, colaboradores, users_map, data_alvo, stage_pr
     return resultado
 
 
-def contagem_abertos_por_squad(pool, colaboradores, users_map, data_alvo):
-    """Quantos negócios ainda estão em aberto (status=open) com expected_close_date == data_alvo, por squad."""
-    contagem = {s: 0 for s in SQUADS_FINANCEIROS}
+def valor_abertos_por_squad(pool, colaboradores, users_map, data_alvo):
+    """Soma o valor bruto dos negócios ainda em aberto (status=open) com expected_close_date == data_alvo, por squad."""
+    soma = {s: 0.0 for s in SQUADS_FINANCEIROS}
     vistos = set()
     alvo_iso = data_alvo.isoformat()
     for d in pool:
@@ -560,9 +560,30 @@ def contagem_abertos_por_squad(pool, colaboradores, users_map, data_alvo):
         if (d.get("expected_close_date") or "")[:10] != alvo_iso:
             continue
         squad = squad_do_deal(d, colaboradores, users_map)
-        if squad in contagem:
-            contagem[squad] += 1
-    return contagem
+        if squad in soma:
+            soma[squad] += float(d.get("value") or 0)
+    return soma
+
+
+def valor_abertos_por_squad(pool, colaboradores, users_map, data_alvo):
+    """Soma o valor bruto dos negócios ainda em aberto (status=open) com
+    expected_close_date == data_alvo, por squad."""
+    soma = {s: 0.0 for s in SQUADS_FINANCEIROS}
+    vistos = set()
+    alvo_iso = data_alvo.isoformat()
+    for d in pool:
+        did = d.get("id")
+        if did in vistos:
+            continue
+        vistos.add(did)
+        if d.get("status") != "open":
+            continue
+        if (d.get("expected_close_date") or "")[:10] != alvo_iso:
+            continue
+        squad = squad_do_deal(d, colaboradores, users_map)
+        if squad in soma:
+            soma[squad] += float(d.get("value") or 0)
+    return soma
 
 
 def montar_painel():
@@ -608,8 +629,7 @@ def montar_painel():
     stage_prob_map = buscar_probabilidade_por_stage()
     previsto_hoje = valor_previsto_por_squad(pool_previsto, colaboradores, users_map, hoje, stage_prob_map)
     previsto_ontem = valor_previsto_por_squad(pool_previsto, colaboradores, users_map, ontem, stage_prob_map)
-    em_aberto_hoje = contagem_abertos_por_squad(pool_previsto, colaboradores, users_map, hoje)
-    em_aberto_ontem = contagem_abertos_por_squad(pool_previsto, colaboradores, users_map, ontem)
+    em_aberto_hoje = valor_abertos_por_squad(pool_previsto, colaboradores, users_map, hoje)
 
     def meta_squad(squad_interno):
         return sum(m["meta_fin"] for nome, m in metas.items()
@@ -666,8 +686,7 @@ def montar_painel():
             "previsto_ontem_50": round(previsto_ontem.get(squad_interno, {}).get("p50", 0.0), 2),
             "previsto_ontem_70": round(previsto_ontem.get(squad_interno, {}).get("p70", 0.0), 2),
             "previsto_ontem_media": round(previsto_ontem.get(squad_interno, {}).get("media", 0.0), 2),
-            "em_aberto_hoje": em_aberto_hoje.get(squad_interno, 0),
-            "em_aberto_ontem": em_aberto_ontem.get(squad_interno, 0),
+            "em_aberto_hoje": round(em_aberto_hoje.get(squad_interno, 0.0), 2),
         }
 
     total_meta_mes = sum(resultado["squads"][SQUAD_DISPLAY[s]]["meta_mes"] for s in SQUADS_FINANCEIROS)
@@ -677,7 +696,7 @@ def montar_painel():
     total_hoje = sum(resultado["squads"][SQUAD_DISPLAY[s]]["hoje"] for s in SQUADS_FINANCEIROS)
     campos_previsto = ["previsto_hoje_20", "previsto_hoje_50", "previsto_hoje_70", "previsto_hoje_media",
                         "previsto_ontem_20", "previsto_ontem_50", "previsto_ontem_70", "previsto_ontem_media",
-                        "em_aberto_hoje", "em_aberto_ontem"]
+                        "em_aberto_hoje"]
     totais_previsto = {
         campo: sum(resultado["squads"][SQUAD_DISPLAY[s]][campo] for s in SQUADS_FINANCEIROS)
         for campo in campos_previsto
