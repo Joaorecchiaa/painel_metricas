@@ -489,8 +489,9 @@ def reuniao_valida_sdr(atividade, deals_rv_owner_map):
 # ---------------------------------------------------------------------------
 
 def buscar_forecast_deals():
-    """Pipeline aberto (FILTER_FORECAST) — v1."""
-    return pd_v1_paginado("/deals", FILTER_FORECAST)
+    """Filtro de forecast — status=all_not_deleted pra também trazer negócios
+    perdidos (não só os ainda em aberto), evitando subestimar o previsto."""
+    return pd_v1_paginado("/deals", FILTER_FORECAST, extra_params={"status": "all_not_deleted"})
 
 
 def valor_previsto_por_squad(pool, colaboradores, users_map, data_alvo):
