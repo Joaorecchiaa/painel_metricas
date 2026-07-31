@@ -84,6 +84,30 @@
   .pill.warn { background: #fef3c7; color: var(--warn); }
   .pill.bad { background: #fee2e2; color: var(--bad); }
   #erro { color: var(--bad); font-size: 13px; margin-top: 20px; display: none; }
+  .produto-dropdown summary {
+    cursor: pointer;
+    font-weight: 500;
+    list-style: none;
+  }
+  .produto-dropdown summary::-webkit-details-marker { display: none; }
+  .produto-dropdown summary::before { content: "▸ "; color: var(--muted); }
+  .produto-dropdown[open] summary::before { content: "▾ "; }
+  .dropdown-conteudo {
+    display: flex;
+    gap: 18px;
+    margin-top: 6px;
+    padding: 8px 10px;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-weight: 400;
+    text-align: left;
+  }
+  .dropdown-coluna { flex: 1; min-width: 0; }
+  .dropdown-coluna strong { display: block; font-size: 10px; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
+  .dropdown-coluna a { display: block; font-size: 11px; color: var(--accent); text-decoration: none; padding: 2px 0; white-space: normal; }
+  .dropdown-coluna a:hover { text-decoration: underline; }
+  .dropdown-vazio { font-size: 11px; color: var(--muted); }
   .tabela-wrap { border: 1px solid var(--border); border-radius: 8px; }
   th.grupo-hoje, td.grupo-hoje { background: #eff6ff; }
   th.grupo-ontem, td.grupo-ontem { background: #f9fafb; }
@@ -251,10 +275,34 @@ async function atualizar() {
     ]);
 
     const produtos = data.produtos_em_aberto || {};
+    const detalhes = data.produtos_em_aberto_detalhes || {};
     const linhasProdutos = ["PFCC", "CES", "LEAN", "ABP", "Não classificado"];
+
+    function listaNegocios(squad, produto) {
+      const negocios = ((detalhes[squad] || {})[produto]) || [];
+      if (negocios.length === 0) return "<div class=\"dropdown-vazio\">Nenhum negócio</div>";
+      return negocios.map(n =>
+        `<a href="${n.url}" target="_blank" rel="noopener">${n.titulo} — ${fmtMoeda(n.valor)}</a>`
+      ).join("");
+    }
+
     document.getElementById("tabelaProdutos").innerHTML = linhasProdutos.map(p => `
       <tr>
-        <td>${p}</td>
+        <td>
+          <details class="produto-dropdown">
+            <summary>${p}</summary>
+            <div class="dropdown-conteudo">
+              <div class="dropdown-coluna">
+                <strong>Olympus</strong>
+                ${listaNegocios("Olympus", p)}
+              </div>
+              <div class="dropdown-coluna">
+                <strong>Elite</strong>
+                ${listaNegocios("Elite", p)}
+              </div>
+            </div>
+          </details>
+        </td>
         <td>${(produtos.Olympus || {})[p] ?? 0}</td>
         <td>${(produtos.Elite || {})[p] ?? 0}</td>
       </tr>`).join("");
