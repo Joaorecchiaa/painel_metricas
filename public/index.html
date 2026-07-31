@@ -68,7 +68,11 @@
     text-transform: uppercase;
     letter-spacing: 0.02em;
   }
-  td.total, th:nth-child(4) { background: var(--total-bg); font-weight: 600; border-left: 2px solid var(--border); }
+  td.total, #tabela-financeiro th:nth-child(4) { background: var(--total-bg); font-weight: 600; border-left: 2px solid var(--border); }
+  #tabelaFinanceiro td:nth-child(2), #tabela-financeiro th:nth-child(2) { background: #f0f9f4; }
+  #tabelaFinanceiro td:nth-child(3), #tabela-financeiro th:nth-child(3) { background: #fff7ed; }
+  th.col-olympus, td.col-olympus { background: #eef2ff; }
+  th.col-elite, td.col-elite { background: #ecfdf5; }
   .pill {
     display: inline-block;
     font-size: 10px;
@@ -102,7 +106,7 @@
 
 <h2 class="titulo-tabela">Financeiro — Olympus &amp; Elite</h2>
 <div class="tabela-wrap">
-  <table>
+  <table id="tabela-financeiro">
     <thead>
       <tr>
         <th>Métrica</th>
