@@ -93,6 +93,7 @@
   .pill.warn { background: #fef3c7; color: var(--warn); }
   .pill.bad { background: #fee2e2; color: var(--bad); }
   #erro { color: var(--bad); font-size: 13px; margin-top: 20px; display: none; }
+  .produto-dropdown { position: relative; }
   .produto-dropdown summary {
     cursor: pointer;
     font-weight: 500;
@@ -102,21 +103,52 @@
   .produto-dropdown summary::before { content: "▸ "; color: var(--muted); }
   .produto-dropdown[open] summary::before { content: "▾ "; }
   .dropdown-conteudo {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: 30;
     display: flex;
-    gap: 18px;
-    margin-top: 6px;
-    padding: 8px 10px;
     background: #fff;
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 8px;
+    box-shadow: 0 10px 28px rgba(17, 24, 39, 0.14);
+    min-width: 560px;
+    max-height: 340px;
+    overflow-y: auto;
     font-weight: 400;
     text-align: left;
   }
-  .dropdown-coluna { flex: 1; min-width: 0; }
-  .dropdown-coluna strong { display: block; font-size: 10px; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
-  .dropdown-coluna a { display: block; font-size: 11px; color: var(--accent); text-decoration: none; padding: 2px 0; white-space: normal; }
-  .dropdown-coluna a:hover { text-decoration: underline; }
-  .dropdown-vazio { font-size: 11px; color: var(--muted); }
+  .dropdown-coluna { flex: 1; min-width: 260px; }
+  .dropdown-coluna + .dropdown-coluna { border-left: 1px solid var(--border); }
+  .dropdown-coluna-header {
+    position: sticky;
+    top: 0;
+    background: var(--head-bg);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    padding: 8px 12px;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+  }
+  .dropdown-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+    padding: 7px 12px;
+    font-size: 12px;
+    color: var(--ink);
+    text-decoration: none;
+    border-bottom: 1px solid #f3f4f6;
+  }
+  .dropdown-item:last-child { border-bottom: none; }
+  .dropdown-item:hover { background: #f8fafc; }
+  .dropdown-item .nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dropdown-item .valor { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; flex-shrink: 0; }
+  .dropdown-vazio { padding: 12px; font-size: 11px; color: var(--muted); text-align: center; }
   .tabela-wrap { border: 1px solid var(--border); border-radius: 8px; }
   th.grupo-hoje, td.grupo-hoje { background: #eff6ff; }
   th.grupo-ontem, td.grupo-ontem { background: #f9fafb; }
@@ -332,7 +364,10 @@ async function atualizar() {
       const negocios = ((detalhes[squad] || {})[produto]) || [];
       if (negocios.length === 0) return "<div class=\"dropdown-vazio\">Nenhum negócio</div>";
       return negocios.map(n =>
-        `<a href="${n.url}" target="_blank" rel="noopener">${n.titulo} — ${fmtMoeda(n.valor)}</a>`
+        `<a class="dropdown-item" href="${n.url}" target="_blank" rel="noopener" title="${n.titulo}">
+          <span class="nome">${n.titulo}</span>
+          <span class="valor">${fmtMoeda(n.valor)}</span>
+        </a>`
       ).join("");
     }
 
@@ -343,11 +378,11 @@ async function atualizar() {
             <summary>${p}</summary>
             <div class="dropdown-conteudo">
               <div class="dropdown-coluna">
-                <strong>Olympus</strong>
+                <div class="dropdown-coluna-header">Olympus</div>
                 ${listaNegocios("Olympus", p)}
               </div>
               <div class="dropdown-coluna">
-                <strong>Elite</strong>
+                <div class="dropdown-coluna-header">Elite</div>
                 ${listaNegocios("Elite", p)}
               </div>
             </div>
