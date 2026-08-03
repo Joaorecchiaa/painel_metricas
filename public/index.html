@@ -131,36 +131,16 @@
     margin-bottom: 8px;
   }
 
-  .status-grupo { margin-bottom: 10px; }
-  .status-titulo {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--ink);
-    margin-bottom: 3px;
-  }
-  .status-titulo .qtd { color: var(--muted); font-weight: 400; }
-  .status-lista {
-    max-height: 140px;
-    overflow-y: auto;
-    border: 1px solid #f1f1f1;
-    border-radius: 6px;
-  }
-  .status-item {
+  .status-grupo {
     display: flex;
     justify-content: space-between;
-    align-items: baseline;
-    gap: 8px;
-    padding: 5px 8px;
-    font-size: 11px;
-    color: var(--ink);
-    text-decoration: none;
+    padding: 4px 0;
+    font-size: 12px;
     border-bottom: 1px solid #f3f4f6;
   }
-  .status-item:last-child { border-bottom: none; }
-  .status-item:hover { background: #f8fafc; }
-  .status-item .nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .status-item .valor { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; flex-shrink: 0; }
-  .status-vazio { padding: 6px 8px; font-size: 11px; color: var(--muted); }
+  .status-grupo:last-child { border-bottom: none; }
+  .status-titulo { color: var(--muted); }
+  .status-numero { font-weight: 600; }
   .tabela-wrap { border: 1px solid var(--border); border-radius: 8px; }
   th.grupo-hoje, td.grupo-hoje { background: #eff6ff; }
   th.grupo-ontem, td.grupo-ontem { background: #f9fafb; }
@@ -357,7 +337,7 @@ async function atualizar() {
       { dados: data.squads.Sniper },
     ]);
 
-    const detalhes = data.produtos_em_aberto_detalhes || {};
+    const numeros = data.produtos_em_aberto_detalhes || {};
     const linhasProdutos = ["PFCC", "CES", "LEAN", "ABP", "Não classificado"];
     const CATEGORIAS = [
       { key: "abertos", label: "Abertos" },
@@ -367,26 +347,13 @@ async function atualizar() {
       { key: "ganhos_hoje", label: "Ganhos - Hoje" },
     ];
 
-    function listaNegocios(negocios) {
-      if (!negocios || negocios.length === 0) return "<div class=\"status-vazio\">Nenhum</div>";
-      return negocios.map(n =>
-        `<a class="status-item" href="${n.url}" target="_blank" rel="noopener" title="${n.titulo}">
-          <span class="nome">${n.titulo}</span>
-          <span class="valor">${fmtMoeda(n.valor)}</span>
-        </a>`
-      ).join("");
-    }
-
     function blocoSquad(squad, produto) {
-      const dadosProduto = ((detalhes[squad] || {})[produto]) || {};
-      const grupos = CATEGORIAS.map(cat => {
-        const lista = dadosProduto[cat.key] || [];
-        return `
-          <div class="status-grupo">
-            <div class="status-titulo">${cat.label} <span class="qtd">(${lista.length})</span></div>
-            <div class="status-lista">${listaNegocios(lista)}</div>
-          </div>`;
-      }).join("");
+      const dadosProduto = ((numeros[squad] || {})[produto]) || {};
+      const grupos = CATEGORIAS.map(cat => `
+        <div class="status-grupo">
+          <span class="status-titulo">${cat.label}:</span>
+          <span class="status-numero">${dadosProduto[cat.key] ?? 0}</span>
+        </div>`).join("");
       return `
         <div class="produto-squad">
           <div class="produto-squad-titulo">${squad}</div>
