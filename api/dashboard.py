@@ -15,6 +15,8 @@ import csv
 import io
 import json
 import unicodedata
+import calendar
+import math
 import datetime as dt
 from http.server import BaseHTTPRequestHandler
 from urllib.request import Request, urlopen
@@ -68,7 +70,6 @@ FUNIL_PARA_SQUAD = {
 # percentual do "gap intermediário" e a data-prazo (ex.: 40% até 16/07/2026).
 # Por ora como constantes — mover pro Sheets se o time preferir editar sem deploy.
 PCT_GAP_INTERMEDIARIO = 0.40
-PRAZO_GAP_INTERMEDIARIO = dt.date(2026, 7, 16)
 
 TZ_OFFSET_HORAS = 3  # Pipedrive retorna UTC; BRT = UTC - 3h (sem horário de verão)
 
@@ -697,14 +698,34 @@ def montar_painel(ano_param=None, mes_param=None):
                    if colaboradores.get(nome, {}).get("subarea") == squad_interno)
 
     ritmo_100 = safe_div(du["passados"], du["total"])
-    dias_ate_prazo = max((PRAZO_GAP_INTERMEDIARIO - hoje).days, 0) if PRAZO_GAP_INTERMEDIARIO >= hoje else 0
-    # dias úteis restantes até o prazo dos 40% (aprox. via feriados)
-    restantes_prazo = 0
-    d = hoje + dt.timedelta(days=1)
-    while d <= PRAZO_GAP_INTERMEDIARIO:
+
+    # Prazo do gap intermediário (40%) = sempre a metade do mês selecionado,
+    # arredondando pra cima (31 dias -> dia 16; 30 -> dia 15; 29 -> dia 15; 28 -> dia 14).
+    dias_no_mes_calendario = calendar.monthrange(ano, mes)[1]
+    dia_metade = math.ceil(dias_no_mes_calendario / 2)
+    prazo_gap_intermediario = dt.date(ano, mes, dia_metade)
+
+    # Dias úteis da 1ª metade do mês (usado como base pro Meta/Dia 40% em mês fechado)
+    dias_uteis_primeira_metade = 0
+    d = dt.date(ano, mes, 1)
+    while d <= prazo_gap_intermediario:
         if eh_dia_util(d, feriados):
-            restantes_prazo += 1
+            dias_uteis_primeira_metade += 1
         d += dt.timedelta(days=1)
+
+    if e_mes_atual:
+        restantes_prazo = 0
+        d = hoje + dt.timedelta(days=1)
+        while d <= prazo_gap_intermediario:
+            if eh_dia_util(d, feriados):
+                restantes_prazo += 1
+            d += dt.timedelta(days=1)
+        dias_restantes_p40 = restantes_prazo if restantes_prazo > 0 else (1 if eh_dia_util(hoje, feriados) else 0)
+    else:
+        # mês fechado: não existe "dias restantes até o prazo" — usa a 1ª metade do mês inteira
+        restantes_prazo = 0
+        dias_restantes_p40 = dias_uteis_primeira_metade
+
     ritmo_prazo = safe_div(du["passados"], du["passados"] + restantes_prazo)
 
     resultado = {
@@ -721,7 +742,7 @@ def montar_painel(ano_param=None, mes_param=None):
         onde_40 = (PCT_GAP_INTERMEDIARIO * meta_mes) * ritmo_prazo
         gap_100 = max(0.0, meta_mes - multi)
         gap_40 = max(0.0, (PCT_GAP_INTERMEDIARIO * meta_mes) - multi)
-        meta_dia_40 = safe_div(gap_40, restantes_prazo)
+        meta_dia_40 = safe_div(gap_40, dias_restantes_p40)
         meta_dia_100 = safe_div(gap_100, dias_restantes_p100)  # gap / dias úteis restantes até o fim do mês (hoje conta se for o último)
         gap_100_bruto = max(0.0, meta_mes - bruto)
         meta_dia_100_bruto = safe_div(gap_100_bruto, dias_restantes_p100)
@@ -776,7 +797,7 @@ def montar_painel(ano_param=None, mes_param=None):
         "atingimento": round(safe_div(total_multi, total_meta_mes) * 100, 2),
         "gap_100": round(max(0.0, total_meta_mes - total_multi), 2),
         "gap_40": round(total_gap_40, 2),
-        "meta_dia_40": round(safe_div(total_gap_40, restantes_prazo), 2),
+        "meta_dia_40": round(safe_div(total_gap_40, dias_restantes_p40), 2),
         "meta_dia_100": round(safe_div(max(0.0, total_meta_mes - total_multi), dias_restantes_p100), 2),
         "gap_100_bruto": round(max(0.0, total_meta_mes - total_bruto), 2),
         "meta_dia_100_bruto": round(safe_div(max(0.0, total_meta_mes - total_bruto), dias_restantes_p100), 2),
@@ -844,7 +865,7 @@ def montar_painel(ano_param=None, mes_param=None):
     onde_40_reu = (PCT_GAP_INTERMEDIARIO * meta_reunioes) * ritmo_prazo
     gap_100_reu = max(0.0, meta_reunioes - validadas_total)
     gap_40_reu = max(0.0, (PCT_GAP_INTERMEDIARIO * meta_reunioes) - validadas_total)
-    meta_dia_40_reu = safe_div(gap_40_reu, restantes_prazo)
+    meta_dia_40_reu = safe_div(gap_40_reu, dias_restantes_p40)
     meta_dia_100_reu = safe_div(gap_100_reu, dias_restantes_p100)
 
     resultado["squads"]["Sniper"] = {
@@ -871,7 +892,7 @@ def montar_painel(ano_param=None, mes_param=None):
         "dias_uteis_passados": du["passados"],
         "dias_uteis_restantes": du["restantes"],
         "dias_restantes_p100": dias_restantes_p100,
-        "prazo_gap_intermediario": PRAZO_GAP_INTERMEDIARIO.isoformat(),
+        "prazo_gap_intermediario": prazo_gap_intermediario.isoformat(),
         "percentual_gap_intermediario": PCT_GAP_INTERMEDIARIO,
         "proximo_dia_util": prox_dia_util.isoformat(),
         "ritmo_100_pct": round(ritmo_100 * 100, 1),
