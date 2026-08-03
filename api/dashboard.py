@@ -379,6 +379,34 @@ def pd_users():
     return {u["id"]: u.get("name", "") for u in (data.get("data") or [])}
 
 
+def buscar_pipeline_id_por_nome(nome_busca):
+    """Acha o pipeline_id cujo nome contém nome_busca (case-insensitive)."""
+    data = http_get_json(f"{V1_BASE}/pipelines?{urlencode({'api_token': PD_TOKEN})}")
+    alvo = norm(nome_busca)
+    for p in (data.get("data") or []):
+        if alvo in norm(p.get("name", "")):
+            return p.get("id")
+    return None
+
+
+def buscar_deals_abertos_por_pipeline(pipeline_id):
+    """Todos os negócios com status=open de um pipeline específico — direto,
+    sem passar por nenhum filter_id salvo (evita limitações do filtro de forecast)."""
+    itens, start = [], 0
+    while True:
+        params = {
+            "api_token": PD_TOKEN, "status": "open", "pipeline_id": pipeline_id,
+            "limit": 500, "start": start,
+        }
+        data = http_get_json(f"{V1_BASE}/deals?{urlencode(params)}")
+        itens.extend(data.get("data") or [])
+        pag = (data.get("additional_data") or {}).get("pagination") or {}
+        if not pag.get("more_items_in_collection"):
+            break
+        start = pag.get("next_start", start + 500)
+    return itens
+
+
 def cf_valor(deal, hash_):
     v = deal.get(hash_)
     if isinstance(v, dict):
@@ -608,30 +636,29 @@ def classificar_produto(deal):
 PRODUTOS_TODOS = PRODUTOS + ["Não classificado"]
 
 
-def produtos_em_aberto_por_squad(pool, colaboradores, users_map):
+SQUAD_NOME_PIPELINE = {"mgm": "olympus", "elite": "elite"}  # nome do funil no Pipedrive
+
+
+def produtos_em_aberto_por_squad():
     """Quantos negócios em aberto de cada produto, por squad (Olympus/Elite),
-    e a lista de negócios (pra montar o dropdown com link pro Pipedrive)."""
+    buscando direto por pipeline (funil) + status=open — sem depender do
+    filtro de forecast (que tem escopo menor) nem da COLAB/cargo."""
     contagem = {s: {p: 0 for p in PRODUTOS_TODOS} for s in SQUADS_FINANCEIROS}
     detalhes = {s: {p: [] for p in PRODUTOS_TODOS} for s in SQUADS_FINANCEIROS}
-    vistos = set()
-    for d in pool:
-        did = d.get("id")
-        if did in vistos:
+    for squad_interno, nome_pipeline in SQUAD_NOME_PIPELINE.items():
+        pipeline_id = buscar_pipeline_id_por_nome(nome_pipeline)
+        if pipeline_id is None:
             continue
-        vistos.add(did)
-        if d.get("status") != "open":
-            continue
-        squad = squad_do_deal(d, colaboradores, users_map)
-        if squad not in contagem:
-            continue
-        produto = classificar_produto(d) or "Não classificado"
-        contagem[squad][produto] += 1
-        detalhes[squad][produto].append({
-            "id": did,
-            "titulo": d.get("title") or f"Negócio {did}",
-            "valor": float(d.get("value") or 0),
-            "url": f"https://{PD_DOMAIN}/deal/{did}",
-        })
+        deals = buscar_deals_abertos_por_pipeline(pipeline_id)
+        for d in deals:
+            produto = classificar_produto(d) or "Não classificado"
+            contagem[squad_interno][produto] += 1
+            detalhes[squad_interno][produto].append({
+                "id": d.get("id"),
+                "titulo": d.get("title") or f"Negócio {d.get('id')}",
+                "valor": float(d.get("value") or 0),
+                "url": f"https://{PD_DOMAIN}/deal/{d.get('id')}",
+            })
     return contagem, detalhes
 
 
@@ -896,7 +923,11 @@ def montar_painel(ano_param=None, mes_param=None):
         "ritmo_100_pct": round(ritmo_100 * 100, 1),
         "ritmo_40_pct": round(ritmo_prazo * 100, 1),
     }
-    produtos_por_squad, produtos_detalhes = produtos_em_aberto_por_squad(pool_previsto, colaboradores, users_map)
+    if e_mes_atual:
+        produtos_por_squad, produtos_detalhes = produtos_em_aberto_por_squad()
+    else:
+        produtos_por_squad = {s: {p: 0 for p in PRODUTOS_TODOS} for s in SQUADS_FINANCEIROS}
+        produtos_detalhes = {s: {p: [] for p in PRODUTOS_TODOS} for s in SQUADS_FINANCEIROS}
     resultado["produtos_em_aberto"] = {
         SQUAD_DISPLAY[s]: produtos_por_squad[s] for s in SQUADS_FINANCEIROS
     }
