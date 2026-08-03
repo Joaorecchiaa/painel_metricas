@@ -633,9 +633,10 @@ def produtos_em_aberto_por_squad(pool, colaboradores, users_map):
     return contagem, detalhes
 
 
-def montar_painel():
+def montar_painel(ano_param=None, mes_param=None):
     hoje = dt.date.today()
-    ano, mes = hoje.year, hoje.month
+    ano, mes = ano_param or hoje.year, mes_param or hoje.month
+    e_mes_atual = (ano, mes) == (hoje.year, hoje.month)
 
     feriados = carregar_feriados()
     colaboradores = carregar_colaboradores(mes, ano)
@@ -643,7 +644,7 @@ def montar_painel():
     du = calcular_dias_uteis(ano, mes, feriados)
     # Se não sobra nenhum dia útil DEPOIS de hoje, mas hoje ainda é dia útil,
     # considera hoje como "1 dia" pra não zerar o Meta/Dia 100% no último dia do mês.
-    dias_restantes_p100 = du["restantes"] if du["restantes"] > 0 else (1 if eh_dia_util(hoje, feriados) else 0)
+    dias_restantes_p100 = du["restantes"] if du["restantes"] > 0 else (1 if (e_mes_atual and eh_dia_util(hoje, feriados)) else 0)
 
     users_map = pd_users()
     deals_ganhos = buscar_deals_ganhos(ano, mes, users_map)
@@ -667,16 +668,24 @@ def montar_painel():
         if won_brt and won_brt.date() == hoje:
             squads_fin[squad]["hoje"] += multi
 
-    # ---- Previsto (forecast) hoje/ontem ----
+    # ---- Previsto (forecast) hoje/ontem — só faz sentido no mês atual ----
     # Sem snapshot histórico: "previsto para ontem" olha o pipeline aberto de hoje
     # + os negócios já ganhos este mês (cobre quem fechou); negócios perdidos com
     # aquela data prevista não entram aqui (limitação conhecida, sem persistência).
-    forecast_abertos = buscar_forecast_deals()
-    pool_previsto = forecast_abertos + deals_ganhos
-    stage_prob_map = buscar_probabilidade_por_stage()
-    previsto_hoje = valor_previsto_por_squad(pool_previsto, colaboradores, users_map, hoje, stage_prob_map)
-    previsto_ontem = valor_previsto_por_squad(pool_previsto, colaboradores, users_map, ontem, stage_prob_map)
-    em_aberto_hoje = valor_abertos_por_squad(pool_previsto, colaboradores, users_map, hoje)
+    if e_mes_atual:
+        forecast_abertos = buscar_forecast_deals()
+        pool_previsto = forecast_abertos + deals_ganhos
+        stage_prob_map = buscar_probabilidade_por_stage()
+        previsto_hoje = valor_previsto_por_squad(pool_previsto, colaboradores, users_map, hoje, stage_prob_map)
+        previsto_ontem = valor_previsto_por_squad(pool_previsto, colaboradores, users_map, ontem, stage_prob_map)
+        em_aberto_hoje = valor_abertos_por_squad(pool_previsto, colaboradores, users_map, hoje)
+    else:
+        pool_previsto = []
+        forecast_abertos = []
+        stage_prob_map = {}
+        previsto_hoje = {s: {"p20": 0.0, "p50": 0.0, "p70": 0.0, "media": 0.0} for s in SQUADS_FINANCEIROS}
+        previsto_ontem = {s: {"p20": 0.0, "p50": 0.0, "p70": 0.0, "media": 0.0} for s in SQUADS_FINANCEIROS}
+        em_aberto_hoje = {s: 0.0 for s in SQUADS_FINANCEIROS}
 
     def meta_squad(squad_interno):
         return sum(m["meta_fin"] for nome, m in metas.items()
@@ -693,7 +702,10 @@ def montar_painel():
         d += dt.timedelta(days=1)
     ritmo_prazo = safe_div(du["passados"], du["passados"] + restantes_prazo)
 
-    resultado = {"squads": {}, "geradoEm": dt.datetime.now().isoformat()}
+    resultado = {
+        "squads": {}, "geradoEm": dt.datetime.now().isoformat(),
+        "mes": mes, "ano": ano, "e_mes_atual": e_mes_atual,
+    }
 
     for squad_interno in SQUADS_FINANCEIROS:
         meta_mes = meta_squad(squad_interno)
@@ -894,7 +906,11 @@ def montar_painel():
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         try:
-            payload = montar_painel()
+            from urllib.parse import urlparse, parse_qs
+            query = parse_qs(urlparse(self.path).query)
+            mes_param = int(query["mes"][0]) if "mes" in query else None
+            ano_param = int(query["ano"][0]) if "ano" in query else None
+            payload = montar_painel(ano_param=ano_param, mes_param=mes_param)
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             self.send_response(200)
         except Exception as e:
