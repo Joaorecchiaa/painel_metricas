@@ -389,13 +389,13 @@ def buscar_pipeline_id_por_nome(nome_busca):
     return None
 
 
-def buscar_deals_abertos_por_pipeline(pipeline_id):
-    """Todos os negócios com status=open de um pipeline específico — direto,
+def buscar_deals_por_pipeline(pipeline_id, status):
+    """Negócios de um status específico (open/won/lost) de um pipeline — direto,
     sem passar por nenhum filter_id salvo. Usa API v2: a v1 ignora silenciosamente
     o parâmetro pipeline_id (por isso todos os funis vinham juntos antes)."""
     itens, cursor = [], None
     while True:
-        params = {"status": "open", "pipeline_id": pipeline_id, "limit": 500}
+        params = {"status": status, "pipeline_id": pipeline_id, "limit": 500}
         if cursor:
             params["cursor"] = cursor
         headers = {"x-api-token": PD_TOKEN}
@@ -641,18 +641,23 @@ PRODUTOS_TODOS = PRODUTOS + ["Não classificado"]
 SQUAD_NOME_PIPELINE = {"mgm": "olympus", "elite": "elite"}  # nome do funil no Pipedrive
 
 
-def produtos_em_aberto_por_squad():
-    """Quantos negócios em aberto de cada produto, por squad (Olympus/Elite),
-    buscando direto por pipeline (funil) + status=open — sem depender do
-    filtro de forecast (que tem escopo menor) nem da COLAB/cargo."""
+def produtos_em_aberto_por_squad(ano, mes, hoje):
+    """Por produto e squad (Olympus/Elite), buscando direto por pipeline (funil):
+    - Abertos: negócios com status=open agora (com detalhes pro dropdown)
+    - Ganhos/Perdidos: contagem de hoje e do mês selecionado
+    Tudo classificado pela utm_campaign, sem depender da COLAB/cargo."""
     contagem = {s: {p: 0 for p in PRODUTOS_TODOS} for s in SQUADS_FINANCEIROS}
     detalhes = {s: {p: [] for p in PRODUTOS_TODOS} for s in SQUADS_FINANCEIROS}
+    stats = {s: {p: {"perdidos_hoje": 0, "perdidos_mes": 0, "ganhos_hoje": 0, "ganhos_mes": 0}
+                 for p in PRODUTOS_TODOS} for s in SQUADS_FINANCEIROS}
+
     for squad_interno, nome_pipeline in SQUAD_NOME_PIPELINE.items():
         pipeline_id = buscar_pipeline_id_por_nome(nome_pipeline)
         if pipeline_id is None:
             continue
-        deals = buscar_deals_abertos_por_pipeline(pipeline_id)
-        for d in deals:
+
+        abertos = buscar_deals_por_pipeline(pipeline_id, "open")
+        for d in abertos:
             produto = classificar_produto(d) or "Não classificado"
             contagem[squad_interno][produto] += 1
             detalhes[squad_interno][produto].append({
@@ -661,7 +666,28 @@ def produtos_em_aberto_por_squad():
                 "valor": float(d.get("value") or 0),
                 "url": f"https://{PD_DOMAIN}/deal/{d.get('id')}",
             })
-    return contagem, detalhes
+
+        ganhos = buscar_deals_por_pipeline(pipeline_id, "won")
+        for d in ganhos:
+            won_brt = to_brt(d.get("won_time"))
+            if not won_brt or (won_brt.year, won_brt.month) != (ano, mes):
+                continue
+            produto = classificar_produto(d) or "Não classificado"
+            stats[squad_interno][produto]["ganhos_mes"] += 1
+            if won_brt.date() == hoje:
+                stats[squad_interno][produto]["ganhos_hoje"] += 1
+
+        perdidos = buscar_deals_por_pipeline(pipeline_id, "lost")
+        for d in perdidos:
+            lost_brt = to_brt(d.get("lost_time"))
+            if not lost_brt or (lost_brt.year, lost_brt.month) != (ano, mes):
+                continue
+            produto = classificar_produto(d) or "Não classificado"
+            stats[squad_interno][produto]["perdidos_mes"] += 1
+            if lost_brt.date() == hoje:
+                stats[squad_interno][produto]["perdidos_hoje"] += 1
+
+    return contagem, detalhes, stats
 
 
 def montar_painel(ano_param=None, mes_param=None):
@@ -926,15 +952,20 @@ def montar_painel(ano_param=None, mes_param=None):
         "ritmo_40_pct": round(ritmo_prazo * 100, 1),
     }
     if e_mes_atual:
-        produtos_por_squad, produtos_detalhes = produtos_em_aberto_por_squad()
+        produtos_por_squad, produtos_detalhes, produtos_stats = produtos_em_aberto_por_squad(ano, mes, hoje)
     else:
         produtos_por_squad = {s: {p: 0 for p in PRODUTOS_TODOS} for s in SQUADS_FINANCEIROS}
         produtos_detalhes = {s: {p: [] for p in PRODUTOS_TODOS} for s in SQUADS_FINANCEIROS}
+        produtos_stats = {s: {p: {"perdidos_hoje": 0, "perdidos_mes": 0, "ganhos_hoje": 0, "ganhos_mes": 0}
+                              for p in PRODUTOS_TODOS} for s in SQUADS_FINANCEIROS}
     resultado["produtos_em_aberto"] = {
         SQUAD_DISPLAY[s]: produtos_por_squad[s] for s in SQUADS_FINANCEIROS
     }
     resultado["produtos_em_aberto_detalhes"] = {
         SQUAD_DISPLAY[s]: produtos_detalhes[s] for s in SQUADS_FINANCEIROS
+    }
+    resultado["produtos_stats"] = {
+        SQUAD_DISPLAY[s]: produtos_stats[s] for s in SQUADS_FINANCEIROS
     }
 
     debug_previsto_hoje_deals = {s: [] for s in SQUADS_FINANCEIROS}
