@@ -358,7 +358,7 @@ async function atualizar() {
       </tr>`).join("");
 
     document.getElementById("ultimaAtualizacao").textContent =
-      "Atualizado às " + new Date(data.geradoEm).toLocaleTimeString("pt-BR");
+      "Atualizado às " + new Date(data.geradoEm).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo" });
   } catch (e) {
     erroBox.textContent = "Erro ao atualizar: " + e.message;
     erroBox.style.display = "block";
