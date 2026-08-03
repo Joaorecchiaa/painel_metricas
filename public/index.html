@@ -93,91 +93,35 @@
   .pill.warn { background: #fef3c7; color: var(--warn); }
   .pill.bad { background: #fee2e2; color: var(--bad); }
   #erro { color: var(--bad); font-size: 13px; margin-top: 20px; display: none; }
-  .produto-dropdown { position: relative; }
-  .produto-dropdown summary {
-    cursor: pointer;
-    font-weight: 500;
-    list-style: none;
-  }
-  .produto-dropdown summary::-webkit-details-marker { display: none; }
-  .produto-dropdown summary::before { content: "▸ "; color: var(--muted); }
-  .produto-dropdown[open] summary::before { content: "▾ "; }
-  .dropdown-conteudo {
-    position: absolute;
-    top: calc(100% + 4px);
-    left: 0;
-    z-index: 30;
-    display: flex;
-    background: #fff;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: 0 10px 28px rgba(17, 24, 39, 0.14);
-    min-width: 320px;
-    width: min(560px, 92vw);
-    max-width: 92vw;
-    max-height: 340px;
-    overflow-y: auto;
-    font-weight: 400;
-    text-align: left;
-  }
-  .dropdown-coluna { flex: 1; min-width: 260px; }
-  .dropdown-coluna + .dropdown-coluna { border-left: 1px solid var(--border); }
-  .dropdown-coluna-header {
-    position: sticky;
-    top: 0;
-    background: var(--head-bg);
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--muted);
-    padding: 8px 12px;
-    text-align: center;
-    border-bottom: 1px solid var(--border);
-  }
-  .dropdown-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 10px;
-    padding: 7px 12px;
-    font-size: 12px;
-    color: var(--ink);
-    text-decoration: none;
-    border-bottom: 1px solid #f3f4f6;
-  }
-  .dropdown-item:last-child { border-bottom: none; }
-  .dropdown-item:hover { background: #f8fafc; }
-  .dropdown-item .nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .dropdown-item .valor { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; flex-shrink: 0; }
-  .dropdown-vazio { padding: 12px; font-size: 11px; color: var(--muted); text-align: center; }
 
   .produto-card {
     border: 1px solid var(--border);
     border-radius: 8px;
-    margin-bottom: 14px;
+    margin-bottom: 10px;
     overflow: hidden;
   }
-  .produto-card-titulo {
+  .produto-card > summary {
+    cursor: pointer;
+    list-style: none;
     background: var(--head-bg);
     font-size: 12px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.03em;
     color: var(--ink);
-    padding: 8px 14px;
-    border-bottom: 1px solid var(--border);
+    padding: 9px 14px;
   }
+  .produto-card > summary::-webkit-details-marker { display: none; }
+  .produto-card > summary::before { content: "▸ "; color: var(--muted); }
+  .produto-card[open] > summary::before { content: "▾ "; }
+  .produto-card[open] > summary { border-bottom: 1px solid var(--border); }
+
   .produto-squads {
     display: grid;
     grid-template-columns: 1fr 1fr;
   }
-  .produto-squad {
-    padding: 12px 16px;
-  }
-  .produto-squad:first-child {
-    border-right: 1px solid var(--border);
-  }
+  .produto-squad { padding: 12px 16px; }
+  .produto-squad:first-child { border-right: 1px solid var(--border); }
   .produto-squad-titulo {
     font-size: 10px;
     font-weight: 700;
@@ -186,34 +130,37 @@
     color: var(--muted);
     margin-bottom: 8px;
   }
-  .produto-abertos {
-    font-size: 13px;
-    margin-bottom: 10px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid var(--border);
+
+  .status-grupo { margin-bottom: 10px; }
+  .status-titulo {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ink);
+    margin-bottom: 3px;
   }
-  .produto-abertos summary {
-    cursor: pointer;
-    list-style: none;
-    display: inline-flex;
+  .status-titulo .qtd { color: var(--muted); font-weight: 400; }
+  .status-lista {
+    max-height: 140px;
+    overflow-y: auto;
+    border: 1px solid #f1f1f1;
+    border-radius: 6px;
+  }
+  .status-item {
+    display: flex;
+    justify-content: space-between;
     align-items: baseline;
-    gap: 4px;
+    gap: 8px;
+    padding: 5px 8px;
+    font-size: 11px;
+    color: var(--ink);
+    text-decoration: none;
+    border-bottom: 1px solid #f3f4f6;
   }
-  .produto-abertos summary::-webkit-details-marker { display: none; }
-  .produto-abertos summary::before { content: "▸"; color: var(--muted); font-size: 10px; }
-  .produto-abertos[open] summary::before { content: "▾"; }
-  .produto-abertos .rotulo { color: var(--muted); }
-  .produto-abertos .valor-num { font-weight: 600; }
-  .produto-metricas {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 4px 12px;
-    font-size: 12px;
-  }
-  .produto-metricas .rotulo { color: var(--muted); }
-  .produto-metricas .valor-num { font-weight: 600; margin-left: 4px; }
-  .produto-abertos .dropdown-conteudo { width: min(320px, 90vw); }
-  .produto-abertos .dropdown-coluna { border-left: none !important; }
+  .status-item:last-child { border-bottom: none; }
+  .status-item:hover { background: #f8fafc; }
+  .status-item .nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .status-item .valor { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; flex-shrink: 0; }
+  .status-vazio { padding: 6px 8px; font-size: 11px; color: var(--muted); }
   .tabela-wrap { border: 1px solid var(--border); border-radius: 8px; }
   th.grupo-hoje, td.grupo-hoje { background: #eff6ff; }
   th.grupo-ontem, td.grupo-ontem { background: #f9fafb; }
@@ -410,16 +357,20 @@ async function atualizar() {
       { dados: data.squads.Sniper },
     ]);
 
-    const produtos = data.produtos_em_aberto || {};
     const detalhes = data.produtos_em_aberto_detalhes || {};
-    const stats = data.produtos_stats || {};
     const linhasProdutos = ["PFCC", "CES", "LEAN", "ABP", "Não classificado"];
+    const CATEGORIAS = [
+      { key: "abertos", label: "Abertos" },
+      { key: "perdidos_mes", label: "Perdidos - Mês" },
+      { key: "perdidos_hoje", label: "Perdidos - Hoje" },
+      { key: "ganhos_mes", label: "Ganhos - Mês" },
+      { key: "ganhos_hoje", label: "Ganhos - Hoje" },
+    ];
 
-    function listaNegocios(squad, produto) {
-      const negocios = ((detalhes[squad] || {})[produto]) || [];
-      if (negocios.length === 0) return "<div class=\"dropdown-vazio\">Nenhum negócio</div>";
+    function listaNegocios(negocios) {
+      if (!negocios || negocios.length === 0) return "<div class=\"status-vazio\">Nenhum</div>";
       return negocios.map(n =>
-        `<a class="dropdown-item" href="${n.url}" target="_blank" rel="noopener" title="${n.titulo}">
+        `<a class="status-item" href="${n.url}" target="_blank" rel="noopener" title="${n.titulo}">
           <span class="nome">${n.titulo}</span>
           <span class="valor">${fmtMoeda(n.valor)}</span>
         </a>`
@@ -427,36 +378,30 @@ async function atualizar() {
     }
 
     function blocoSquad(squad, produto) {
-      const abertos = (produtos[squad] || {})[produto] ?? 0;
-      const s = ((stats[squad] || {})[produto]) || { perdidos_hoje: 0, perdidos_mes: 0, ganhos_hoje: 0, ganhos_mes: 0 };
+      const dadosProduto = ((detalhes[squad] || {})[produto]) || {};
+      const grupos = CATEGORIAS.map(cat => {
+        const lista = dadosProduto[cat.key] || [];
+        return `
+          <div class="status-grupo">
+            <div class="status-titulo">${cat.label} <span class="qtd">(${lista.length})</span></div>
+            <div class="status-lista">${listaNegocios(lista)}</div>
+          </div>`;
+      }).join("");
       return `
         <div class="produto-squad">
           <div class="produto-squad-titulo">${squad}</div>
-          <details class="produto-abertos">
-            <summary><span class="rotulo">Abertos:</span> <span class="valor-num">${abertos}</span></summary>
-            <div class="dropdown-conteudo">
-              <div class="dropdown-coluna">
-                ${listaNegocios(squad, produto)}
-              </div>
-            </div>
-          </details>
-          <div class="produto-metricas">
-            <div><span class="rotulo">Perdidos - Hoje:</span><span class="valor-num">${s.perdidos_hoje}</span></div>
-            <div><span class="rotulo">Perdidos - Mês:</span><span class="valor-num">${s.perdidos_mes}</span></div>
-            <div><span class="rotulo">Ganhos - Hoje:</span><span class="valor-num">${s.ganhos_hoje}</span></div>
-            <div><span class="rotulo">Ganhos - Mês:</span><span class="valor-num">${s.ganhos_mes}</span></div>
-          </div>
+          ${grupos}
         </div>`;
     }
 
     document.getElementById("cardsProdutos").innerHTML = linhasProdutos.map(p => `
-      <div class="produto-card">
-        <div class="produto-card-titulo">${p}</div>
+      <details class="produto-card">
+        <summary>${p}</summary>
         <div class="produto-squads">
           ${blocoSquad("Olympus", p)}
           ${blocoSquad("Elite", p)}
         </div>
-      </div>`).join("");
+      </details>`).join("");
 
     document.getElementById("ultimaAtualizacao").textContent =
       "Atualizado às " + new Date(data.geradoEm).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo" });
