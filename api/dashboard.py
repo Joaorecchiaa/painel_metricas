@@ -909,6 +909,19 @@ def montar_painel(ano_param=None, mes_param=None):
         SQUAD_DISPLAY[s]: produtos_detalhes[s] for s in SQUADS_FINANCEIROS
     }
 
+    resultado["debug_closers"] = {
+        SQUAD_DISPLAY[s]: sorted([
+            {
+                "nome": colaboradores[nome]["nome_exibicao"],
+                "cargo": colaboradores[nome]["cargo"],
+                "meta_financeira": metas.get(nome, {}).get("meta_fin", 0),
+            }
+            for nome in colaboradores
+            if colaboradores[nome]["subarea"] == s and "closer" in colaboradores[nome].get("cargo", "")
+        ], key=lambda x: x["nome"])
+        for s in SQUADS_FINANCEIROS
+    }
+
     resultado["debug_forecast"] = {
         "stages_com_probabilidade_mapeada": len(stage_prob_map),
         "total_pool_previsto": len(pool_previsto),
