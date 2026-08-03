@@ -202,6 +202,7 @@ def carregar_colaboradores(mes, ano):
     fields = rows[0].keys()
     col_nome = find_col(fields, exact="nome")
     col_subarea = find_col(fields, exact="subarea")
+    col_cargo = find_col(fields, exact="cargo")
     col_status = find_col(fields, contains="status")
     col_head = find_col(fields, contains="head")
     col_lider = find_col(fields, contains_all=["lider", "team"])
@@ -233,6 +234,7 @@ def carregar_colaboradores(mes, ano):
         colaboradores[nome] = {
             "nome_exibicao": r.get(col_nome, ""),
             "subarea": norm(r.get(col_subarea, "")),
+            "cargo": norm(r.get(col_cargo, "")) if col_cargo else "",
             "head": norm(r.get(col_head, "")) if col_head else "",
             "lider": norm(r.get(col_lider, "")) if col_lider else "",
         }
@@ -424,7 +426,8 @@ def buscar_deals_ganhos(ano, mes, users_map):
 
 
 def squad_do_deal(deal, colaboradores, users_map):
-    """Retorna squad interno (mgm/elite/sniper/...) via dono normalizado, com exceção da GM."""
+    """Retorna squad interno (mgm/elite/sniper/...) via dono normalizado, com exceção da GM.
+    Pros squads financeiros (Olympus/Elite), exige que o cargo seja Closer."""
     nome_dono = norm(owner_nome(deal, users_map))
     if GM_NOME_NORMALIZADO and nome_dono == GM_NOME_NORMALIZADO:
         funil = norm((deal.get("pipeline_name") or deal.get("pipeline_id") or ""))
@@ -434,6 +437,8 @@ def squad_do_deal(deal, colaboradores, users_map):
         return None
     subarea = colaborador["subarea"]
     if subarea.startswith("lic"):
+        return None
+    if subarea in SQUADS_FINANCEIROS and "closer" not in colaborador.get("cargo", ""):
         return None
     return subarea
 
@@ -493,9 +498,8 @@ def reuniao_valida_sdr(atividade, deals_rv_owner_map):
 # ---------------------------------------------------------------------------
 
 def buscar_forecast_deals():
-    """Filtro de forecast — status=all_not_deleted pra também trazer negócios
-    perdidos (não só os ainda em aberto), evitando subestimar o previsto."""
-    return pd_v1_paginado("/deals", FILTER_FORECAST, extra_params={"status": "all_not_deleted"})
+    """Pipeline aberto (FILTER_FORECAST) — só negócios em aberto, v1."""
+    return pd_v1_paginado("/deals", FILTER_FORECAST)
 
 
 def buscar_probabilidade_por_stage():
@@ -675,12 +679,10 @@ def montar_painel(ano_param=None, mes_param=None):
             squads_fin[squad]["hoje"] += multi
 
     # ---- Previsto (forecast) hoje/ontem — só faz sentido no mês atual ----
-    # Sem snapshot histórico: "previsto para ontem" olha o pipeline aberto de hoje
-    # + os negócios já ganhos este mês (cobre quem fechou); negócios perdidos com
-    # aquela data prevista não entram aqui (limitação conhecida, sem persistência).
+    # Só negócios em aberto (revertido: não inclui mais ganhos/perdidos).
     if e_mes_atual:
         forecast_abertos = buscar_forecast_deals()
-        pool_previsto = forecast_abertos + deals_ganhos
+        pool_previsto = forecast_abertos
         stage_prob_map = buscar_probabilidade_por_stage()
         previsto_hoje = valor_previsto_por_squad(pool_previsto, colaboradores, users_map, hoje, stage_prob_map)
         previsto_ontem = valor_previsto_por_squad(pool_previsto, colaboradores, users_map, ontem, stage_prob_map)
@@ -695,7 +697,8 @@ def montar_painel(ano_param=None, mes_param=None):
 
     def meta_squad(squad_interno):
         return sum(m["meta_fin"] for nome, m in metas.items()
-                   if colaboradores.get(nome, {}).get("subarea") == squad_interno)
+                   if colaboradores.get(nome, {}).get("subarea") == squad_interno
+                   and "closer" in colaboradores.get(nome, {}).get("cargo", ""))
 
     ritmo_100 = safe_div(du["passados"], du["total"])
 
