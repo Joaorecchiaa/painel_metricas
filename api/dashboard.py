@@ -391,24 +391,26 @@ def buscar_pipeline_id_por_nome(nome_busca):
 
 def buscar_deals_abertos_por_pipeline(pipeline_id):
     """Todos os negócios com status=open de um pipeline específico — direto,
-    sem passar por nenhum filter_id salvo (evita limitações do filtro de forecast)."""
-    itens, start = [], 0
+    sem passar por nenhum filter_id salvo. Usa API v2: a v1 ignora silenciosamente
+    o parâmetro pipeline_id (por isso todos os funis vinham juntos antes)."""
+    itens, cursor = [], None
     while True:
-        params = {
-            "api_token": PD_TOKEN, "status": "open", "pipeline_id": pipeline_id,
-            "limit": 500, "start": start,
-        }
-        data = http_get_json(f"{V1_BASE}/deals?{urlencode(params)}")
+        params = {"status": "open", "pipeline_id": pipeline_id, "limit": 500}
+        if cursor:
+            params["cursor"] = cursor
+        headers = {"x-api-token": PD_TOKEN}
+        data = http_get_json(f"{V2_BASE}/deals?{urlencode(params)}", headers=headers)
         itens.extend(data.get("data") or [])
-        pag = (data.get("additional_data") or {}).get("pagination") or {}
-        if not pag.get("more_items_in_collection"):
+        cursor = (data.get("additional_data") or {}).get("next_cursor")
+        if not cursor:
             break
-        start = pag.get("next_start", start + 500)
     return itens
 
 
 def cf_valor(deal, hash_):
     v = deal.get(hash_)
+    if v is None:
+        v = (deal.get("custom_fields") or {}).get(hash_)  # formato v2
     if isinstance(v, dict):
         return v.get("value")
     return v
