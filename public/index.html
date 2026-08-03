@@ -46,6 +46,15 @@
     cursor: pointer;
   }
   button#refresh:disabled { opacity: 0.5; cursor: default; }
+  .seletor-periodo { display: flex; gap: 8px; align-items: center; }
+  .seletor-periodo select {
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 12px;
+    background: #fff;
+    color: var(--ink);
+  }
   .meta-info { font-size: 11px; color: var(--muted); text-align: right; margin-top: 5px; }
   table {
     width: 100%;
@@ -123,7 +132,11 @@
     <div class="sub">Board Academy · Squads Olympus, Elite e Sniper</div>
   </div>
   <div>
-    <button id="refresh" onclick="atualizar()">Atualizar painel</button>
+    <div class="seletor-periodo">
+      <select id="seletorMes"></select>
+      <select id="seletorAno"></select>
+      <button id="refresh" onclick="atualizar()">Atualizar painel</button>
+    </div>
     <div class="meta-info" id="ultimaAtualizacao">—</div>
   </div>
 </header>
@@ -156,18 +169,20 @@
   </table>
 </div>
 
-<h2 class="titulo-tabela">Produtos em Aberto — Olympus &amp; Elite</h2>
-<div class="tabela-wrap">
-  <table id="tabela-produtos">
-    <thead>
-      <tr>
-        <th>Produto</th>
-        <th>Olympus</th>
-        <th>Elite</th>
-      </tr>
-    </thead>
-    <tbody id="tabelaProdutos"></tbody>
-  </table>
+<div id="secaoProdutos">
+  <h2 class="titulo-tabela">Produtos em Aberto — Olympus &amp; Elite</h2>
+  <div class="tabela-wrap">
+    <table id="tabela-produtos">
+      <thead>
+        <tr>
+          <th>Produto</th>
+          <th>Olympus</th>
+          <th>Elite</th>
+        </tr>
+      </thead>
+      <tbody id="tabelaProdutos"></tbody>
+    </table>
+  </div>
 </div>
 
 <div id="erro"></div>
@@ -243,26 +258,61 @@ function classesGrupo(grupo) {
   return `grupo-${grupo} grupo-inicio`;
 }
 
+let mesAtualSelecionado = true;
+
 function tabelaTransposta(metricas, colunas) {
   // colunas: [{label, dados, isTotal}]
-  return metricas.map(m => `
+  const linhas = mesAtualSelecionado ? metricas : metricas.filter(m => !m.grupo);
+  return linhas.map(m => `
     <tr>
       <td class="${classesGrupo(m.grupo)}">${m.label}</td>
       ${colunas.map(c => `<td class="${c.isTotal ? 'total ' : ''}${classesGrupo(m.grupo)}">${m.fmt(c.dados[m.key])}</td>`).join("")}
     </tr>`).join("");
 }
 
+const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+
+function popularSeletores() {
+  const hoje = new Date();
+  const anoAtual = hoje.getFullYear();
+  const mesAtual = hoje.getMonth() + 1; // 1-12
+  const selMes = document.getElementById("seletorMes");
+  const selAno = document.getElementById("seletorAno");
+
+  MESES.forEach((nome, i) => {
+    const opt = document.createElement("option");
+    opt.value = i + 1;
+    opt.textContent = nome;
+    selMes.appendChild(opt);
+  });
+
+  for (let ano = anoAtual; ano >= 2025; ano--) {
+    const opt = document.createElement("option");
+    opt.value = ano;
+    opt.textContent = ano;
+    selAno.appendChild(opt);
+  }
+
+  selMes.value = mesAtual;
+  selAno.value = anoAtual;
+}
+popularSeletores();
+
 async function atualizar() {
   const btn = document.getElementById("refresh");
   const erroBox = document.getElementById("erro");
+  const mesSelecionado = document.getElementById("seletorMes").value;
+  const anoSelecionado = document.getElementById("seletorAno").value;
   btn.disabled = true;
   btn.textContent = "Atualizando...";
   erroBox.style.display = "none";
   try {
-    const resp = await fetch(API_URL, { cache: "no-store" });
+    const resp = await fetch(`${API_URL}?mes=${mesSelecionado}&ano=${anoSelecionado}`, { cache: "no-store" });
     const data = await resp.json();
     if (data.erro) throw new Error(data.erro);
     premissasAtual = data.premissas || {};
+    mesAtualSelecionado = !!data.e_mes_atual;
+    document.getElementById("secaoProdutos").style.display = mesAtualSelecionado ? "" : "none";
 
     document.getElementById("tabelaFinanceiro").innerHTML = tabelaTransposta(METRICAS_FINANCEIRO, [
       { dados: data.squads.Olympus },
