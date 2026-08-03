@@ -644,7 +644,12 @@ def montar_painel(ano_param=None, mes_param=None):
     du = calcular_dias_uteis(ano, mes, feriados)
     # Se não sobra nenhum dia útil DEPOIS de hoje, mas hoje ainda é dia útil,
     # considera hoje como "1 dia" pra não zerar o Meta/Dia 100% no último dia do mês.
-    dias_restantes_p100 = du["restantes"] if du["restantes"] > 0 else (1 if (e_mes_atual and eh_dia_util(hoje, feriados)) else 0)
+    if e_mes_atual:
+        # dia atual conta como "1 dia" quando não sobra nenhum depois dele (último dia útil do mês)
+        dias_restantes_p100 = du["restantes"] if du["restantes"] > 0 else (1 if eh_dia_util(hoje, feriados) else 0)
+    else:
+        # mês já fechado: não existe "dias restantes", então usa o total de dias úteis do mês
+        dias_restantes_p100 = du["total"]
 
     users_map = pd_users()
     deals_ganhos = buscar_deals_ganhos(ano, mes, users_map)
