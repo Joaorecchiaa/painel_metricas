@@ -151,6 +151,69 @@
   .dropdown-item .nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dropdown-item .valor { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; flex-shrink: 0; }
   .dropdown-vazio { padding: 12px; font-size: 11px; color: var(--muted); text-align: center; }
+
+  .produto-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+  .produto-card-titulo {
+    background: var(--head-bg);
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--ink);
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .produto-squads {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .produto-squad {
+    padding: 12px 16px;
+  }
+  .produto-squad:first-child {
+    border-right: 1px solid var(--border);
+  }
+  .produto-squad-titulo {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .produto-abertos {
+    font-size: 13px;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .produto-abertos summary {
+    cursor: pointer;
+    list-style: none;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+  }
+  .produto-abertos summary::-webkit-details-marker { display: none; }
+  .produto-abertos summary::before { content: "▸"; color: var(--muted); font-size: 10px; }
+  .produto-abertos[open] summary::before { content: "▾"; }
+  .produto-abertos .rotulo { color: var(--muted); }
+  .produto-abertos .valor-num { font-weight: 600; }
+  .produto-metricas {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 12px;
+    font-size: 12px;
+  }
+  .produto-metricas .rotulo { color: var(--muted); }
+  .produto-metricas .valor-num { font-weight: 600; margin-left: 4px; }
+  .produto-abertos .dropdown-conteudo { width: min(320px, 90vw); }
+  .produto-abertos .dropdown-coluna { border-left: none !important; }
   .tabela-wrap { border: 1px solid var(--border); border-radius: 8px; }
   th.grupo-hoje, td.grupo-hoje { background: #eff6ff; }
   th.grupo-ontem, td.grupo-ontem { background: #f9fafb; }
@@ -205,18 +268,7 @@
 
 <div id="secaoProdutos">
   <h2 class="titulo-tabela">Produtos em Aberto — Olympus &amp; Elite</h2>
-  <div class="tabela-wrap">
-    <table id="tabela-produtos">
-      <thead>
-        <tr>
-          <th>Produto</th>
-          <th>Olympus</th>
-          <th>Elite</th>
-        </tr>
-      </thead>
-      <tbody id="tabelaProdutos"></tbody>
-    </table>
-  </div>
+  <div id="cardsProdutos"></div>
 </div>
 
 <div id="erro"></div>
@@ -360,6 +412,7 @@ async function atualizar() {
 
     const produtos = data.produtos_em_aberto || {};
     const detalhes = data.produtos_em_aberto_detalhes || {};
+    const stats = data.produtos_stats || {};
     const linhasProdutos = ["PFCC", "CES", "LEAN", "ABP", "Não classificado"];
 
     function listaNegocios(squad, produto) {
@@ -373,26 +426,37 @@ async function atualizar() {
       ).join("");
     }
 
-    document.getElementById("tabelaProdutos").innerHTML = linhasProdutos.map(p => `
-      <tr>
-        <td>
-          <details class="produto-dropdown">
-            <summary>${p}</summary>
+    function blocoSquad(squad, produto) {
+      const abertos = (produtos[squad] || {})[produto] ?? 0;
+      const s = ((stats[squad] || {})[produto]) || { perdidos_hoje: 0, perdidos_mes: 0, ganhos_hoje: 0, ganhos_mes: 0 };
+      return `
+        <div class="produto-squad">
+          <div class="produto-squad-titulo">${squad}</div>
+          <details class="produto-abertos">
+            <summary><span class="rotulo">Abertos:</span> <span class="valor-num">${abertos}</span></summary>
             <div class="dropdown-conteudo">
               <div class="dropdown-coluna">
-                <div class="dropdown-coluna-header">Olympus</div>
-                ${listaNegocios("Olympus", p)}
-              </div>
-              <div class="dropdown-coluna">
-                <div class="dropdown-coluna-header">Elite</div>
-                ${listaNegocios("Elite", p)}
+                ${listaNegocios(squad, produto)}
               </div>
             </div>
           </details>
-        </td>
-        <td>${(produtos.Olympus || {})[p] ?? 0}</td>
-        <td>${(produtos.Elite || {})[p] ?? 0}</td>
-      </tr>`).join("");
+          <div class="produto-metricas">
+            <div><span class="rotulo">Perdidos - Hoje:</span><span class="valor-num">${s.perdidos_hoje}</span></div>
+            <div><span class="rotulo">Perdidos - Mês:</span><span class="valor-num">${s.perdidos_mes}</span></div>
+            <div><span class="rotulo">Ganhos - Hoje:</span><span class="valor-num">${s.ganhos_hoje}</span></div>
+            <div><span class="rotulo">Ganhos - Mês:</span><span class="valor-num">${s.ganhos_mes}</span></div>
+          </div>
+        </div>`;
+    }
+
+    document.getElementById("cardsProdutos").innerHTML = linhasProdutos.map(p => `
+      <div class="produto-card">
+        <div class="produto-card-titulo">${p}</div>
+        <div class="produto-squads">
+          ${blocoSquad("Olympus", p)}
+          ${blocoSquad("Elite", p)}
+        </div>
+      </div>`).join("");
 
     document.getElementById("ultimaAtualizacao").textContent =
       "Atualizado às " + new Date(data.geradoEm).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo" });
