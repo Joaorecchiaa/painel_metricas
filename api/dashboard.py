@@ -498,8 +498,9 @@ def reuniao_valida_sdr(atividade, deals_rv_owner_map):
 # ---------------------------------------------------------------------------
 
 def buscar_forecast_deals():
-    """Pipeline aberto (FILTER_FORECAST) — só negócios em aberto, v1."""
-    return pd_v1_paginado("/deals", FILTER_FORECAST)
+    """Pipeline aberto (FILTER_FORECAST) — v1. Pede status=open explicitamente:
+    sem isso, a API retorna TODOS os status que batem com o filtro (won/lost inclusive)."""
+    return pd_v1_paginado("/deals", FILTER_FORECAST, extra_params={"status": "open"})
 
 
 def buscar_probabilidade_por_stage():
@@ -515,11 +516,11 @@ def buscar_probabilidade_por_stage():
     return mapa
 
 
-def valor_previsto_por_squad(pool, colaboradores, users_map, data_alvo, stage_prob_map):
+def valor_previsto_por_squad(pool, colaboradores, users_map, data_alvo):
     """Por squad financeiro: soma bruta separada por bucket de probabilidade
     (20/50/70, comparação exata) + a média ponderada (bruto x probabilidade).
-    Pra negócios ganhos/perdidos, usa a probabilidade da ETAPA (stage) em vez do
-    campo probability do negócio, que o Pipedrive costuma sobrescrever no fechamento."""
+    Só considera negócios com status=open — a API do Pipedrive não filtra isso
+    sozinha (retorna todos os status do filtro por padrão)."""
     buckets = {s: {20: 0.0, 50: 0.0, 70: 0.0} for s in SQUADS_FINANCEIROS}
     vistos = set()
     alvo_iso = data_alvo.isoformat()
@@ -528,16 +529,12 @@ def valor_previsto_por_squad(pool, colaboradores, users_map, data_alvo, stage_pr
         if did in vistos:
             continue
         vistos.add(did)
+        if d.get("status") != "open":
+            continue
         if (d.get("expected_close_date") or "")[:10] != alvo_iso:
             continue
-
-        prob_bruta = d.get("probability")
-        if d.get("status") in ("won", "lost"):
-            prob_etapa = stage_prob_map.get(d.get("stage_id"))
-            if prob_etapa is not None:
-                prob_bruta = prob_etapa
         try:
-            prob = int(float(prob_bruta))
+            prob = int(float(d.get("probability")))
         except (TypeError, ValueError):
             continue
         if prob not in (20, 50, 70):
@@ -683,14 +680,12 @@ def montar_painel(ano_param=None, mes_param=None):
     if e_mes_atual:
         forecast_abertos = buscar_forecast_deals()
         pool_previsto = forecast_abertos
-        stage_prob_map = buscar_probabilidade_por_stage()
-        previsto_hoje = valor_previsto_por_squad(pool_previsto, colaboradores, users_map, hoje, stage_prob_map)
-        previsto_ontem = valor_previsto_por_squad(pool_previsto, colaboradores, users_map, ontem, stage_prob_map)
+        previsto_hoje = valor_previsto_por_squad(pool_previsto, colaboradores, users_map, hoje)
+        previsto_ontem = valor_previsto_por_squad(pool_previsto, colaboradores, users_map, ontem)
         em_aberto_hoje = valor_abertos_por_squad(pool_previsto, colaboradores, users_map, hoje)
     else:
         pool_previsto = []
         forecast_abertos = []
-        stage_prob_map = {}
         previsto_hoje = {s: {"p20": 0.0, "p50": 0.0, "p70": 0.0, "media": 0.0} for s in SQUADS_FINANCEIROS}
         previsto_ontem = {s: {"p20": 0.0, "p50": 0.0, "p70": 0.0, "media": 0.0} for s in SQUADS_FINANCEIROS}
         em_aberto_hoje = {s: 0.0 for s in SQUADS_FINANCEIROS}
@@ -951,7 +946,6 @@ def montar_painel(ano_param=None, mes_param=None):
     }
 
     resultado["debug_forecast"] = {
-        "stages_com_probabilidade_mapeada": len(stage_prob_map),
         "total_pool_previsto": len(pool_previsto),
         "total_forecast_abertos_todos_status": len(forecast_abertos),
     }
