@@ -909,6 +909,34 @@ def montar_painel(ano_param=None, mes_param=None):
         SQUAD_DISPLAY[s]: produtos_detalhes[s] for s in SQUADS_FINANCEIROS
     }
 
+    debug_previsto_hoje_deals = {s: [] for s in SQUADS_FINANCEIROS}
+    if e_mes_atual:
+        alvo_iso = hoje.isoformat()
+        vistos_dbg = set()
+        for d in pool_previsto:
+            did = d.get("id")
+            if did in vistos_dbg:
+                continue
+            vistos_dbg.add(did)
+            if (d.get("expected_close_date") or "")[:10] != alvo_iso:
+                continue
+            squad = squad_do_deal(d, colaboradores, users_map)
+            try:
+                prob = int(float(d.get("probability")))
+            except (TypeError, ValueError):
+                prob = None
+            debug_previsto_hoje_deals.setdefault(squad, []).append({
+                "id": did,
+                "titulo": d.get("title"),
+                "dono": owner_nome(d, users_map),
+                "status": d.get("status"),
+                "probability": prob,
+                "valor": float(d.get("value") or 0),
+            })
+    resultado["debug_previsto_hoje_deals"] = {
+        SQUAD_DISPLAY.get(s, s): v for s, v in debug_previsto_hoje_deals.items() if s in SQUADS_FINANCEIROS
+    }
+
     resultado["debug_closers"] = {
         SQUAD_DISPLAY[s]: sorted([
             {
