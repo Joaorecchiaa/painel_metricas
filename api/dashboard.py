@@ -729,7 +729,7 @@ def montar_painel(ano_param=None, mes_param=None):
     ritmo_prazo = safe_div(du["passados"], du["passados"] + restantes_prazo)
 
     resultado = {
-        "squads": {}, "geradoEm": dt.datetime.now().isoformat(),
+        "squads": {}, "geradoEm": dt.datetime.now(dt.timezone.utc).isoformat(),
         "mes": mes, "ano": ano, "e_mes_atual": e_mes_atual,
     }
 
