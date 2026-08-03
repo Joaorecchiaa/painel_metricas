@@ -389,15 +389,21 @@ def buscar_pipeline_id_por_nome(nome_busca):
     return None
 
 
-def buscar_deals_por_pipeline(pipeline_id, status):
+def buscar_deals_por_pipeline(pipeline_id, status, desde_iso=None, ate_iso=None):
     """Negócios de um status específico (open/won/lost) de um pipeline — direto,
     sem passar por nenhum filter_id salvo. Usa API v2: a v1 ignora silenciosamente
-    o parâmetro pipeline_id (por isso todos os funis vinham juntos antes)."""
+    o parâmetro pipeline_id (por isso todos os funis vinham juntos antes).
+    desde_iso/ate_iso limitam por update_time — reduz MUITO o volume pra won/lost
+    (senão baixaria o histórico inteiro do funil e estourava o timeout)."""
     itens, cursor = [], None
     while True:
         params = {"status": status, "pipeline_id": pipeline_id, "limit": 500}
         if cursor:
             params["cursor"] = cursor
+        if desde_iso:
+            params["updated_since"] = desde_iso
+        if ate_iso:
+            params["updated_until"] = ate_iso
         headers = {"x-api-token": PD_TOKEN}
         data = http_get_json(f"{V2_BASE}/deals?{urlencode(params)}", headers=headers)
         itens.extend(data.get("data") or [])
@@ -653,12 +659,18 @@ def _item_deal(d):
 CATEGORIAS_PRODUTO = ["abertos", "perdidos_mes", "perdidos_hoje", "ganhos_mes", "ganhos_hoje"]
 
 
-def produtos_em_aberto_por_squad(ano, mes, hoje):
+def produtos_em_aberto_por_squad(ano, mes, hoje, retornar_detalhes=False):
     """Por produto e squad (Olympus/Elite), buscando direto por pipeline (funil):
-    listas completas (com link) de Abertos, Perdidos (mês/hoje) e Ganhos (mês/hoje).
-    Tudo classificado pela utm_campaign, sem depender da COLAB/cargo."""
+    contagens de Abertos, Perdidos (mês/hoje) e Ganhos (mês/hoje).
+    Tudo classificado pela utm_campaign, sem depender da COLAB/cargo.
+    Se retornar_detalhes=True, mantém a lista completa (com link) em vez de só o número."""
     detalhes = {s: {p: {c: [] for c in CATEGORIAS_PRODUTO} for p in PRODUTOS_TODOS}
                 for s in SQUADS_FINANCEIROS}
+
+    inicio_mes = dt.date(ano, mes, 1)
+    fim_mes = dt.date(ano + 1, 1, 1) - dt.timedelta(days=1) if mes == 12 else dt.date(ano, mes + 1, 1) - dt.timedelta(days=1)
+    desde_iso = f"{inicio_mes.isoformat()}T00:00:00Z"
+    ate_iso = f"{fim_mes.isoformat()}T23:59:59Z"
 
     for squad_interno, nome_pipeline in SQUAD_NOME_PIPELINE.items():
         pipeline_id = buscar_pipeline_id_por_nome(nome_pipeline)
@@ -670,7 +682,8 @@ def produtos_em_aberto_por_squad(ano, mes, hoje):
             produto = classificar_produto(d) or "Não classificado"
             detalhes[squad_interno][produto]["abertos"].append(_item_deal(d))
 
-        ganhos = buscar_deals_por_pipeline(pipeline_id, "won")
+        # limitado ao mês selecionado (update_time) — senão baixaria o histórico inteiro do funil
+        ganhos = buscar_deals_por_pipeline(pipeline_id, "won", desde_iso, ate_iso)
         for d in ganhos:
             won_brt = to_brt(d.get("won_time"))
             if not won_brt or (won_brt.year, won_brt.month) != (ano, mes):
@@ -681,7 +694,7 @@ def produtos_em_aberto_por_squad(ano, mes, hoje):
             if won_brt.date() == hoje:
                 detalhes[squad_interno][produto]["ganhos_hoje"].append(item)
 
-        perdidos = buscar_deals_por_pipeline(pipeline_id, "lost")
+        perdidos = buscar_deals_por_pipeline(pipeline_id, "lost", desde_iso, ate_iso)
         for d in perdidos:
             lost_brt = to_brt(d.get("lost_time"))
             if not lost_brt or (lost_brt.year, lost_brt.month) != (ano, mes):
@@ -692,7 +705,14 @@ def produtos_em_aberto_por_squad(ano, mes, hoje):
             if lost_brt.date() == hoje:
                 detalhes[squad_interno][produto]["perdidos_hoje"].append(item)
 
-    return detalhes
+    if retornar_detalhes:
+        return detalhes
+
+    # só os números — sem nome/link dos negócios (pedido: "tire os negócios, deixe só os números")
+    return {
+        s: {p: {c: len(detalhes[s][p][c]) for c in CATEGORIAS_PRODUTO} for p in PRODUTOS_TODOS}
+        for s in SQUADS_FINANCEIROS
+    }
 
 
 def montar_painel(ano_param=None, mes_param=None):
