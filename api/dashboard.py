@@ -41,6 +41,8 @@ FILTER_REFERIDOS = 1562285    # indicações (não usado neste painel por ora)
 CF_MULTIPLICADOR = "7e0e43c2734751f77be292a72527f638a850ad50"
 CF_QUALIFICADOR = "a6f13cc27c8d041f3af4091283ce0d4fe0913875"
 CF_UTM_CAMPAIGN = "ae03fa460a108b8cdfa87e97ebca24379d2779d6"
+CF_PRODUTO = "8bdce76ba66f0fed0280918a4845190c92899ed5"
+CF_NOME_PRODUTO = "09d57fd58b8cac693f5901417f758df746223273"
 
 PRODUTOS = ["PFCC", "CES", "LEAN", "ABP"]
 
@@ -627,18 +629,34 @@ def valor_abertos_por_squad(pool, colaboradores, users_map, data_alvo):
     return soma
 
 
-def classificar_produto(deal):
-    """Classifica o produto pela utm_campaign (contém a palavra, sem diferenciar maiúsculas/minúsculas)."""
-    utm = norm(cf_valor(deal, CF_UTM_CAMPAIGN) or "")
-    if "pfcc" in utm:
+def _match_produto_no_texto(texto):
+    t = norm(texto or "")
+    if "pfcc" in t:
         return "PFCC"
-    if "lean" in utm:
+    if "lean" in t:
         return "LEAN"
-    if "ces" in utm:
+    if "ces" in t:
         return "CES"
-    if "abp" in utm:  # suposição — confirmar a palavra-chave real da utm pro ABP
+    if "abp" in t:  # suposição — confirmar a palavra-chave real pro ABP
         return "ABP"
     return None
+
+
+def classificar_produto(deal):
+    """Classifica o produto pela utm_campaign (contém a palavra, sem diferenciar maiúsculas/minúsculas)."""
+    return _match_produto_no_texto(cf_valor(deal, CF_UTM_CAMPAIGN))
+
+
+def classificar_produto_ganho(deal):
+    """Só pra negócios GANHOS: prioriza o produto que o cliente efetivamente comprou
+    ('Produto' / 'Nome produto'), já que pode ser diferente da campanha de origem
+    (utm_campaign) — cliente entra por uma campanha mas fecha em outro produto.
+    Cai pra utm_campaign só se os dois campos vierem vazios."""
+    for campo in (CF_PRODUTO, CF_NOME_PRODUTO):
+        produto = _match_produto_no_texto(cf_valor(deal, campo))
+        if produto:
+            return produto
+    return classificar_produto(deal)
 
 
 PRODUTOS_TODOS = PRODUTOS + ["Não classificado"]
@@ -688,7 +706,7 @@ def produtos_em_aberto_por_squad(ano, mes, hoje, retornar_detalhes=False):
             won_brt = to_brt(d.get("won_time"))
             if not won_brt or (won_brt.year, won_brt.month) != (ano, mes):
                 continue
-            produto = classificar_produto(d) or "Não classificado"
+            produto = classificar_produto_ganho(d) or "Não classificado"
             item = _item_deal(d)
             detalhes[squad_interno][produto]["ganhos_mes"].append(item)
             if won_brt.date() == hoje:
