@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Acompanhamento de Meta — Julho 2026</title>
+<title>Métricas Comercial - 2026</title>
 <style>
   :root {
     --bg: #ffffff;
@@ -28,38 +28,51 @@
   header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
-    border-bottom: 1px solid var(--border);
-    padding-bottom: 14px;
-    margin-bottom: 18px;
-  }
-  h1 { font-size: 18px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
-  h2.titulo-tabela { font-size: 13px; font-weight: 600; margin: 18px 0 8px; color: var(--ink); }
-  .sub { color: var(--muted); font-size: 12px; margin-top: 4px; }
-  button#refresh {
-    background: var(--accent);
+    align-items: center;
+    background: #0b0b0f;
     color: #fff;
+    padding: 14px 20px;
+    margin: -20px -24px 20px;
+    border-radius: 0 0 10px 10px;
+  }
+  .header-esquerda { display: flex; align-items: center; gap: 14px; }
+  h1 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; color: #fff; }
+  h2.titulo-tabela { font-size: 12px; font-weight: 600; margin: 18px 0 8px; color: var(--ink); }
+  .sub { color: rgba(255,255,255,0.55); font-size: 10px; margin-top: 2px; letter-spacing: 0.03em; text-transform: uppercase; }
+  .badge-dias-uteis {
+    font-size: 11px;
+    color: rgba(255,255,255,0.85);
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 999px;
+    padding: 5px 14px;
+  }
+  .badge-dias-uteis .destaque { color: #fbbf24; font-weight: 600; }
+  button#refresh {
+    background: #fff;
+    color: #0b0b0f;
     border: none;
-    padding: 8px 14px;
+    padding: 7px 13px;
     border-radius: 6px;
-    font-size: 12px;
+    font-size: 11px;
+    font-weight: 600;
     cursor: pointer;
   }
   button#refresh:disabled { opacity: 0.5; cursor: default; }
   .seletor-periodo { display: flex; gap: 8px; align-items: center; }
   .seletor-periodo select {
-    padding: 8px 10px;
-    border: 1px solid var(--border);
+    padding: 7px 10px;
+    border: 1px solid rgba(255,255,255,0.15);
     border-radius: 6px;
-    font-size: 12px;
-    background: #fff;
-    color: var(--ink);
+    font-size: 11px;
+    background: rgba(255,255,255,0.06);
+    color: #fff;
   }
-  .meta-info { font-size: 11px; color: var(--muted); text-align: right; margin-top: 5px; }
+  .meta-info { font-size: 10px; color: rgba(255,255,255,0.5); text-align: right; margin-top: 5px; }
   table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 11px;
+    font-size: 10.5px;
     table-layout: fixed;
   }
   th, td {
@@ -110,6 +123,16 @@
     letter-spacing: 0.03em;
     color: var(--ink);
     padding: 9px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .produto-total-abertos {
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--muted);
   }
   .produto-card > summary::-webkit-details-marker { display: none; }
   .produto-card > summary::before { content: "▸ "; color: var(--muted); }
@@ -187,9 +210,12 @@
 <body>
 
 <header>
-  <div>
-    <h1>Acompanhamento de Meta — Julho 2026</h1>
-    <div class="sub">Board Academy · Squads Olympus, Elite e Sniper</div>
+  <div class="header-esquerda">
+    <div>
+      <h1>Métricas Comercial - 2026</h1>
+      <div class="sub">Board Academy</div>
+    </div>
+    <div class="badge-dias-uteis" id="badgeDiasUteis">—</div>
   </div>
   <div>
     <div class="seletor-periodo">
@@ -360,6 +386,9 @@ async function atualizar() {
     const data = await resp.json();
     if (data.erro) throw new Error(data.erro);
     premissasAtual = data.premissas || {};
+    const nomeMes = MESES[(data.mes || 1) - 1];
+    document.getElementById("badgeDiasUteis").innerHTML =
+      `${nomeMes} ${data.ano} · <span class="destaque">${premissasAtual.dias_uteis_passados ?? "—"}/${premissasAtual.dias_uteis_total ?? "—"}</span> dias úteis · <span class="destaque">${premissasAtual.dias_uteis_restantes ?? "—"}</span> restantes`;
     mesAtualSelecionado = !!data.e_mes_atual;
     document.getElementById("secaoProdutos").style.display = mesAtualSelecionado ? "" : "none";
 
@@ -382,15 +411,23 @@ async function atualizar() {
       { key: "ganhos_mes", label: "Ganhos - Mês", listaKey: "ganhos_mes_lista" },
       { key: "ganhos_hoje", label: "Ganhos - Hoje", listaKey: "ganhos_hoje_lista" },
     ];
+    const CATEGORIA_NOVOS_HOJE = { key: "novos_hoje", label: "Novos Leads Hoje" };
 
     function listaIds(lista) {
       if (!lista || lista.length === 0) return "<div class=\"status-vazio\">Nenhum</div>";
       return lista.map(n => `<a class="status-id-item" href="${n.url}">#${n.id}</a>`).join("");
     }
 
+    function totalAbertosProduto(produto) {
+      return ["Olympus", "Elite", "Sniper"].reduce(
+        (soma, squad) => soma + (((numeros[squad] || {})[produto] || {}).abertos ?? 0), 0
+      );
+    }
+
     function blocoSquad(squad, produto) {
       const dadosProduto = ((numeros[squad] || {})[produto]) || {};
-      const categorias = squad === "Sniper" ? CATEGORIAS.filter(c => !c.listaKey) : CATEGORIAS;
+      let categorias = squad === "Sniper" ? CATEGORIAS.filter(c => !c.listaKey) : CATEGORIAS;
+      if (squad === "Sniper") categorias = [categorias[0], CATEGORIA_NOVOS_HOJE, ...categorias.slice(1)];
       const grupos = categorias.map(cat => {
         if (cat.listaKey) {
           const lista = dadosProduto[cat.listaKey] || [];
@@ -415,7 +452,7 @@ async function atualizar() {
 
     document.getElementById("cardsProdutos").innerHTML = linhasProdutos.map(p => `
       <details class="produto-card">
-        <summary>${p}</summary>
+        <summary>${p} <span class="produto-total-abertos">Total aberto: ${totalAbertosProduto(p)}</span></summary>
         <div class="produto-squads produto-squads-3">
           ${blocoSquad("Olympus", p)}
           ${blocoSquad("Elite", p)}
