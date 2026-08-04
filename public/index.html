@@ -183,14 +183,16 @@
     border-bottom: 1px solid #f3f4f6;
   }
   .status-grupo-destaque {
-    background: #fef9c3;
+    background: #f8fafc;
     margin: 0 -8px;
     padding: 4px 8px;
     border-radius: 4px;
     border-bottom: none;
+    border-left: 2px solid var(--border);
   }
-  .status-grupo-destaque .status-titulo { color: #854d0e; font-weight: 600; }
-  .status-grupo-destaque .status-numero { color: #854d0e; }
+  .status-grupo-destaque .status-titulo { color: var(--ink); font-weight: 600; }
+  .status-grupo-destaque .status-numero { color: var(--ink); font-weight: 600; }
+  .status-grupo-destaque summary { cursor: pointer; }
   .status-grupo:last-child { border-bottom: none; }
   .status-titulo { color: var(--muted); }
   .status-numero { font-weight: 600; }
@@ -452,8 +454,8 @@ async function atualizar() {
     const linhasProdutos = ["PFCC", "CES", "LEAN", "ABP", "COAUTORIA", "Não classificado"];
     const CATEGORIAS = [
       { key: "abertos", label: "Abertos" },
-      { key: "novos_hoje", label: "Novos Leads Hoje", destaque: true },
-      { key: "novos_ontem", label: "Novos Leads Ontem", destaque: true },
+      { key: "novos_hoje", label: "Novos Leads Hoje", destaque: true, listaKey: "novos_hoje_lista" },
+      { key: "novos_ontem", label: "Novos Leads Ontem", destaque: true, listaKey: "novos_ontem_lista" },
       { key: "perdidos_mes", label: "Perdidos - Mês" },
       { key: "perdidos_hoje", label: "Perdidos - Hoje" },
       { key: "ganhos_mes", label: "Ganhos - Mês", listaKey: "ganhos_mes_lista" },
@@ -473,12 +475,12 @@ async function atualizar() {
 
     function blocoSquad(squad, produto) {
       const dadosProduto = ((numeros[squad] || {})[produto]) || {};
-      const categorias = squad === "Sniper" ? CATEGORIAS.filter(c => !c.listaKey) : CATEGORIAS;
+      const categorias = squad === "Sniper" ? CATEGORIAS.filter(c => !c.key.startsWith("ganhos")) : CATEGORIAS;
       const grupos = categorias.map(cat => {
         if (cat.listaKey) {
           const lista = dadosProduto[cat.listaKey] || [];
           return `
-            <details class="status-grupo-dropdown">
+            <details class="status-grupo-dropdown${cat.destaque ? ' status-grupo-destaque' : ''}">
               <summary><span class="status-titulo">${cat.label}:</span> <span class="status-numero">${dadosProduto[cat.key] ?? 0}</span></summary>
               <div class="status-ids-lista">${listaIds(lista)}</div>
             </details>`;
