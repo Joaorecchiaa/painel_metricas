@@ -676,6 +676,69 @@ PIPELINE_ID_SNIPER = 88  # ID direto, sem precisar buscar por nome
 SQUADS_PRODUTOS = ["mgm", "elite", "sniper"]  # squads que aparecem em Produtos - Detalhamento
 
 
+def _pipeline_id_do_squad(squad_interno):
+    if squad_interno == "sniper":
+        return PIPELINE_ID_SNIPER
+    return buscar_pipeline_id_por_nome(SQUAD_NOME_PIPELINE[squad_interno])
+
+
+def _motivos_com_percentual(motivos_contagem, total):
+    itens = [
+        {"motivo": motivo, "quantidade": qtd, "percentual": round(safe_div(qtd, total) * 100, 1)}
+        for motivo, qtd in motivos_contagem.items()
+    ]
+    itens.sort(key=lambda x: x["quantidade"], reverse=True)
+    return itens
+
+
+def analisar_perdidos(ano, mes, hoje):
+    """Perdidos do dia/mês + motivo de perda (quantidade e %), geral e por funil (Olympus/Elite/Sniper)."""
+    inicio_mes = dt.date(ano, mes, 1)
+    fim_mes = dt.date(ano + 1, 1, 1) - dt.timedelta(days=1) if mes == 12 else dt.date(ano, mes + 1, 1) - dt.timedelta(days=1)
+    desde_iso = f"{inicio_mes.isoformat()}T00:00:00Z"
+    ate_iso = f"{fim_mes.isoformat()}T23:59:59Z"
+
+    por_funil = {}
+    motivos_geral = {}
+    total_mes_geral = 0
+    total_hoje_geral = 0
+
+    for squad_interno in SQUADS_PRODUTOS:
+        pipeline_id = _pipeline_id_do_squad(squad_interno)
+        motivos_funil = {}
+        total_mes = 0
+        total_hoje = 0
+        if pipeline_id is not None:
+            perdidos = buscar_deals_por_pipeline(pipeline_id, "lost", desde_iso, ate_iso)
+            for d in perdidos:
+                lost_brt = to_brt(d.get("lost_time"))
+                if not lost_brt or (lost_brt.year, lost_brt.month) != (ano, mes):
+                    continue
+                total_mes += 1
+                if lost_brt.date() == hoje:
+                    total_hoje += 1
+                motivo = (d.get("lost_reason") or "").strip() or "Sem motivo"
+                motivos_funil[motivo] = motivos_funil.get(motivo, 0) + 1
+                motivos_geral[motivo] = motivos_geral.get(motivo, 0) + 1
+
+        por_funil[squad_interno] = {
+            "total_mes": total_mes,
+            "total_hoje": total_hoje,
+            "motivos": _motivos_com_percentual(motivos_funil, total_mes),
+        }
+        total_mes_geral += total_mes
+        total_hoje_geral += total_hoje
+
+    return {
+        "geral": {
+            "total_mes": total_mes_geral,
+            "total_hoje": total_hoje_geral,
+            "motivos": _motivos_com_percentual(motivos_geral, total_mes_geral),
+        },
+        "por_funil": {SQUAD_DISPLAY[s]: por_funil[s] for s in SQUADS_PRODUTOS},
+    }
+
+
 def _item_deal(d):
     return {
         "id": d.get("id"),
@@ -1056,6 +1119,14 @@ def montar_painel(ano_param=None, mes_param=None):
     )
     resultado["squads"]["Sniper"]["novos_leads_hoje"] = novos_leads_hoje
     resultado["squads"]["Sniper"]["novos_leads_ontem"] = novos_leads_ontem
+
+    if e_mes_atual:
+        resultado["perdidos_analise"] = analisar_perdidos(ano, mes, hoje)
+    else:
+        resultado["perdidos_analise"] = {
+            "geral": {"total_mes": 0, "total_hoje": 0, "motivos": []},
+            "por_funil": {SQUAD_DISPLAY[s]: {"total_mes": 0, "total_hoje": 0, "motivos": []} for s in SQUADS_PRODUTOS},
+        }
 
     debug_previsto_hoje_deals = {s: [] for s in SQUADS_FINANCEIROS}
     if e_mes_atual:
