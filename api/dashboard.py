@@ -678,7 +678,7 @@ def _item_deal(d):
     }
 
 
-CATEGORIAS_PRODUTO = ["abertos", "perdidos_mes", "perdidos_hoje", "ganhos_mes", "ganhos_hoje"]
+CATEGORIAS_PRODUTO = ["abertos", "perdidos_mes", "perdidos_hoje", "ganhos_mes", "ganhos_hoje", "novos_hoje"]
 
 
 def produtos_em_aberto_por_squad(ano, mes, hoje, retornar_detalhes=False):
@@ -707,7 +707,11 @@ def produtos_em_aberto_por_squad(ano, mes, hoje, retornar_detalhes=False):
         abertos = buscar_deals_por_pipeline(pipeline_id, "open")
         for d in abertos:
             produto = classificar_produto(d) or "Não classificado"
-            detalhes[squad_interno][produto]["abertos"].append(_item_deal(d))
+            item = _item_deal(d)
+            detalhes[squad_interno][produto]["abertos"].append(item)
+            add_brt = to_brt(d.get("add_time"))
+            if add_brt and add_brt.date() == hoje:
+                detalhes[squad_interno][produto]["novos_hoje"].append(item)
 
         # limitado ao mês selecionado (update_time) — senão baixaria o histórico inteiro do funil
         if tem_ganhos:
