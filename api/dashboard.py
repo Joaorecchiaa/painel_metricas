@@ -671,18 +671,27 @@ SQUADS_PRODUTOS = ["mgm", "elite", "sniper"]  # squads que aparecem em Produtos 
 
 
 def contar_novos_leads_aplicacao(data_alvo):
-    """Quantos negócios do funil Sniper têm 'Data da última aplicação' contendo data_alvo
-    (igual ao filtro 'Status é Aberto/Perdido/Ganho' + 'Data da última aplicação contém <data>').
-    Busca abertos (sem limite) + ganhos/perdidos limitados ao mês de data_alvo, pra não estourar timeout."""
+    """Quantos negócios (somando os 3 funis: Sniper + Elite + Olympus) têm
+    'Data da última aplicação' contendo data_alvo, em qualquer status
+    (igual ao filtro 'Status é Aberto/Perdido/Ganho' + 'Funil é Sniper/Elite/Olympus'
+    + 'Data da última aplicação contém <data>' — sem UTM nenhuma nessa conta)."""
     ano, mes = data_alvo.year, data_alvo.month
     inicio_mes = dt.date(ano, mes, 1)
     fim_mes = dt.date(ano + 1, 1, 1) - dt.timedelta(days=1) if mes == 12 else dt.date(ano, mes + 1, 1) - dt.timedelta(days=1)
     desde_iso = f"{inicio_mes.isoformat()}T00:00:00Z"
     ate_iso = f"{fim_mes.isoformat()}T23:59:59Z"
 
-    deals = buscar_deals_por_pipeline(PIPELINE_ID_SNIPER, "open")
-    for status in ("won", "lost"):
-        deals.extend(buscar_deals_por_pipeline(PIPELINE_ID_SNIPER, status, desde_iso, ate_iso))
+    pipeline_ids = [PIPELINE_ID_SNIPER]
+    for nome_pipeline in SQUAD_NOME_PIPELINE.values():  # olympus, elite
+        pid = buscar_pipeline_id_por_nome(nome_pipeline)
+        if pid is not None:
+            pipeline_ids.append(pid)
+
+    deals = []
+    for pid in pipeline_ids:
+        deals.extend(buscar_deals_por_pipeline(pid, "open"))
+        for status in ("won", "lost"):
+            deals.extend(buscar_deals_por_pipeline(pid, status, desde_iso, ate_iso))
 
     # a data pode estar gravada em formatos diferentes (ISO ou BR) — testa os dois, tipo o "contém" do Pipedrive
     variantes = {data_alvo.isoformat(), data_alvo.strftime("%d/%m/%Y"), data_alvo.strftime("%d-%m-%Y")}
