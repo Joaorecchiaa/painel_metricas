@@ -184,11 +184,8 @@
   }
   .status-grupo-destaque {
     background: #f8fafc;
-    margin: 0 -8px;
-    padding: 4px 8px;
-    border-radius: 4px;
+    padding: 4px 0;
     border-bottom: none;
-    border-left: 2px solid var(--border);
   }
   .status-grupo-destaque .status-titulo { color: var(--ink); font-weight: 600; }
   .status-grupo-destaque .status-numero { color: var(--ink); font-weight: 600; }
@@ -464,7 +461,7 @@ async function atualizar() {
 
     function listaIds(lista) {
       if (!lista || lista.length === 0) return "<div class=\"status-vazio\">Nenhum</div>";
-      return lista.map(n => `<a class="status-id-item" href="${n.url}">#${n.id}</a>`).join("");
+      return lista.map(n => `<a class="status-id-item" href="${n.url}" target="_blank" rel="noopener">#${n.id}</a>`).join("");
     }
 
     function totalAbertosProduto(produto) {
