@@ -142,6 +142,9 @@
   .status-titulo { color: var(--muted); }
   .status-numero { font-weight: 600; }
   .tabela-wrap { border: 1px solid var(--border); border-radius: 8px; }
+  .tabela-wrap-estreita { max-width: 420px; }
+  .tabela-wrap-estreita table { width: auto; table-layout: auto; }
+  .tabela-wrap-estreita td:last-child, .tabela-wrap-estreita th:last-child { padding-left: 24px; }
   th.grupo-hoje, td.grupo-hoje { background: #eff6ff; }
   th.grupo-ontem, td.grupo-ontem { background: #f9fafb; }
   th.grupo-inicio, td.grupo-inicio { border-left: 2px solid var(--border); }
@@ -181,7 +184,7 @@
 </div>
 
 <h2 class="titulo-tabela">Sniper — SDR's (meta de reuniões)</h2>
-<div class="tabela-wrap">
+<div class="tabela-wrap tabela-wrap-estreita">
   <table>
     <thead>
       <tr>
