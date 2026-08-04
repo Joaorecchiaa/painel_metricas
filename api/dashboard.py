@@ -670,45 +670,6 @@ PIPELINE_ID_SNIPER = 88  # ID direto, sem precisar buscar por nome
 SQUADS_PRODUTOS = ["mgm", "elite", "sniper"]  # squads que aparecem em Produtos - Detalhamento
 
 
-def contar_novos_leads_aplicacao(data_alvo):
-    """Quantos negócios (somando os 3 funis: Sniper + Elite + Olympus) têm
-    'Data da última aplicação' contendo data_alvo, em qualquer status
-    (igual ao filtro 'Status é Aberto/Perdido/Ganho' + 'Funil é Sniper/Elite/Olympus'
-    + 'Data da última aplicação contém <data>' — sem UTM nenhuma nessa conta)."""
-    ano, mes = data_alvo.year, data_alvo.month
-    inicio_mes = dt.date(ano, mes, 1)
-    fim_mes = dt.date(ano + 1, 1, 1) - dt.timedelta(days=1) if mes == 12 else dt.date(ano, mes + 1, 1) - dt.timedelta(days=1)
-    desde_iso = f"{inicio_mes.isoformat()}T00:00:00Z"
-    ate_iso = f"{fim_mes.isoformat()}T23:59:59Z"
-
-    pipeline_ids = [PIPELINE_ID_SNIPER]
-    for nome_pipeline in SQUAD_NOME_PIPELINE.values():  # olympus, elite
-        pid = buscar_pipeline_id_por_nome(nome_pipeline)
-        if pid is not None:
-            pipeline_ids.append(pid)
-
-    deals = []
-    for pid in pipeline_ids:
-        deals.extend(buscar_deals_por_pipeline(pid, "open"))
-        for status in ("won", "lost"):
-            deals.extend(buscar_deals_por_pipeline(pid, status, desde_iso, ate_iso))
-
-    # a data pode estar gravada em formatos diferentes (ISO ou BR) — testa os dois, tipo o "contém" do Pipedrive
-    variantes = {data_alvo.isoformat(), data_alvo.strftime("%d/%m/%Y"), data_alvo.strftime("%d-%m-%Y")}
-
-    vistos = set()
-    total = 0
-    for d in deals:
-        did = d.get("id")
-        if did in vistos:
-            continue
-        vistos.add(did)
-        valor = str(cf_valor(d, CF_DATA_ULTIMA_APLICACAO) or "")
-        if any(v in valor for v in variantes):
-            total += 1
-    return total
-
-
 def _item_deal(d):
     return {
         "id": d.get("id"),
@@ -747,15 +708,10 @@ def produtos_em_aberto_por_squad(ano, mes, hoje, ontem, retornar_detalhes=False)
         abertos = buscar_deals_por_pipeline(pipeline_id, "open")
         for d in abertos:
             produto = classificar_produto(d) or "Não classificado"
-            item = _item_deal(d)
-            detalhes[squad_interno][produto]["abertos"].append(item)
-            add_brt = to_brt(d.get("add_time"))
-            if add_brt and add_brt.date() == hoje:
-                detalhes[squad_interno][produto]["novos_hoje"].append(item)
-            if add_brt and add_brt.date() == ontem:
-                detalhes[squad_interno][produto]["novos_ontem"].append(item)
+            detalhes[squad_interno][produto]["abertos"].append(_item_deal(d))
 
         # limitado ao mês selecionado (update_time) — senão baixaria o histórico inteiro do funil
+        ganhos = []
         if tem_ganhos:
             ganhos = buscar_deals_por_pipeline(pipeline_id, "won", desde_iso, ate_iso)
             for d in ganhos:
@@ -778,6 +734,21 @@ def produtos_em_aberto_por_squad(ano, mes, hoje, ontem, retornar_detalhes=False)
             detalhes[squad_interno][produto]["perdidos_mes"].append(item)
             if lost_brt.date() == hoje:
                 detalhes[squad_interno][produto]["perdidos_hoje"].append(item)
+
+        # Novos Leads (hoje/ontem) — pela data de criação do negócio ("Negócio criado em" / add_time),
+        # olhando TODOS os negócios já buscados (aberto+ganho+perdido), mesma regra da aba Métricas.
+        vistos_novos = set()
+        for d in abertos + ganhos + perdidos:
+            did = d.get("id")
+            if did in vistos_novos:
+                continue
+            vistos_novos.add(did)
+            produto = classificar_produto(d) or "Não classificado"
+            add_brt = to_brt(d.get("add_time"))
+            if add_brt and add_brt.date() == hoje:
+                detalhes[squad_interno][produto]["novos_hoje"].append(_item_deal(d))
+            if add_brt and add_brt.date() == ontem:
+                detalhes[squad_interno][produto]["novos_ontem"].append(_item_deal(d))
 
     if retornar_detalhes:
         return detalhes
@@ -1071,22 +1042,14 @@ def montar_painel(ano_param=None, mes_param=None):
     resultado["produtos_em_aberto_detalhes"] = {
         SQUAD_DISPLAY[s]: produtos_detalhes[s] for s in SQUADS_PRODUTOS
     }
-    # Novos Leads do Sniper (hoje/ontem) — via "Data da última aplicação" (contém a data),
-    # em Aberto/Perdido/Ganho, igual ao filtro de referência do usuário no Pipedrive.
-    if e_mes_atual:
-        novos_leads_hoje = contar_novos_leads_aplicacao(hoje)
-        novos_leads_ontem = contar_novos_leads_aplicacao(ontem)
-        deals_sniper_debug = buscar_deals_por_pipeline(PIPELINE_ID_SNIPER, "open")
-        resultado["debug_novos_leads"] = {
-            "total_abertos_sniper": len(deals_sniper_debug),
-            "amostra_campo_data_aplicacao": [
-                {"id": d.get("id"), "valor_campo": cf_valor(d, CF_DATA_ULTIMA_APLICACAO)}
-                for d in deals_sniper_debug[:8]
-            ],
-        }
-    else:
-        novos_leads_hoje = 0
-        novos_leads_ontem = 0
+    # Novos Leads (hoje/ontem) do Sniper na aba Métricas = soma de todos os produtos e
+    # todos os squads que a aba Produtos calcula — assim os dois nunca divergem.
+    novos_leads_hoje = sum(
+        produtos_detalhes[s][p]["novos_hoje"] for s in SQUADS_PRODUTOS for p in PRODUTOS_TODOS
+    )
+    novos_leads_ontem = sum(
+        produtos_detalhes[s][p]["novos_ontem"] for s in SQUADS_PRODUTOS for p in PRODUTOS_TODOS
+    )
     resultado["squads"]["Sniper"]["novos_leads_hoje"] = novos_leads_hoje
     resultado["squads"]["Sniper"]["novos_leads_ontem"] = novos_leads_ontem
 
