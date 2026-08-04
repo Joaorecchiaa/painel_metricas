@@ -670,11 +670,22 @@ PIPELINE_ID_SNIPER = 88  # ID direto, sem precisar buscar por nome
 
 
 def contar_novos_leads_por_aplicacao(data_alvo):
-    """Quantos negócios (abertos) do funil Sniper têm 'Data da última aplicação' == data_alvo."""
+    """Quantos negócios do funil Sniper têm 'Data da última aplicação' == data_alvo,
+    em qualquer status (Aberto + Perdido + Ganho) — igual ao filtro de referência
+    ('Status é Aberto/Perdido/Ganho' + 'Data da última aplicação contém <data>')."""
+    desde_iso = f"{(data_alvo - dt.timedelta(days=3)).isoformat()}T00:00:00Z"
+    ate_iso = f"{(data_alvo + dt.timedelta(days=1)).isoformat()}T23:59:59Z"
     deals = buscar_deals_por_pipeline(PIPELINE_ID_SNIPER, "open")
+    for status in ("won", "lost"):
+        deals.extend(buscar_deals_por_pipeline(PIPELINE_ID_SNIPER, status, desde_iso, ate_iso))
     alvo_iso = data_alvo.isoformat()
     total = 0
+    vistos = set()
     for d in deals:
+        did = d.get("id")
+        if did in vistos:
+            continue
+        vistos.add(did)
         valor = cf_valor(d, CF_DATA_ULTIMA_APLICACAO)
         if valor and str(valor)[:10] == alvo_iso:
             total += 1
