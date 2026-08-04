@@ -670,6 +670,36 @@ PIPELINE_ID_SNIPER = 88  # ID direto, sem precisar buscar por nome
 SQUADS_PRODUTOS = ["mgm", "elite", "sniper"]  # squads que aparecem em Produtos - Detalhamento
 
 
+def contar_novos_leads_aplicacao(data_alvo):
+    """Quantos negócios do funil Sniper têm 'Data da última aplicação' contendo data_alvo
+    (igual ao filtro 'Status é Aberto/Perdido/Ganho' + 'Data da última aplicação contém <data>').
+    Busca abertos (sem limite) + ganhos/perdidos limitados ao mês de data_alvo, pra não estourar timeout."""
+    ano, mes = data_alvo.year, data_alvo.month
+    inicio_mes = dt.date(ano, mes, 1)
+    fim_mes = dt.date(ano + 1, 1, 1) - dt.timedelta(days=1) if mes == 12 else dt.date(ano, mes + 1, 1) - dt.timedelta(days=1)
+    desde_iso = f"{inicio_mes.isoformat()}T00:00:00Z"
+    ate_iso = f"{fim_mes.isoformat()}T23:59:59Z"
+
+    deals = buscar_deals_por_pipeline(PIPELINE_ID_SNIPER, "open")
+    for status in ("won", "lost"):
+        deals.extend(buscar_deals_por_pipeline(PIPELINE_ID_SNIPER, status, desde_iso, ate_iso))
+
+    # a data pode estar gravada em formatos diferentes (ISO ou BR) — testa os dois, tipo o "contém" do Pipedrive
+    variantes = {data_alvo.isoformat(), data_alvo.strftime("%d/%m/%Y"), data_alvo.strftime("%d-%m-%Y")}
+
+    vistos = set()
+    total = 0
+    for d in deals:
+        did = d.get("id")
+        if did in vistos:
+            continue
+        vistos.add(did)
+        valor = str(cf_valor(d, CF_DATA_ULTIMA_APLICACAO) or "")
+        if any(v in valor for v in variantes):
+            total += 1
+    return total
+
+
 def _item_deal(d):
     return {
         "id": d.get("id"),
@@ -1032,10 +1062,22 @@ def montar_painel(ano_param=None, mes_param=None):
     resultado["produtos_em_aberto_detalhes"] = {
         SQUAD_DISPLAY[s]: produtos_detalhes[s] for s in SQUADS_PRODUTOS
     }
-    # Novos Leads do Sniper (hoje/ontem) = soma dos "novos_hoje"/"novos_ontem" de
-    # todos os produtos que a seção Produtos - Detalhamento já calcula certinho.
-    novos_leads_hoje = sum(produtos_detalhes["sniper"][p]["novos_hoje"] for p in PRODUTOS_TODOS)
-    novos_leads_ontem = sum(produtos_detalhes["sniper"][p]["novos_ontem"] for p in PRODUTOS_TODOS)
+    # Novos Leads do Sniper (hoje/ontem) — via "Data da última aplicação" (contém a data),
+    # em Aberto/Perdido/Ganho, igual ao filtro de referência do usuário no Pipedrive.
+    if e_mes_atual:
+        novos_leads_hoje = contar_novos_leads_aplicacao(hoje)
+        novos_leads_ontem = contar_novos_leads_aplicacao(ontem)
+        deals_sniper_debug = buscar_deals_por_pipeline(PIPELINE_ID_SNIPER, "open")
+        resultado["debug_novos_leads"] = {
+            "total_abertos_sniper": len(deals_sniper_debug),
+            "amostra_campo_data_aplicacao": [
+                {"id": d.get("id"), "valor_campo": cf_valor(d, CF_DATA_ULTIMA_APLICACAO)}
+                for d in deals_sniper_debug[:8]
+            ],
+        }
+    else:
+        novos_leads_hoje = 0
+        novos_leads_ontem = 0
     resultado["squads"]["Sniper"]["novos_leads_hoje"] = novos_leads_hoje
     resultado["squads"]["Sniper"]["novos_leads_ontem"] = novos_leads_ontem
 
