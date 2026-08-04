@@ -182,6 +182,15 @@
     font-size: 12px;
     border-bottom: 1px solid #f3f4f6;
   }
+  .status-grupo-destaque {
+    background: #fef9c3;
+    margin: 0 -8px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    border-bottom: none;
+  }
+  .status-grupo-destaque .status-titulo { color: #854d0e; font-weight: 600; }
+  .status-grupo-destaque .status-numero { color: #854d0e; }
   .status-grupo:last-child { border-bottom: none; }
   .status-titulo { color: var(--muted); }
   .status-numero { font-weight: 600; }
@@ -443,12 +452,13 @@ async function atualizar() {
     const linhasProdutos = ["PFCC", "CES", "LEAN", "ABP", "COAUTORIA", "Não classificado"];
     const CATEGORIAS = [
       { key: "abertos", label: "Abertos" },
+      { key: "novos_hoje", label: "Novos Leads Hoje", destaque: true },
+      { key: "novos_ontem", label: "Novos Leads Ontem", destaque: true },
       { key: "perdidos_mes", label: "Perdidos - Mês" },
       { key: "perdidos_hoje", label: "Perdidos - Hoje" },
       { key: "ganhos_mes", label: "Ganhos - Mês", listaKey: "ganhos_mes_lista" },
       { key: "ganhos_hoje", label: "Ganhos - Hoje", listaKey: "ganhos_hoje_lista" },
     ];
-    const CATEGORIA_NOVOS_HOJE = { key: "novos_hoje", label: "Novos Leads Hoje" };
 
     function listaIds(lista) {
       if (!lista || lista.length === 0) return "<div class=\"status-vazio\">Nenhum</div>";
@@ -463,8 +473,7 @@ async function atualizar() {
 
     function blocoSquad(squad, produto) {
       const dadosProduto = ((numeros[squad] || {})[produto]) || {};
-      let categorias = squad === "Sniper" ? CATEGORIAS.filter(c => !c.listaKey) : CATEGORIAS;
-      if (squad === "Sniper") categorias = [categorias[0], CATEGORIA_NOVOS_HOJE, ...categorias.slice(1)];
+      const categorias = squad === "Sniper" ? CATEGORIAS.filter(c => !c.listaKey) : CATEGORIAS;
       const grupos = categorias.map(cat => {
         if (cat.listaKey) {
           const lista = dadosProduto[cat.listaKey] || [];
@@ -475,7 +484,7 @@ async function atualizar() {
             </details>`;
         }
         return `
-          <div class="status-grupo">
+          <div class="status-grupo${cat.destaque ? ' status-grupo-destaque' : ''}">
             <span class="status-titulo">${cat.label}:</span>
             <span class="status-numero">${dadosProduto[cat.key] ?? 0}</span>
           </div>`;
