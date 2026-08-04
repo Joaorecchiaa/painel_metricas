@@ -223,6 +223,47 @@
     text-decoration: none;
   }
   .status-id-item:hover { background: #e5e7eb; }
+  .status-vazio { font-size: 11px; color: var(--muted); }
+
+  .perdidos-resumo {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .perdidos-resumo-card {
+    flex: 1;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .perdidos-resumo-card .rotulo { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+  .perdidos-resumo-card .valor { font-size: 22px; font-weight: 700; color: var(--bad); margin-top: 4px; }
+
+  .motivos-lista { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 20px; }
+  .motivo-linha {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 14px;
+    font-size: 12px;
+    border-bottom: 1px solid #f3f4f6;
+  }
+  .motivo-linha:last-child { border-bottom: none; }
+  .motivo-nome { flex: 1; }
+  .motivo-barra-wrap { flex: 2; background: #f3f4f6; border-radius: 999px; height: 8px; overflow: hidden; }
+  .motivo-barra { background: var(--bad); height: 100%; }
+  .motivo-qtd { width: 90px; text-align: right; color: var(--muted); }
+  .motivo-pct { width: 50px; text-align: right; font-weight: 600; }
+
+  .perdidos-funis {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 14px;
+  }
+  .perdidos-funil-card { border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  .perdidos-funil-titulo { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 10px; }
+  .perdidos-funil-resumo { display: flex; gap: 10px; margin-bottom: 10px; font-size: 12px; color: var(--muted); }
+  .perdidos-funil-resumo strong { color: var(--ink); font-size: 14px; }
   .tabela-wrap { border: 1px solid var(--border); border-radius: 8px; }
   .tabela-wrap-estreita { max-width: 48vw; min-width: 520px; }
   .tabela-wrap-estreita table { width: 100%; table-layout: auto; }
@@ -257,6 +298,7 @@
 <nav class="abas">
   <button class="aba-btn ativa" id="btnAbaMetricas" onclick="mostrarPagina('metricas')">Métricas</button>
   <button class="aba-btn" id="btnAbaProdutos" onclick="mostrarPagina('produtos')">Produtos</button>
+  <button class="aba-btn" id="btnAbaPerdidos" onclick="mostrarPagina('perdidos')">Perdidos</button>
 </nav>
 
 <div id="paginaMetricas">
@@ -296,17 +338,71 @@
   </div>
 </div>
 
+<div id="paginaPerdidos" style="display:none;">
+  <h2 class="titulo-tabela">PERDIDOS — GERAL</h2>
+  <div id="resumoPerdidosGeral" class="perdidos-resumo"></div>
+  <div id="motivosPerdidosGeral"></div>
+
+  <h2 class="titulo-tabela">PERDIDOS — POR FUNIL</h2>
+  <div id="cardsPerdidosFunil" class="perdidos-funis"></div>
+</div>
+
 <div id="erro"></div>
 
 <script>
 const API_URL = "/api/dashboard";
 const INTERVALO_MS = 10 * 60 * 1000; // 10 minutos
 
+function renderizarPerdidos(analise) {
+  const geral = analise.geral || { total_mes: 0, total_hoje: 0, motivos: [] };
+  document.getElementById("resumoPerdidosGeral").innerHTML = `
+    <div class="perdidos-resumo-card">
+      <div class="rotulo">Perdidos Hoje</div>
+      <div class="valor">${geral.total_hoje ?? 0}</div>
+    </div>
+    <div class="perdidos-resumo-card">
+      <div class="rotulo">Perdidos no Mês</div>
+      <div class="valor">${geral.total_mes ?? 0}</div>
+    </div>`;
+
+  function listaMotivos(motivos) {
+    if (!motivos || motivos.length === 0) {
+      return `<div class="status-vazio" style="padding:14px;">Nenhum motivo registrado</div>`;
+    }
+    return motivos.map(m => `
+      <div class="motivo-linha">
+        <span class="motivo-nome">${m.motivo}</span>
+        <div class="motivo-barra-wrap"><div class="motivo-barra" style="width:${m.percentual}%"></div></div>
+        <span class="motivo-qtd">${m.quantidade} negócios</span>
+        <span class="motivo-pct">${m.percentual}%</span>
+      </div>`).join("");
+  }
+
+  document.getElementById("motivosPerdidosGeral").innerHTML =
+    `<div class="motivos-lista">${listaMotivos(geral.motivos)}</div>`;
+
+  const porFunil = analise.por_funil || {};
+  document.getElementById("cardsPerdidosFunil").innerHTML = ["Olympus", "Elite", "Sniper"].map(squad => {
+    const dados = porFunil[squad] || { total_mes: 0, total_hoje: 0, motivos: [] };
+    return `
+      <div class="perdidos-funil-card">
+        <div class="perdidos-funil-titulo">${squad}</div>
+        <div class="perdidos-funil-resumo">
+          <span>Hoje: <strong>${dados.total_hoje ?? 0}</strong></span>
+          <span>Mês: <strong>${dados.total_mes ?? 0}</strong></span>
+        </div>
+        <div class="motivos-lista">${listaMotivos(dados.motivos)}</div>
+      </div>`;
+  }).join("");
+}
+
 function mostrarPagina(pagina) {
   document.getElementById("paginaMetricas").style.display = pagina === "metricas" ? "" : "none";
   document.getElementById("paginaProdutos").style.display = pagina === "produtos" ? "" : "none";
+  document.getElementById("paginaPerdidos").style.display = pagina === "perdidos" ? "" : "none";
   document.getElementById("btnAbaMetricas").classList.toggle("ativa", pagina === "metricas");
   document.getElementById("btnAbaProdutos").classList.toggle("ativa", pagina === "produtos");
+  document.getElementById("btnAbaPerdidos").classList.toggle("ativa", pagina === "perdidos");
 }
 
 function fmtMoeda(v) {
@@ -504,6 +600,8 @@ async function atualizar() {
           ${blocoSquad("Sniper", p)}
         </div>
       </details>`).join("");
+
+    renderizarPerdidos(data.perdidos_analise || {});
 
     document.getElementById("ultimaAtualizacao").textContent =
       "Atualizado às " + new Date(data.geradoEm).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo" });
