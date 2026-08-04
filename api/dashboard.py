@@ -753,18 +753,16 @@ def produtos_em_aberto_por_squad(ano, mes, hoje, ontem, retornar_detalhes=False)
     if retornar_detalhes:
         return detalhes
 
-    # números pra todo mundo, mas a lista (id + link) só fica pros GANHOS
+    # números pra todo mundo, mas a lista (id + link) fica pros GANHOS e NOVOS LEADS
     resultado = {}
     for s in SQUADS_PRODUTOS:
         resultado[s] = {}
         for p in PRODUTOS_TODOS:
             resultado[s][p] = {c: len(detalhes[s][p][c]) for c in CATEGORIAS_PRODUTO}
-            resultado[s][p]["ganhos_mes_lista"] = [
-                {"id": item["id"], "url": item["url"]} for item in detalhes[s][p]["ganhos_mes"]
-            ]
-            resultado[s][p]["ganhos_hoje_lista"] = [
-                {"id": item["id"], "url": item["url"]} for item in detalhes[s][p]["ganhos_hoje"]
-            ]
+            for chave in ("ganhos_mes", "ganhos_hoje", "novos_hoje", "novos_ontem"):
+                resultado[s][p][f"{chave}_lista"] = [
+                    {"id": item["id"], "url": item["url"]} for item in detalhes[s][p][chave]
+                ]
     return resultado
 
 
