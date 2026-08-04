@@ -667,29 +667,6 @@ PRODUTOS_TODOS = PRODUTOS + ["Não classificado"]
 
 SQUAD_NOME_PIPELINE = {"mgm": "olympus", "elite": "elite"}  # nome do funil no Pipedrive
 PIPELINE_ID_SNIPER = 88  # ID direto, sem precisar buscar por nome
-
-
-def contar_novos_leads_por_aplicacao(data_alvo):
-    """Quantos negócios do funil Sniper têm 'Data da última aplicação' == data_alvo,
-    em qualquer status (Aberto + Perdido + Ganho) — igual ao filtro de referência
-    ('Status é Aberto/Perdido/Ganho' + 'Data da última aplicação contém <data>')."""
-    desde_iso = f"{(data_alvo - dt.timedelta(days=3)).isoformat()}T00:00:00Z"
-    ate_iso = f"{(data_alvo + dt.timedelta(days=1)).isoformat()}T23:59:59Z"
-    deals = buscar_deals_por_pipeline(PIPELINE_ID_SNIPER, "open")
-    for status in ("won", "lost"):
-        deals.extend(buscar_deals_por_pipeline(PIPELINE_ID_SNIPER, status, desde_iso, ate_iso))
-    alvo_iso = data_alvo.isoformat()
-    total = 0
-    vistos = set()
-    for d in deals:
-        did = d.get("id")
-        if did in vistos:
-            continue
-        vistos.add(did)
-        valor = cf_valor(d, CF_DATA_ULTIMA_APLICACAO)
-        if valor and str(valor)[:10] == alvo_iso:
-            total += 1
-    return total
 SQUADS_PRODUTOS = ["mgm", "elite", "sniper"]  # squads que aparecem em Produtos - Detalhamento
 
 
@@ -702,10 +679,10 @@ def _item_deal(d):
     }
 
 
-CATEGORIAS_PRODUTO = ["abertos", "perdidos_mes", "perdidos_hoje", "ganhos_mes", "ganhos_hoje", "novos_hoje"]
+CATEGORIAS_PRODUTO = ["abertos", "perdidos_mes", "perdidos_hoje", "ganhos_mes", "ganhos_hoje", "novos_hoje", "novos_ontem"]
 
 
-def produtos_em_aberto_por_squad(ano, mes, hoje, retornar_detalhes=False):
+def produtos_em_aberto_por_squad(ano, mes, hoje, ontem, retornar_detalhes=False):
     """Por produto e squad (Olympus/Elite/Sniper), buscando direto por pipeline (funil):
     contagens de Abertos, Perdidos (mês/hoje) e Ganhos (mês/hoje) — Sniper não tem Ganhos.
     Tudo classificado pela utm_campaign, sem depender da COLAB/cargo.
@@ -736,6 +713,8 @@ def produtos_em_aberto_por_squad(ano, mes, hoje, retornar_detalhes=False):
             add_brt = to_brt(d.get("add_time"))
             if add_brt and add_brt.date() == hoje:
                 detalhes[squad_interno][produto]["novos_hoje"].append(item)
+            if add_brt and add_brt.date() == ontem:
+                detalhes[squad_interno][produto]["novos_ontem"].append(item)
 
         # limitado ao mês selecionado (update_time) — senão baixaria o histórico inteiro do funil
         if tem_ganhos:
@@ -1010,13 +989,6 @@ def montar_painel(ano_param=None, mes_param=None):
     meta_dia_40_reu = safe_div(gap_40_reu, dias_restantes_p40)
     meta_dia_100_reu = safe_div(gap_100_reu, dias_restantes_p100)
 
-    if e_mes_atual:
-        novos_leads_hoje = contar_novos_leads_por_aplicacao(hoje)
-        novos_leads_ontem = contar_novos_leads_por_aplicacao(d_ontem_util)
-    else:
-        novos_leads_hoje = 0
-        novos_leads_ontem = 0
-
     resultado["squads"]["Sniper"] = {
         "meta_mes_reunioes": meta_reunioes,
         "meta_dia_reunioes": round(meta_dia_reu, 2),
@@ -1034,8 +1006,8 @@ def montar_painel(ano_param=None, mes_param=None):
         "previsto_ontem": previsto_ontem_reu,
         "gap_hoje": max(0, previsto_hoje_reu - validadas_hoje),
         "gap_ontem": max(0, previsto_ontem_reu - validadas_dia_anterior_util),
-        "novos_leads_hoje": novos_leads_hoje,
-        "novos_leads_ontem": novos_leads_ontem,
+        "novos_leads_hoje": 0,   # preenchido mais abaixo, reaproveitando o cálculo de Produtos
+        "novos_leads_ontem": 0,
     }
 
     resultado["premissas"] = {
@@ -1050,13 +1022,22 @@ def montar_painel(ano_param=None, mes_param=None):
         "ritmo_40_pct": round(ritmo_prazo * 100, 1),
     }
     if e_mes_atual:
-        produtos_detalhes = produtos_em_aberto_por_squad(ano, mes, hoje)
+        produtos_detalhes = produtos_em_aberto_por_squad(ano, mes, hoje, ontem)
     else:
-        produtos_detalhes = {s: {p: {c: [] for c in CATEGORIAS_PRODUTO} for p in PRODUTOS_TODOS}
-                              for s in SQUADS_PRODUTOS}
+        produtos_detalhes = {
+            s: {p: {**{c: 0 for c in CATEGORIAS_PRODUTO}, "ganhos_mes_lista": [], "ganhos_hoje_lista": []}
+                for p in PRODUTOS_TODOS}
+            for s in SQUADS_PRODUTOS
+        }
     resultado["produtos_em_aberto_detalhes"] = {
         SQUAD_DISPLAY[s]: produtos_detalhes[s] for s in SQUADS_PRODUTOS
     }
+    # Novos Leads do Sniper (hoje/ontem) = soma dos "novos_hoje"/"novos_ontem" de
+    # todos os produtos que a seção Produtos - Detalhamento já calcula certinho.
+    novos_leads_hoje = sum(produtos_detalhes["sniper"][p]["novos_hoje"] for p in PRODUTOS_TODOS)
+    novos_leads_ontem = sum(produtos_detalhes["sniper"][p]["novos_ontem"] for p in PRODUTOS_TODOS)
+    resultado["squads"]["Sniper"]["novos_leads_hoje"] = novos_leads_hoje
+    resultado["squads"]["Sniper"]["novos_leads_ontem"] = novos_leads_ontem
 
     debug_previsto_hoje_deals = {s: [] for s in SQUADS_FINANCEIROS}
     if e_mes_atual:
