@@ -38,6 +38,25 @@
   .header-esquerda { display: flex; align-items: center; gap: 14px; }
   h1 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; color: #fff; }
   h2.titulo-tabela { font-size: 12px; font-weight: 600; margin: 18px 0 8px; color: var(--ink); }
+  .abas {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 4px;
+  }
+  .aba-btn {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 9px 4px;
+    margin-right: 18px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .aba-btn.ativa { color: var(--ink); border-bottom-color: #0b0b0f; }
+  .aba-btn:hover { color: var(--ink); }
   .sub { color: rgba(255,255,255,0.55); font-size: 10px; margin-top: 2px; letter-spacing: 0.03em; text-transform: uppercase; }
   .badge-dias-uteis {
     font-size: 11px;
@@ -227,37 +246,46 @@
   </div>
 </header>
 
-<h2 class="titulo-tabela">OLYMPUS &amp; ELITE</h2>
-<div class="tabela-wrap">
-  <table id="tabela-financeiro">
-    <thead>
-      <tr>
-        <th>Métrica</th>
-        <th>Olympus</th>
-        <th>Elite</th>
-        <th>Total Consolidado</th>
-      </tr>
-    </thead>
-    <tbody id="tabelaFinanceiro"></tbody>
-  </table>
+<nav class="abas">
+  <button class="aba-btn ativa" id="btnAbaMetricas" onclick="mostrarPagina('metricas')">Métricas</button>
+  <button class="aba-btn" id="btnAbaProdutos" onclick="mostrarPagina('produtos')">Produtos</button>
+</nav>
+
+<div id="paginaMetricas">
+  <h2 class="titulo-tabela">OLYMPUS &amp; ELITE</h2>
+  <div class="tabela-wrap">
+    <table id="tabela-financeiro">
+      <thead>
+        <tr>
+          <th>Métrica</th>
+          <th>Olympus</th>
+          <th>Elite</th>
+          <th>Total Consolidado</th>
+        </tr>
+      </thead>
+      <tbody id="tabelaFinanceiro"></tbody>
+    </table>
+  </div>
+
+  <h2 class="titulo-tabela">SNIPER</h2>
+  <div class="tabela-wrap tabela-wrap-estreita">
+    <table>
+      <thead>
+        <tr>
+          <th>Métrica</th>
+          <th>Sniper</th>
+        </tr>
+      </thead>
+      <tbody id="tabelaSniper"></tbody>
+    </table>
+  </div>
 </div>
 
-<h2 class="titulo-tabela">SNIPER</h2>
-<div class="tabela-wrap tabela-wrap-estreita">
-  <table>
-    <thead>
-      <tr>
-        <th>Métrica</th>
-        <th>Sniper</th>
-      </tr>
-    </thead>
-    <tbody id="tabelaSniper"></tbody>
-  </table>
-</div>
-
-<div id="secaoProdutos">
-  <h2 class="titulo-tabela">PRODUTOS - DETALHAMENTO</h2>
-  <div id="cardsProdutos"></div>
+<div id="paginaProdutos" style="display:none;">
+  <div id="secaoProdutos">
+    <h2 class="titulo-tabela">PRODUTOS - DETALHAMENTO</h2>
+    <div id="cardsProdutos"></div>
+  </div>
 </div>
 
 <div id="erro"></div>
@@ -265,6 +293,13 @@
 <script>
 const API_URL = "/api/dashboard";
 const INTERVALO_MS = 10 * 60 * 1000; // 10 minutos
+
+function mostrarPagina(pagina) {
+  document.getElementById("paginaMetricas").style.display = pagina === "metricas" ? "" : "none";
+  document.getElementById("paginaProdutos").style.display = pagina === "produtos" ? "" : "none";
+  document.getElementById("btnAbaMetricas").classList.toggle("ativa", pagina === "metricas");
+  document.getElementById("btnAbaProdutos").classList.toggle("ativa", pagina === "produtos");
+}
 
 function fmtMoeda(v) {
   return (v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
