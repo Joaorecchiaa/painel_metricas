@@ -44,7 +44,7 @@ CF_UTM_CAMPAIGN = "ae03fa460a108b8cdfa87e97ebca24379d2779d6"
 CF_PRODUTO = "8bdce76ba66f0fed0280918a4845190c92899ed5"
 CF_NOME_PRODUTO = "09d57fd58b8cac693f5901417f758df746223273"
 
-PRODUTOS = ["PFCC", "CES", "LEAN", "ABP"]
+PRODUTOS = ["PFCC", "CES", "LEAN", "ABP", "COAUTORIA"]
 
 SHEET_COLAB = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=1782440078&single=true&output=csv"
 SHEET_METAS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=0&single=true&output=csv"
@@ -639,6 +639,8 @@ def _match_produto_no_texto(texto):
         return "CES"
     if "abp" in t:  # suposição — confirmar a palavra-chave real pro ABP
         return "ABP"
+    if "coautoria" in t:
+        return "COAUTORIA"
     return None
 
 
@@ -726,11 +728,19 @@ def produtos_em_aberto_por_squad(ano, mes, hoje, retornar_detalhes=False):
     if retornar_detalhes:
         return detalhes
 
-    # só os números — sem nome/link dos negócios (pedido: "tire os negócios, deixe só os números")
-    return {
-        s: {p: {c: len(detalhes[s][p][c]) for c in CATEGORIAS_PRODUTO} for p in PRODUTOS_TODOS}
-        for s in SQUADS_FINANCEIROS
-    }
+    # números pra todo mundo, mas a lista (id + link) só fica pros GANHOS
+    resultado = {}
+    for s in SQUADS_FINANCEIROS:
+        resultado[s] = {}
+        for p in PRODUTOS_TODOS:
+            resultado[s][p] = {c: len(detalhes[s][p][c]) for c in CATEGORIAS_PRODUTO}
+            resultado[s][p]["ganhos_mes_lista"] = [
+                {"id": item["id"], "url": item["url"]} for item in detalhes[s][p]["ganhos_mes"]
+            ]
+            resultado[s][p]["ganhos_hoje_lista"] = [
+                {"id": item["id"], "url": item["url"]} for item in detalhes[s][p]["ganhos_hoje"]
+            ]
+    return resultado
 
 
 def montar_painel(ano_param=None, mes_param=None):
