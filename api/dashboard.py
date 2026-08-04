@@ -43,6 +43,7 @@ CF_QUALIFICADOR = "a6f13cc27c8d041f3af4091283ce0d4fe0913875"
 CF_UTM_CAMPAIGN = "ae03fa460a108b8cdfa87e97ebca24379d2779d6"
 CF_PRODUTO = "8bdce76ba66f0fed0280918a4845190c92899ed5"
 CF_NOME_PRODUTO = "09d57fd58b8cac693f5901417f758df746223273"
+CF_DATA_ULTIMA_APLICACAO = "23de049432e523993f69ecd456a3f755c0f07f3d"
 
 PRODUTOS = ["PFCC", "CES", "LEAN", "ABP", "COAUTORIA"]
 
@@ -666,6 +667,18 @@ PRODUTOS_TODOS = PRODUTOS + ["Não classificado"]
 
 SQUAD_NOME_PIPELINE = {"mgm": "olympus", "elite": "elite"}  # nome do funil no Pipedrive
 PIPELINE_ID_SNIPER = 88  # ID direto, sem precisar buscar por nome
+
+
+def contar_novos_leads_por_aplicacao(data_alvo):
+    """Quantos negócios (abertos) do funil Sniper têm 'Data da última aplicação' == data_alvo."""
+    deals = buscar_deals_por_pipeline(PIPELINE_ID_SNIPER, "open")
+    alvo_iso = data_alvo.isoformat()
+    total = 0
+    for d in deals:
+        valor = cf_valor(d, CF_DATA_ULTIMA_APLICACAO)
+        if valor and str(valor)[:10] == alvo_iso:
+            total += 1
+    return total
 SQUADS_PRODUTOS = ["mgm", "elite", "sniper"]  # squads que aparecem em Produtos - Detalhamento
 
 
@@ -986,6 +999,13 @@ def montar_painel(ano_param=None, mes_param=None):
     meta_dia_40_reu = safe_div(gap_40_reu, dias_restantes_p40)
     meta_dia_100_reu = safe_div(gap_100_reu, dias_restantes_p100)
 
+    if e_mes_atual:
+        novos_leads_hoje = contar_novos_leads_por_aplicacao(hoje)
+        novos_leads_ontem = contar_novos_leads_por_aplicacao(d_ontem_util)
+    else:
+        novos_leads_hoje = 0
+        novos_leads_ontem = 0
+
     resultado["squads"]["Sniper"] = {
         "meta_mes_reunioes": meta_reunioes,
         "meta_dia_reunioes": round(meta_dia_reu, 2),
@@ -1003,6 +1023,8 @@ def montar_painel(ano_param=None, mes_param=None):
         "previsto_ontem": previsto_ontem_reu,
         "gap_hoje": max(0, previsto_hoje_reu - validadas_hoje),
         "gap_ontem": max(0, previsto_ontem_reu - validadas_dia_anterior_util),
+        "novos_leads_hoje": novos_leads_hoje,
+        "novos_leads_ontem": novos_leads_ontem,
     }
 
     resultado["premissas"] = {
