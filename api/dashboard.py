@@ -47,6 +47,12 @@ CF_DATA_ULTIMA_APLICACAO = "23de049432e523993f69ecd456a3f755c0f07f3d"
 
 PRODUTOS = ["PFCC", "CES", "LEAN", "ABP", "COAUTORIA"]
 
+# IDs de campanha do Google Ads que também identificam PFCC (além de conter "pfcc" na utm_campaign)
+PFCC_IDS_GOOGLE = {
+    "22822740395", "23869952762", "22675029313", "23874401647",
+    "23397388987", "22508119133", "23963147748",
+}
+
 SHEET_COLAB = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=1782440078&single=true&output=csv"
 SHEET_METAS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=0&single=true&output=csv"
 SHEET_FERIADOS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=1010928978&single=true&output=csv"
@@ -632,7 +638,7 @@ def valor_abertos_por_squad(pool, colaboradores, users_map, data_alvo):
 
 def _match_produto_no_texto(texto):
     t = norm(texto or "")
-    if "pfcc" in t:
+    if "pfcc" in t or any(gid in t for gid in PFCC_IDS_GOOGLE):
         return "PFCC"
     if "lean" in t:
         return "LEAN"
