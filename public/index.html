@@ -120,6 +120,8 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
   }
+  .produto-squads-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .produto-squads-3 .produto-squad:not(:last-child) { border-right: 1px solid var(--border); }
   .produto-squad { padding: 12px 16px; }
   .produto-squad:first-child { border-right: 1px solid var(--border); }
   .produto-squad-titulo {
@@ -228,7 +230,7 @@
 </div>
 
 <div id="secaoProdutos">
-  <h2 class="titulo-tabela">Produtos em Aberto — Olympus &amp; Elite</h2>
+  <h2 class="titulo-tabela">PRODUTOS - DETALHAMENTO</h2>
   <div id="cardsProdutos"></div>
 </div>
 
@@ -388,7 +390,8 @@ async function atualizar() {
 
     function blocoSquad(squad, produto) {
       const dadosProduto = ((numeros[squad] || {})[produto]) || {};
-      const grupos = CATEGORIAS.map(cat => {
+      const categorias = squad === "Sniper" ? CATEGORIAS.filter(c => !c.listaKey) : CATEGORIAS;
+      const grupos = categorias.map(cat => {
         if (cat.listaKey) {
           const lista = dadosProduto[cat.listaKey] || [];
           return `
@@ -413,9 +416,10 @@ async function atualizar() {
     document.getElementById("cardsProdutos").innerHTML = linhasProdutos.map(p => `
       <details class="produto-card">
         <summary>${p}</summary>
-        <div class="produto-squads">
+        <div class="produto-squads produto-squads-3">
           ${blocoSquad("Olympus", p)}
           ${blocoSquad("Elite", p)}
+          ${blocoSquad("Sniper", p)}
         </div>
       </details>`).join("");
 
