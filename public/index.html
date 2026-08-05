@@ -264,6 +264,14 @@
   .perdidos-funil-titulo { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 10px; }
   .perdidos-funil-resumo { display: flex; gap: 10px; margin-bottom: 10px; font-size: 12px; color: var(--muted); }
   .perdidos-funil-resumo strong { color: var(--ink); font-size: 14px; }
+  .auditoria-etapa { margin-bottom: 16px; }
+  .auditoria-etapa-titulo {
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 6px;
+    color: var(--ink);
+  }
+  .auditoria-etapa-titulo .qtd { color: var(--bad); font-weight: 500; font-size: 11px; }
   .tabela-wrap { border: 1px solid var(--border); border-radius: 8px; }
   .tabela-wrap-estreita { max-width: 48vw; min-width: 520px; }
   .tabela-wrap-estreita table { width: 100%; table-layout: auto; }
@@ -345,6 +353,11 @@
 
   <h2 class="titulo-tabela">PERDIDOS — POR FUNIL</h2>
   <div id="cardsPerdidosFunil" class="perdidos-funis"></div>
+
+  <h2 class="titulo-tabela">AUDITORIA DE PERDAS</h2>
+  <div class="sub" style="color:var(--muted); margin-bottom:10px;">Motivos de perda fora do esperado pra etapa em que o negócio estava</div>
+  <div id="auditoriaPerdidosGeral"></div>
+  <div id="cardsAuditoriaFunil" class="perdidos-funis"></div>
 </div>
 
 <div id="erro"></div>
@@ -392,6 +405,28 @@ function renderizarPerdidos(analise) {
           <span>Mês: <strong>${dados.total_mes ?? 0}</strong></span>
         </div>
         <div class="motivos-lista">${listaMotivos(dados.motivos)}</div>
+      </div>`;
+  }).join("");
+
+  function listaAuditoria(auditoria) {
+    if (!auditoria || auditoria.length === 0) {
+      return `<div class="status-vazio" style="padding:14px;">Nenhum motivo fora da regra encontrado 🎉</div>`;
+    }
+    return auditoria.map(a => `
+      <div class="auditoria-etapa">
+        <div class="auditoria-etapa-titulo">${a.etapa} <span class="qtd">(${a.total} fora da regra)</span></div>
+        <div class="motivos-lista">${listaMotivos(a.motivos)}</div>
+      </div>`).join("");
+  }
+
+  document.getElementById("auditoriaPerdidosGeral").innerHTML = listaAuditoria(geral.auditoria);
+
+  document.getElementById("cardsAuditoriaFunil").innerHTML = ["Olympus", "Elite", "Sniper"].map(squad => {
+    const dados = porFunil[squad] || { auditoria: [] };
+    return `
+      <div class="perdidos-funil-card">
+        <div class="perdidos-funil-titulo">${squad}</div>
+        ${listaAuditoria(dados.auditoria)}
       </div>`;
   }).join("");
 }
