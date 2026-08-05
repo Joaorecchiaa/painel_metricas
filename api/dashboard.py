@@ -398,6 +398,15 @@ def buscar_pipeline_id_por_nome(nome_busca):
     return None
 
 
+def buscar_stages_pipeline(pipeline_id):
+    """Mapa stage_id -> {'norm': nome normalizado, 'nome': nome original} das etapas de um pipeline."""
+    data = http_get_json(f"{V1_BASE}/stages?{urlencode({'api_token': PD_TOKEN, 'pipeline_id': pipeline_id})}")
+    mapa = {}
+    for s in (data.get("data") or []):
+        mapa[s.get("id")] = {"norm": norm(s.get("name", "")), "nome": s.get("name", "")}
+    return mapa
+
+
 def buscar_deals_por_pipeline(pipeline_id, status, desde_iso=None, ate_iso=None):
     """Negócios de um status específico (open/won/lost) de um pipeline — direto,
     sem passar por nenhum filter_id salvo. Usa API v2: a v1 ignora silenciosamente
@@ -691,8 +700,44 @@ def _motivos_com_percentual(motivos_contagem, total):
     return itens
 
 
+# ---- Auditoria de Perdas: quais motivos fazem sentido em cada etapa ----
+# "Black List" é aceito em qualquer etapa (regra geral, não precisa repetir abaixo).
+MOTIVOS_A_PARTIR_CONTATADO = {
+    norm(m) for m in [
+        "Sem interesse", "Parou de Responder", "Futuro 30", "Futuro 60", "Futuro 90",
+        "Sem agenda / Próximo ano", "Sem condições financeiras", "Sem perfil",
+        "Contato Inexistente", "Optou pela concorrência", "Oportunidade de emprego",
+        "Cliente não reconheceu valor ou timing para avançar",
+    ]
+}
+ETAPAS_A_PARTIR_CONTATADO = {
+    norm(e) for e in [
+        "Contatado", "Oportunidade", "Agendados", "No Show",
+        "Validação de Reunião", "Validação da Reunião", "Negociação", "Inscrição em andamento",
+    ]
+}
+REGRA_MOTIVOS_POR_ETAPA = {
+    norm("Aplicação"): set(),                                    # não é pra ter perdido
+    norm("Reabertura"): set(),                                    # suposição: mesma regra da Aplicação — confirmar
+    norm("Etapa 1"): {norm("Duplicidade"), norm("Sem perfil")},
+    norm("Etapa 2"): set(),                                       # não é pra ter perdido
+    norm("Etapa 3"): {norm("Sem retorno")},
+}
+MOTIVO_BLACK_LIST = norm("Black List")
+
+
+def _motivos_permitidos_na_etapa(etapa_norm):
+    """None = etapa não mapeada (não auditamos); set() = nenhum motivo aceito nessa etapa."""
+    if etapa_norm in ETAPAS_A_PARTIR_CONTATADO:
+        return MOTIVOS_A_PARTIR_CONTATADO
+    if etapa_norm in REGRA_MOTIVOS_POR_ETAPA:
+        return REGRA_MOTIVOS_POR_ETAPA[etapa_norm]
+    return None
+
+
 def analisar_perdidos(ano, mes, hoje):
-    """Perdidos do dia/mês + motivo de perda (quantidade e %), geral e por funil (Olympus/Elite/Sniper)."""
+    """Perdidos do dia/mês + motivo de perda (quantidade e %), geral e por funil (Olympus/Elite/Sniper),
+    + Auditoria de Perdas (motivos fora da regra esperada pra cada etapa)."""
     inicio_mes = dt.date(ano, mes, 1)
     fim_mes = dt.date(ano + 1, 1, 1) - dt.timedelta(days=1) if mes == 12 else dt.date(ano, mes + 1, 1) - dt.timedelta(days=1)
     desde_iso = f"{inicio_mes.isoformat()}T00:00:00Z"
@@ -702,14 +747,17 @@ def analisar_perdidos(ano, mes, hoje):
     motivos_geral = {}
     total_mes_geral = 0
     total_hoje_geral = 0
+    auditoria_geral = {}  # etapa (nome de exibição) -> {motivo: qtd}
 
     for squad_interno in SQUADS_PRODUTOS:
         pipeline_id = _pipeline_id_do_squad(squad_interno)
         motivos_funil = {}
         total_mes = 0
         total_hoje = 0
+        auditoria_funil = {}
         if pipeline_id is not None:
             perdidos = buscar_deals_por_pipeline(pipeline_id, "lost", desde_iso, ate_iso)
+            stages_map = buscar_stages_pipeline(pipeline_id)
             for d in perdidos:
                 lost_brt = to_brt(d.get("lost_time"))
                 if not lost_brt or (lost_brt.year, lost_brt.month) != (ano, mes):
@@ -721,10 +769,31 @@ def analisar_perdidos(ano, mes, hoje):
                 motivos_funil[motivo] = motivos_funil.get(motivo, 0) + 1
                 motivos_geral[motivo] = motivos_geral.get(motivo, 0) + 1
 
+                # Auditoria: o motivo faz sentido pra etapa em que o negócio estava?
+                motivo_norm = norm(motivo)
+                if motivo_norm == MOTIVO_BLACK_LIST:
+                    continue  # aceito em qualquer etapa
+                etapa_info = stages_map.get(d.get("stage_id"))
+                if not etapa_info:
+                    continue
+                permitidos = _motivos_permitidos_na_etapa(etapa_info["norm"])
+                if permitidos is None:
+                    continue  # etapa não mapeada, não auditamos
+                if motivo_norm not in permitidos:
+                    etapa_nome = etapa_info["nome"]
+                    auditoria_funil.setdefault(etapa_nome, {})
+                    auditoria_funil[etapa_nome][motivo] = auditoria_funil[etapa_nome].get(motivo, 0) + 1
+                    auditoria_geral.setdefault(etapa_nome, {})
+                    auditoria_geral[etapa_nome][motivo] = auditoria_geral[etapa_nome].get(motivo, 0) + 1
+
         por_funil[squad_interno] = {
             "total_mes": total_mes,
             "total_hoje": total_hoje,
             "motivos": _motivos_com_percentual(motivos_funil, total_mes),
+            "auditoria": [
+                {"etapa": etapa, "total": sum(m.values()), "motivos": _motivos_com_percentual(m, sum(m.values()))}
+                for etapa, m in sorted(auditoria_funil.items(), key=lambda kv: sum(kv[1].values()), reverse=True)
+            ],
         }
         total_mes_geral += total_mes
         total_hoje_geral += total_hoje
@@ -734,6 +803,10 @@ def analisar_perdidos(ano, mes, hoje):
             "total_mes": total_mes_geral,
             "total_hoje": total_hoje_geral,
             "motivos": _motivos_com_percentual(motivos_geral, total_mes_geral),
+            "auditoria": [
+                {"etapa": etapa, "total": sum(m.values()), "motivos": _motivos_com_percentual(m, sum(m.values()))}
+                for etapa, m in sorted(auditoria_geral.items(), key=lambda kv: sum(kv[1].values()), reverse=True)
+            ],
         },
         "por_funil": {SQUAD_DISPLAY[s]: por_funil[s] for s in SQUADS_PRODUTOS},
     }
@@ -1124,8 +1197,8 @@ def montar_painel(ano_param=None, mes_param=None):
         resultado["perdidos_analise"] = analisar_perdidos(ano, mes, hoje)
     else:
         resultado["perdidos_analise"] = {
-            "geral": {"total_mes": 0, "total_hoje": 0, "motivos": []},
-            "por_funil": {SQUAD_DISPLAY[s]: {"total_mes": 0, "total_hoje": 0, "motivos": []} for s in SQUADS_PRODUTOS},
+            "geral": {"total_mes": 0, "total_hoje": 0, "motivos": [], "auditoria": []},
+            "por_funil": {SQUAD_DISPLAY[s]: {"total_mes": 0, "total_hoje": 0, "motivos": [], "auditoria": []} for s in SQUADS_PRODUTOS},
         }
 
     debug_previsto_hoje_deals = {s: [] for s in SQUADS_FINANCEIROS}
