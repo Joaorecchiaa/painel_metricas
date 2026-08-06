@@ -44,6 +44,8 @@ CF_UTM_CAMPAIGN = "ae03fa460a108b8cdfa87e97ebca24379d2779d6"
 CF_PRODUTO = "8bdce76ba66f0fed0280918a4845190c92899ed5"
 CF_NOME_PRODUTO = "09d57fd58b8cac693f5901417f758df746223273"
 CF_DATA_ULTIMA_APLICACAO = "23de049432e523993f69ecd456a3f755c0f07f3d"
+CF_UTM_SOURCE = "8fb3221ab3d91cddaf51e0a9e1bbcda34fc9d28e"
+CF_CARGO_NEGOCIO = "718c8aba81211c883ffd9f4616f75ee22a10b2da"  # campo "Cargo" do negócio (diferente do Cargo da COLAB)
 
 PRODUTOS = ["PFCC", "CES", "LEAN", "ABP", "COAUTORIA"]
 
@@ -707,6 +709,59 @@ def _pipeline_id_do_squad(squad_interno):
     return buscar_pipeline_id_por_nome(SQUAD_NOME_PIPELINE[squad_interno])
 
 
+def analisar_mql_pfcc(ano, mes, hoje):
+    """'NOVOS MQL's PFCC': negócios (Sniper/Elite/Olympus, qualquer status) com:
+    utm_campaign não vazio + utm_source != 'org' + Cargo não vazio +
+    (utm_campaign contém 'pfcc' OU um dos IDs do Google) +
+    Data da última aplicação contendo o dia (hoje) ou o mês/ano (mês)."""
+    inicio_mes = dt.date(ano, mes, 1)
+    fim_mes = dt.date(ano + 1, 1, 1) - dt.timedelta(days=1) if mes == 12 else dt.date(ano, mes + 1, 1) - dt.timedelta(days=1)
+    desde_iso = f"{inicio_mes.isoformat()}T00:00:00Z"
+    ate_iso = f"{fim_mes.isoformat()}T23:59:59Z"
+
+    pipelines = [PIPELINE_ID_SNIPER]
+    for nome_pipeline in SQUAD_NOME_PIPELINE.values():  # olympus, elite
+        pid = buscar_pipeline_id_por_nome(nome_pipeline)
+        if pid is not None:
+            pipelines.append(pid)
+
+    variantes_dia = {hoje.isoformat(), hoje.strftime("%d/%m/%Y"), hoje.strftime("%d-%m-%Y")}
+    variantes_mes = {f"{ano:04d}-{mes:02d}", f"{mes:02d}/{ano:04d}"}
+
+    vistos = set()
+    total_hoje = 0
+    total_mes = 0
+    for pid in pipelines:
+        deals = buscar_deals_por_pipeline(pid, "open")
+        for status in ("won", "lost"):
+            deals.extend(buscar_deals_por_pipeline(pid, status, desde_iso, ate_iso))
+        for d in deals:
+            did = d.get("id")
+            if did in vistos:
+                continue
+            vistos.add(did)
+
+            utm_campaign_raw = cf_valor(d, CF_UTM_CAMPAIGN)
+            if not (utm_campaign_raw and str(utm_campaign_raw).strip()):
+                continue
+            if norm(cf_valor(d, CF_UTM_SOURCE)) == "org":
+                continue
+            cargo = cf_valor(d, CF_CARGO_NEGOCIO)
+            if not (cargo and str(cargo).strip()):
+                continue
+            campanha_norm = norm(utm_campaign_raw)
+            if not ("pfcc" in campanha_norm or any(gid in campanha_norm for gid in PFCC_IDS_GOOGLE)):
+                continue
+
+            valor_data = str(cf_valor(d, CF_DATA_ULTIMA_APLICACAO) or "")
+            if any(v in valor_data for v in variantes_dia):
+                total_hoje += 1
+            if any(v in valor_data for v in variantes_mes):
+                total_mes += 1
+
+    return {"hoje": total_hoje, "mes": total_mes}
+
+
 def _papel_colaborador(nome_dono, colaboradores):
     """Classifica o dono do negócio como SDR/Closer/Outro, via cargo cadastrado na COLAB."""
     colab = colaboradores.get(norm(nome_dono), {})
@@ -1250,6 +1305,11 @@ def montar_painel(ano_param=None, mes_param=None):
     )
     resultado["squads"]["Sniper"]["novos_leads_hoje"] = novos_leads_hoje
     resultado["squads"]["Sniper"]["novos_leads_ontem"] = novos_leads_ontem
+
+    if e_mes_atual:
+        resultado["mql_pfcc"] = analisar_mql_pfcc(ano, mes, hoje)
+    else:
+        resultado["mql_pfcc"] = {"hoje": 0, "mes": 0}
 
     if e_mes_atual:
         resultado["perdidos_analise"] = analisar_perdidos(ano, mes, hoje, colaboradores, users_map)
