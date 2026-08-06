@@ -865,7 +865,7 @@ def _item_deal(d):
     }
 
 
-CATEGORIAS_PRODUTO = ["abertos", "perdidos_mes", "perdidos_hoje", "ganhos_mes", "ganhos_hoje", "novos_hoje", "novos_ontem"]
+CATEGORIAS_PRODUTO = ["abertos", "perdidos_mes", "perdidos_hoje", "ganhos_mes", "ganhos_hoje", "novos_hoje", "novos_ontem", "novos_mes"]
 
 
 def produtos_em_aberto_por_squad(ano, mes, hoje, ontem, retornar_detalhes=False):
@@ -935,6 +935,8 @@ def produtos_em_aberto_por_squad(ano, mes, hoje, ontem, retornar_detalhes=False)
                 detalhes[squad_interno][produto]["novos_hoje"].append(_item_deal(d))
             if add_brt and add_brt.date() == ontem:
                 detalhes[squad_interno][produto]["novos_ontem"].append(_item_deal(d))
+            if add_brt and (add_brt.year, add_brt.month) == (ano, mes):
+                detalhes[squad_interno][produto]["novos_mes"].append(_item_deal(d))
 
     if retornar_detalhes:
         return detalhes
@@ -945,7 +947,7 @@ def produtos_em_aberto_por_squad(ano, mes, hoje, ontem, retornar_detalhes=False)
         resultado[s] = {}
         for p in PRODUTOS_TODOS:
             resultado[s][p] = {c: len(detalhes[s][p][c]) for c in CATEGORIAS_PRODUTO}
-            for chave in ("ganhos_mes", "ganhos_hoje", "novos_hoje", "novos_ontem"):
+            for chave in ("ganhos_mes", "ganhos_hoje", "novos_hoje", "novos_ontem", "novos_mes"):
                 resultado[s][p][f"{chave}_lista"] = [
                     {"id": item["id"], "url": item["url"]} for item in detalhes[s][p][chave]
                 ]
@@ -1219,7 +1221,8 @@ def montar_painel(ano_param=None, mes_param=None):
         produtos_detalhes = produtos_em_aberto_por_squad(ano, mes, hoje, ontem)
     else:
         produtos_detalhes = {
-            s: {p: {**{c: 0 for c in CATEGORIAS_PRODUTO}, "ganhos_mes_lista": [], "ganhos_hoje_lista": []}
+            s: {p: {**{c: 0 for c in CATEGORIAS_PRODUTO}, "ganhos_mes_lista": [], "ganhos_hoje_lista": [],
+                     "novos_hoje_lista": [], "novos_ontem_lista": [], "novos_mes_lista": []}
                 for p in PRODUTOS_TODOS}
             for s in SQUADS_PRODUTOS
         }
