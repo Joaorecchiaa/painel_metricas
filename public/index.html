@@ -238,6 +238,8 @@
   }
   .perdidos-resumo-card .rotulo { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
   .perdidos-resumo-card .valor { font-size: 22px; font-weight: 700; color: var(--bad); margin-top: 4px; }
+  #resumoNovosLeadsProdutos .valor { color: var(--ink); }
+  #resumoNovosLeadsProdutos { margin-bottom: 20px; }
 
   .motivos-lista { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 20px; }
   .motivo-dropdown { border-bottom: 1px solid #f3f4f6; }
@@ -363,6 +365,7 @@
 
 <div id="paginaProdutos" style="display:none;">
   <div id="secaoProdutos">
+    <div id="resumoNovosLeadsProdutos" class="perdidos-resumo"></div>
     <h2 class="titulo-tabela">PRODUTOS - DETALHAMENTO</h2>
     <div id="cardsProdutos"></div>
   </div>
@@ -626,10 +629,25 @@ async function atualizar() {
 
     const numeros = data.produtos_em_aberto_detalhes || {};
     const linhasProdutos = ["PFCC", "CES", "LEAN", "ABP", "COAUTORIA", "Não classificado"];
+
+    function totalGeralNovosLeads(chave) {
+      return ["Olympus", "Elite", "Sniper"].reduce((soma, squad) =>
+        soma + linhasProdutos.reduce((s2, p) => s2 + (((numeros[squad] || {})[p] || {})[chave] ?? 0), 0), 0);
+    }
+    document.getElementById("resumoNovosLeadsProdutos").innerHTML = `
+      <div class="perdidos-resumo-card">
+        <div class="rotulo">Novos Leads Hoje</div>
+        <div class="valor">${totalGeralNovosLeads("novos_hoje")}</div>
+      </div>
+      <div class="perdidos-resumo-card">
+        <div class="rotulo">Novos Leads Mês</div>
+        <div class="valor">${totalGeralNovosLeads("novos_mes")}</div>
+      </div>`;
     const CATEGORIAS = [
       { key: "abertos", label: "Abertos" },
       { key: "novos_hoje", label: "Novos Leads Hoje", destaque: true, listaKey: "novos_hoje_lista" },
       { key: "novos_ontem", label: "Novos Leads Ontem", destaque: true, listaKey: "novos_ontem_lista" },
+      { key: "novos_mes", label: "Novos Leads Mês", destaque: true, listaKey: "novos_mes_lista" },
       { key: "perdidos_mes", label: "Perdidos - Mês" },
       { key: "perdidos_hoje", label: "Perdidos - Hoje" },
       { key: "ganhos_mes", label: "Ganhos - Mês", listaKey: "ganhos_mes_lista" },
