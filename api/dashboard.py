@@ -691,10 +691,46 @@ def _pipeline_id_do_squad(squad_interno):
     return buscar_pipeline_id_por_nome(SQUAD_NOME_PIPELINE[squad_interno])
 
 
-def _motivos_com_percentual(motivos_contagem, total):
+def _papel_colaborador(nome_dono, colaboradores):
+    """Classifica o dono do negócio como SDR/Closer/Outro, via cargo cadastrado na COLAB."""
+    colab = colaboradores.get(norm(nome_dono), {})
+    cargo = colab.get("cargo", "")
+    if "closer" in cargo:
+        return "Closer"
+    if "sdr" in cargo:
+        return "SDR"
+    return "Outro"
+
+
+def _colaboradores_do_motivo(deals, colaboradores, users_map):
+    """Agrupa os negócios de um motivo por colaborador (dono), separado por papel (SDR/Closer/Outro)."""
+    grupos = {"Closer": {}, "SDR": {}, "Outro": {}}
+    for d in deals:
+        nome_dono = owner_nome(d, users_map) or "Sem dono"
+        papel = _papel_colaborador(nome_dono, colaboradores)
+        grupos[papel].setdefault(nome_dono, []).append({
+            "id": d.get("id"),
+            "url": f"https://{PD_DOMAIN}/deal/{d.get('id')}",
+        })
+    resultado = {}
+    for papel, pessoas in grupos.items():
+        lista = [{"nome": nome, "quantidade": len(negocios), "negocios": negocios}
+                 for nome, negocios in pessoas.items()]
+        lista.sort(key=lambda x: x["quantidade"], reverse=True)
+        resultado[papel] = lista
+    return resultado
+
+
+def _motivos_com_percentual(motivos_deals, total, colaboradores, users_map):
+    """motivos_deals: {motivo: [negócio, ...]} -> lista com quantidade/% + quebra por colaborador."""
     itens = [
-        {"motivo": motivo, "quantidade": qtd, "percentual": round(safe_div(qtd, total) * 100, 1)}
-        for motivo, qtd in motivos_contagem.items()
+        {
+            "motivo": motivo,
+            "quantidade": len(deals),
+            "percentual": round(safe_div(len(deals), total) * 100, 1),
+            "colaboradores": _colaboradores_do_motivo(deals, colaboradores, users_map),
+        }
+        for motivo, deals in motivos_deals.items()
     ]
     itens.sort(key=lambda x: x["quantidade"], reverse=True)
     return itens
@@ -735,19 +771,19 @@ def _motivos_permitidos_na_etapa(etapa_norm):
     return None
 
 
-def analisar_perdidos(ano, mes, hoje):
-    """Perdidos do dia/mês + motivo de perda (quantidade e %), geral e por funil (Olympus/Elite/Sniper),
-    + Auditoria de Perdas (motivos fora da regra esperada pra cada etapa)."""
+def analisar_perdidos(ano, mes, hoje, colaboradores, users_map):
+    """Perdidos do dia/mês + motivo de perda (quantidade, % e quebra por colaborador SDR/Closer),
+    geral e por funil (Olympus/Elite/Sniper), + Auditoria de Perdas (motivos fora da regra por etapa)."""
     inicio_mes = dt.date(ano, mes, 1)
     fim_mes = dt.date(ano + 1, 1, 1) - dt.timedelta(days=1) if mes == 12 else dt.date(ano, mes + 1, 1) - dt.timedelta(days=1)
     desde_iso = f"{inicio_mes.isoformat()}T00:00:00Z"
     ate_iso = f"{fim_mes.isoformat()}T23:59:59Z"
 
     por_funil = {}
-    motivos_geral = {}
+    motivos_geral = {}  # motivo -> [negócio, ...]
     total_mes_geral = 0
     total_hoje_geral = 0
-    auditoria_geral = {}  # etapa (nome de exibição) -> {motivo: qtd}
+    auditoria_geral = {}  # etapa -> {motivo: [negócio, ...]}
 
     for squad_interno in SQUADS_PRODUTOS:
         pipeline_id = _pipeline_id_do_squad(squad_interno)
@@ -766,8 +802,8 @@ def analisar_perdidos(ano, mes, hoje):
                 if lost_brt.date() == hoje:
                     total_hoje += 1
                 motivo = (d.get("lost_reason") or "").strip() or "Sem motivo"
-                motivos_funil[motivo] = motivos_funil.get(motivo, 0) + 1
-                motivos_geral[motivo] = motivos_geral.get(motivo, 0) + 1
+                motivos_funil.setdefault(motivo, []).append(d)
+                motivos_geral.setdefault(motivo, []).append(d)
 
                 # Auditoria: o motivo faz sentido pra etapa em que o negócio estava?
                 motivo_norm = norm(motivo)
@@ -781,18 +817,20 @@ def analisar_perdidos(ano, mes, hoje):
                     continue  # etapa não mapeada, não auditamos
                 if motivo_norm not in permitidos:
                     etapa_nome = etapa_info["nome"]
-                    auditoria_funil.setdefault(etapa_nome, {})
-                    auditoria_funil[etapa_nome][motivo] = auditoria_funil[etapa_nome].get(motivo, 0) + 1
-                    auditoria_geral.setdefault(etapa_nome, {})
-                    auditoria_geral[etapa_nome][motivo] = auditoria_geral[etapa_nome].get(motivo, 0) + 1
+                    auditoria_funil.setdefault(etapa_nome, {}).setdefault(motivo, []).append(d)
+                    auditoria_geral.setdefault(etapa_nome, {}).setdefault(motivo, []).append(d)
 
         por_funil[squad_interno] = {
             "total_mes": total_mes,
             "total_hoje": total_hoje,
-            "motivos": _motivos_com_percentual(motivos_funil, total_mes),
+            "motivos": _motivos_com_percentual(motivos_funil, total_mes, colaboradores, users_map),
             "auditoria": [
-                {"etapa": etapa, "total": sum(m.values()), "motivos": _motivos_com_percentual(m, sum(m.values()))}
-                for etapa, m in sorted(auditoria_funil.items(), key=lambda kv: sum(kv[1].values()), reverse=True)
+                {
+                    "etapa": etapa,
+                    "total": sum(len(v) for v in m.values()),
+                    "motivos": _motivos_com_percentual(m, sum(len(v) for v in m.values()), colaboradores, users_map),
+                }
+                for etapa, m in sorted(auditoria_funil.items(), key=lambda kv: sum(len(v) for v in kv[1].values()), reverse=True)
             ],
         }
         total_mes_geral += total_mes
@@ -802,10 +840,14 @@ def analisar_perdidos(ano, mes, hoje):
         "geral": {
             "total_mes": total_mes_geral,
             "total_hoje": total_hoje_geral,
-            "motivos": _motivos_com_percentual(motivos_geral, total_mes_geral),
+            "motivos": _motivos_com_percentual(motivos_geral, total_mes_geral, colaboradores, users_map),
             "auditoria": [
-                {"etapa": etapa, "total": sum(m.values()), "motivos": _motivos_com_percentual(m, sum(m.values()))}
-                for etapa, m in sorted(auditoria_geral.items(), key=lambda kv: sum(kv[1].values()), reverse=True)
+                {
+                    "etapa": etapa,
+                    "total": sum(len(v) for v in m.values()),
+                    "motivos": _motivos_com_percentual(m, sum(len(v) for v in m.values()), colaboradores, users_map),
+                }
+                for etapa, m in sorted(auditoria_geral.items(), key=lambda kv: sum(len(v) for v in kv[1].values()), reverse=True)
             ],
         },
         "por_funil": {SQUAD_DISPLAY[s]: por_funil[s] for s in SQUADS_PRODUTOS},
@@ -1194,7 +1236,7 @@ def montar_painel(ano_param=None, mes_param=None):
     resultado["squads"]["Sniper"]["novos_leads_ontem"] = novos_leads_ontem
 
     if e_mes_atual:
-        resultado["perdidos_analise"] = analisar_perdidos(ano, mes, hoje)
+        resultado["perdidos_analise"] = analisar_perdidos(ano, mes, hoje, colaboradores, users_map)
     else:
         resultado["perdidos_analise"] = {
             "geral": {"total_mes": 0, "total_hoje": 0, "motivos": [], "auditoria": []},
