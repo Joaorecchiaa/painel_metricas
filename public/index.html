@@ -244,6 +244,7 @@
   .perdidos-resumo-card .valor { font-size: 22px; font-weight: 700; color: var(--bad); margin-top: 4px; }
   #resumoNovosLeadsProdutos .valor { color: var(--ink); }
   #resumoNovosLeadsProdutos { margin-bottom: 20px; }
+  .card-destaque-suave { background: rgba(11, 11, 15, 0.035); }
 
   .motivos-lista { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 20px; }
   .motivo-dropdown { border-bottom: 1px solid #f3f4f6; }
@@ -640,20 +641,20 @@ async function atualizar() {
     }
     const mql = data.mql_pfcc || { hoje: 0, mes: 0 };
     document.getElementById("resumoNovosLeadsProdutos").innerHTML = `
-      <div class="perdidos-resumo-card">
+      <div class="perdidos-resumo-card card-destaque-suave">
         <div class="rotulo">Novos Leads Hoje</div>
         <div class="valor">${totalGeralNovosLeads("novos_hoje")}</div>
       </div>
-      <div class="perdidos-resumo-card">
+      <div class="perdidos-resumo-card card-destaque-suave">
         <div class="rotulo">Novos Leads Mês</div>
         <div class="valor">${totalGeralNovosLeads("novos_mes")}</div>
       </div>
       <div class="perdidos-resumo-card">
-        <div class="rotulo">Novos MQL's PFCC — Hoje</div>
+        <div class="rotulo">Novos MQL's <strong>PFCC</strong> — Hoje</div>
         <div class="valor">${mql.hoje ?? 0}</div>
       </div>
       <div class="perdidos-resumo-card">
-        <div class="rotulo">Novos MQL's PFCC — Mês</div>
+        <div class="rotulo">Novos MQL's <strong>PFCC</strong> — Mês</div>
         <div class="valor">${mql.mes ?? 0}</div>
       </div>`;
     const CATEGORIAS = [
