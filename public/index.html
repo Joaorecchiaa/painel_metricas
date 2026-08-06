@@ -229,11 +229,13 @@
 
   .perdidos-resumo {
     display: flex;
+    flex-wrap: wrap;
     gap: 12px;
     margin-bottom: 16px;
   }
   .perdidos-resumo-card {
     flex: 1;
+    min-width: 160px;
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 14px 16px;
@@ -636,6 +638,7 @@ async function atualizar() {
       return ["Sniper", "Navigator"].reduce((soma, squad) =>
         soma + linhasProdutos.reduce((s2, p) => s2 + (((numeros[squad] || {})[p] || {})[chave] ?? 0), 0), 0);
     }
+    const mql = data.mql_pfcc || { hoje: 0, mes: 0 };
     document.getElementById("resumoNovosLeadsProdutos").innerHTML = `
       <div class="perdidos-resumo-card">
         <div class="rotulo">Novos Leads Hoje</div>
@@ -644,6 +647,14 @@ async function atualizar() {
       <div class="perdidos-resumo-card">
         <div class="rotulo">Novos Leads Mês</div>
         <div class="valor">${totalGeralNovosLeads("novos_mes")}</div>
+      </div>
+      <div class="perdidos-resumo-card">
+        <div class="rotulo">Novos MQL's PFCC — Hoje</div>
+        <div class="valor">${mql.hoje ?? 0}</div>
+      </div>
+      <div class="perdidos-resumo-card">
+        <div class="rotulo">Novos MQL's PFCC — Mês</div>
+        <div class="valor">${mql.mes ?? 0}</div>
       </div>`;
     const CATEGORIAS = [
       { key: "abertos", label: "Abertos" },
