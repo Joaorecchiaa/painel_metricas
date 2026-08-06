@@ -58,7 +58,7 @@ SHEET_METAS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR
 SHEET_FERIADOS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=1010928978&single=true&output=csv"
 
 # Mapa interno -> exibição. Chave interna "mgm" (funis Olympus + Navigator) exibe como "Olympus".
-SQUAD_DISPLAY = {"mgm": "Olympus", "elite": "Elite", "sniper": "Sniper"}
+SQUAD_DISPLAY = {"mgm": "Olympus", "elite": "Elite", "sniper": "Sniper", "navigator": "Navigator"}
 SQUADS_FINANCEIROS = ["mgm", "elite"]     # closers (valor em R$)
 SQUAD_SDR = "sniper"                       # reuniões
 
@@ -655,15 +655,25 @@ def _match_produto_no_texto(texto):
         return "LEAN"
     if "ces" in t:
         return "CES"
-    if "abp" in t:  # suposição — confirmar a palavra-chave real pro ABP
-        return "ABP"
-    if "coautoria" in t:
-        return "COAUTORIA"
+    return None
+
+
+def _match_abp_coautoria(deal):
+    """ABP e COAUTORIA são identificados pelo campo 'Nome produto' (ou 'Produto'), não pela utm_campaign."""
+    for campo in (CF_NOME_PRODUTO, CF_PRODUTO):
+        valor = norm(cf_valor(deal, campo) or "")
+        if "abp" in valor:
+            return "ABP"
+        if "coautoria" in valor:
+            return "COAUTORIA"
     return None
 
 
 def classificar_produto(deal):
-    """Classifica o produto pela utm_campaign (contém a palavra, sem diferenciar maiúsculas/minúsculas)."""
+    """PFCC/LEAN/CES pela utm_campaign; ABP/COAUTORIA pelo campo 'Nome produto'/'Produto'."""
+    produto = _match_abp_coautoria(deal)
+    if produto:
+        return produto
     return _match_produto_no_texto(cf_valor(deal, CF_UTM_CAMPAIGN))
 
 
@@ -684,12 +694,16 @@ PRODUTOS_TODOS = PRODUTOS + ["Não classificado"]
 
 SQUAD_NOME_PIPELINE = {"mgm": "olympus", "elite": "elite"}  # nome do funil no Pipedrive
 PIPELINE_ID_SNIPER = 88  # ID direto, sem precisar buscar por nome
-SQUADS_PRODUTOS = ["mgm", "elite", "sniper"]  # squads que aparecem em Produtos - Detalhamento
+PIPELINE_ID_NAVIGATOR = 51  # ID direto — só aparece na aba Produtos, não em Perdidos
+SQUADS_PRODUTOS = ["mgm", "elite", "sniper"]  # squads usados em Perdidos (Olympus/Elite/Sniper)
+SQUADS_PRODUTOS_ABA = SQUADS_PRODUTOS + ["navigator"]  # squads que aparecem na aba Produtos - Detalhamento
 
 
 def _pipeline_id_do_squad(squad_interno):
     if squad_interno == "sniper":
         return PIPELINE_ID_SNIPER
+    if squad_interno == "navigator":
+        return PIPELINE_ID_NAVIGATOR
     return buscar_pipeline_id_por_nome(SQUAD_NOME_PIPELINE[squad_interno])
 
 
@@ -869,25 +883,21 @@ CATEGORIAS_PRODUTO = ["abertos", "perdidos_mes", "perdidos_hoje", "ganhos_mes", 
 
 
 def produtos_em_aberto_por_squad(ano, mes, hoje, ontem, retornar_detalhes=False):
-    """Por produto e squad (Olympus/Elite/Sniper), buscando direto por pipeline (funil):
-    contagens de Abertos, Perdidos (mês/hoje) e Ganhos (mês/hoje) — Sniper não tem Ganhos.
+    """Por produto e squad (Olympus/Elite/Sniper/Navigator), buscando direto por pipeline (funil):
+    contagens de Abertos, Perdidos (mês/hoje) e Ganhos (mês/hoje) — Sniper e Navigator não têm Ganhos.
     Tudo classificado pela utm_campaign, sem depender da COLAB/cargo.
     Se retornar_detalhes=True, mantém a lista completa (com link) em vez de só o número."""
     detalhes = {s: {p: {c: [] for c in CATEGORIAS_PRODUTO} for p in PRODUTOS_TODOS}
-                for s in SQUADS_PRODUTOS}
+                for s in SQUADS_PRODUTOS_ABA}
 
     inicio_mes = dt.date(ano, mes, 1)
     fim_mes = dt.date(ano + 1, 1, 1) - dt.timedelta(days=1) if mes == 12 else dt.date(ano, mes + 1, 1) - dt.timedelta(days=1)
     desde_iso = f"{inicio_mes.isoformat()}T00:00:00Z"
     ate_iso = f"{fim_mes.isoformat()}T23:59:59Z"
 
-    for squad_interno in SQUADS_PRODUTOS:
-        if squad_interno == "sniper":
-            pipeline_id = PIPELINE_ID_SNIPER
-            tem_ganhos = False
-        else:
-            pipeline_id = buscar_pipeline_id_por_nome(SQUAD_NOME_PIPELINE[squad_interno])
-            tem_ganhos = True
+    for squad_interno in SQUADS_PRODUTOS_ABA:
+        pipeline_id = _pipeline_id_do_squad(squad_interno)
+        tem_ganhos = squad_interno != "sniper"
         if pipeline_id is None:
             continue
 
@@ -943,7 +953,7 @@ def produtos_em_aberto_por_squad(ano, mes, hoje, ontem, retornar_detalhes=False)
 
     # números pra todo mundo, mas a lista (id + link) fica pros GANHOS e NOVOS LEADS
     resultado = {}
-    for s in SQUADS_PRODUTOS:
+    for s in SQUADS_PRODUTOS_ABA:
         resultado[s] = {}
         for p in PRODUTOS_TODOS:
             resultado[s][p] = {c: len(detalhes[s][p][c]) for c in CATEGORIAS_PRODUTO}
@@ -1224,18 +1234,18 @@ def montar_painel(ano_param=None, mes_param=None):
             s: {p: {**{c: 0 for c in CATEGORIAS_PRODUTO}, "ganhos_mes_lista": [], "ganhos_hoje_lista": [],
                      "novos_hoje_lista": [], "novos_ontem_lista": [], "novos_mes_lista": []}
                 for p in PRODUTOS_TODOS}
-            for s in SQUADS_PRODUTOS
+            for s in SQUADS_PRODUTOS_ABA
         }
     resultado["produtos_em_aberto_detalhes"] = {
-        SQUAD_DISPLAY[s]: produtos_detalhes[s] for s in SQUADS_PRODUTOS
+        SQUAD_DISPLAY[s]: produtos_detalhes[s] for s in SQUADS_PRODUTOS_ABA
     }
     # Novos Leads (hoje/ontem) do Sniper na aba Métricas = soma de todos os produtos e
-    # todos os squads que a aba Produtos calcula — assim os dois nunca divergem.
+    # todos os squads (Olympus/Elite/Sniper/Navigator) que a aba Produtos calcula — assim os dois nunca divergem.
     novos_leads_hoje = sum(
-        produtos_detalhes[s][p]["novos_hoje"] for s in SQUADS_PRODUTOS for p in PRODUTOS_TODOS
+        produtos_detalhes[s][p]["novos_hoje"] for s in SQUADS_PRODUTOS_ABA for p in PRODUTOS_TODOS
     )
     novos_leads_ontem = sum(
-        produtos_detalhes[s][p]["novos_ontem"] for s in SQUADS_PRODUTOS for p in PRODUTOS_TODOS
+        produtos_detalhes[s][p]["novos_ontem"] for s in SQUADS_PRODUTOS_ABA for p in PRODUTOS_TODOS
     )
     resultado["squads"]["Sniper"]["novos_leads_hoje"] = novos_leads_hoje
     resultado["squads"]["Sniper"]["novos_leads_ontem"] = novos_leads_ontem
