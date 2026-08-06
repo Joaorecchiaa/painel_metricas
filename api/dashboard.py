@@ -931,22 +931,23 @@ def produtos_em_aberto_por_squad(ano, mes, hoje, ontem, retornar_detalhes=False)
             if lost_brt.date() == hoje:
                 detalhes[squad_interno][produto]["perdidos_hoje"].append(item)
 
-        # Novos Leads (hoje/ontem) — pela data de criação do negócio ("Negócio criado em" / add_time),
-        # olhando TODOS os negócios já buscados (aberto+ganho+perdido), mesma regra da aba Métricas.
-        vistos_novos = set()
-        for d in abertos + ganhos + perdidos:
-            did = d.get("id")
-            if did in vistos_novos:
-                continue
-            vistos_novos.add(did)
-            produto = classificar_produto(d) or "Não classificado"
-            add_brt = to_brt(d.get("add_time"))
-            if add_brt and add_brt.date() == hoje:
-                detalhes[squad_interno][produto]["novos_hoje"].append(_item_deal(d))
-            if add_brt and add_brt.date() == ontem:
-                detalhes[squad_interno][produto]["novos_ontem"].append(_item_deal(d))
-            if add_brt and (add_brt.year, add_brt.month) == (ano, mes):
-                detalhes[squad_interno][produto]["novos_mes"].append(_item_deal(d))
+        # Novos Leads (hoje/ontem/mês) — só faz sentido pra Sniper e Navigator (pedido do usuário).
+        # Pela data de criação do negócio ("Negócio criado em" / add_time).
+        if squad_interno in ("sniper", "navigator"):
+            vistos_novos = set()
+            for d in abertos + ganhos + perdidos:
+                did = d.get("id")
+                if did in vistos_novos:
+                    continue
+                vistos_novos.add(did)
+                produto = classificar_produto(d) or "Não classificado"
+                add_brt = to_brt(d.get("add_time"))
+                if add_brt and add_brt.date() == hoje:
+                    detalhes[squad_interno][produto]["novos_hoje"].append(_item_deal(d))
+                if add_brt and add_brt.date() == ontem:
+                    detalhes[squad_interno][produto]["novos_ontem"].append(_item_deal(d))
+                if add_brt and (add_brt.year, add_brt.month) == (ano, mes):
+                    detalhes[squad_interno][produto]["novos_mes"].append(_item_deal(d))
 
     if retornar_detalhes:
         return detalhes
@@ -1239,13 +1240,13 @@ def montar_painel(ano_param=None, mes_param=None):
     resultado["produtos_em_aberto_detalhes"] = {
         SQUAD_DISPLAY[s]: produtos_detalhes[s] for s in SQUADS_PRODUTOS_ABA
     }
-    # Novos Leads (hoje/ontem) do Sniper na aba Métricas = soma de todos os produtos e
-    # todos os squads (Olympus/Elite/Sniper/Navigator) que a aba Produtos calcula — assim os dois nunca divergem.
+    # Novos Leads (hoje/ontem) do Sniper na aba Métricas = soma dos funis Sniper+Navigator
+    # (únicos onde Novos Leads faz sentido) — assim os dois nunca divergem.
     novos_leads_hoje = sum(
-        produtos_detalhes[s][p]["novos_hoje"] for s in SQUADS_PRODUTOS_ABA for p in PRODUTOS_TODOS
+        produtos_detalhes[s][p]["novos_hoje"] for s in ("sniper", "navigator") for p in PRODUTOS_TODOS
     )
     novos_leads_ontem = sum(
-        produtos_detalhes[s][p]["novos_ontem"] for s in SQUADS_PRODUTOS_ABA for p in PRODUTOS_TODOS
+        produtos_detalhes[s][p]["novos_ontem"] for s in ("sniper", "navigator") for p in PRODUTOS_TODOS
     )
     resultado["squads"]["Sniper"]["novos_leads_hoje"] = novos_leads_hoje
     resultado["squads"]["Sniper"]["novos_leads_ontem"] = novos_leads_ontem
