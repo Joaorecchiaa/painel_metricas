@@ -442,6 +442,8 @@ def cf_valor(deal, hash_):
 
 def owner_nome(deal, users_map):
     owner = deal.get("user_id")
+    if owner is None:
+        owner = deal.get("owner_id")  # formato v2
     if isinstance(owner, dict):
         return owner.get("name", "")
     return users_map.get(owner, "")
