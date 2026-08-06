@@ -633,7 +633,7 @@ async function atualizar() {
     const linhasProdutos = ["PFCC", "CES", "LEAN", "ABP", "COAUTORIA", "Não classificado"];
 
     function totalGeralNovosLeads(chave) {
-      return ["Olympus", "Elite", "Sniper", "Navigator"].reduce((soma, squad) =>
+      return ["Sniper", "Navigator"].reduce((soma, squad) =>
         soma + linhasProdutos.reduce((s2, p) => s2 + (((numeros[squad] || {})[p] || {})[chave] ?? 0), 0), 0);
     }
     document.getElementById("resumoNovosLeadsProdutos").innerHTML = `
@@ -669,7 +669,10 @@ async function atualizar() {
 
     function blocoSquad(squad, produto) {
       const dadosProduto = ((numeros[squad] || {})[produto]) || {};
-      const categorias = squad === "Sniper" ? CATEGORIAS.filter(c => !c.key.startsWith("ganhos")) : CATEGORIAS;
+      const squadsComNovosLeads = ["Sniper", "Navigator"];
+      let categorias = CATEGORIAS;
+      if (squad === "Sniper") categorias = categorias.filter(c => !c.key.startsWith("ganhos"));
+      if (!squadsComNovosLeads.includes(squad)) categorias = categorias.filter(c => !c.key.startsWith("novos_"));
       const grupos = categorias.map(cat => {
         if (cat.listaKey) {
           const lista = dadosProduto[cat.listaKey] || [];
