@@ -164,6 +164,8 @@
   }
   .produto-squads-3 { grid-template-columns: 1fr 1fr 1fr; }
   .produto-squads-3 .produto-squad:not(:last-child) { border-right: 1px solid var(--border); }
+  .produto-squads-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+  .produto-squads-4 .produto-squad:not(:last-child) { border-right: 1px solid var(--border); }
   .produto-squad { padding: 12px 16px; }
   .produto-squad:first-child { border-right: 1px solid var(--border); }
   .produto-squad-titulo {
@@ -631,7 +633,7 @@ async function atualizar() {
     const linhasProdutos = ["PFCC", "CES", "LEAN", "ABP", "COAUTORIA", "Não classificado"];
 
     function totalGeralNovosLeads(chave) {
-      return ["Olympus", "Elite", "Sniper"].reduce((soma, squad) =>
+      return ["Olympus", "Elite", "Sniper", "Navigator"].reduce((soma, squad) =>
         soma + linhasProdutos.reduce((s2, p) => s2 + (((numeros[squad] || {})[p] || {})[chave] ?? 0), 0), 0);
     }
     document.getElementById("resumoNovosLeadsProdutos").innerHTML = `
@@ -660,7 +662,7 @@ async function atualizar() {
     }
 
     function totalAbertosProduto(produto) {
-      return ["Olympus", "Elite", "Sniper"].reduce(
+      return ["Olympus", "Elite", "Sniper", "Navigator"].reduce(
         (soma, squad) => soma + (((numeros[squad] || {})[produto] || {}).abertos ?? 0), 0
       );
     }
@@ -693,10 +695,11 @@ async function atualizar() {
     document.getElementById("cardsProdutos").innerHTML = linhasProdutos.map(p => `
       <details class="produto-card">
         <summary>${p} <span class="produto-total-abertos">Total aberto: ${totalAbertosProduto(p)}</span></summary>
-        <div class="produto-squads produto-squads-3">
+        <div class="produto-squads produto-squads-4">
           ${blocoSquad("Olympus", p)}
           ${blocoSquad("Elite", p)}
           ${blocoSquad("Sniper", p)}
+          ${blocoSquad("Navigator", p)}
         </div>
       </details>`).join("");
 
