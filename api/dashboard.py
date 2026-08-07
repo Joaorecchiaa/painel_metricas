@@ -934,7 +934,20 @@ def _item_deal(d):
     }
 
 
-CATEGORIAS_PRODUTO = ["abertos", "perdidos_mes", "perdidos_hoje", "ganhos_mes", "ganhos_hoje", "novos_hoje", "novos_ontem", "novos_mes"]
+CATEGORIAS_PRODUTO = ["abertos", "perdidos_mes", "perdidos_hoje", "ganhos_mes", "ganhos_hoje", "novos_hoje", "novos_ontem", "novos_mes", "reaplicacoes_hoje", "reaplicacoes_mes"]
+
+
+def _parse_data_campo(valor):
+    """Converte o valor bruto de um campo de data (ISO ou BR) num date. None se não der pra ler."""
+    if not valor:
+        return None
+    texto = str(valor)[:10]
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+        try:
+            return dt.datetime.strptime(texto, fmt).date()
+        except ValueError:
+            continue
+    return None
 
 
 def produtos_em_aberto_por_squad(ano, mes, hoje, ontem, retornar_detalhes=False):
@@ -1004,6 +1017,14 @@ def produtos_em_aberto_por_squad(ano, mes, hoje, ontem, retornar_detalhes=False)
                 if add_brt and (add_brt.year, add_brt.month) == (ano, mes):
                     detalhes[squad_interno][produto]["novos_mes"].append(_item_deal(d))
 
+                # Reaplicação: "Data da última aplicação" != "Negócio criado em" (datas diferentes)
+                data_aplicacao = _parse_data_campo(cf_valor(d, CF_DATA_ULTIMA_APLICACAO))
+                if data_aplicacao and add_brt and data_aplicacao != add_brt.date():
+                    if data_aplicacao == hoje:
+                        detalhes[squad_interno][produto]["reaplicacoes_hoje"].append(_item_deal(d))
+                    if (data_aplicacao.year, data_aplicacao.month) == (ano, mes):
+                        detalhes[squad_interno][produto]["reaplicacoes_mes"].append(_item_deal(d))
+
     if retornar_detalhes:
         return detalhes
 
@@ -1013,7 +1034,7 @@ def produtos_em_aberto_por_squad(ano, mes, hoje, ontem, retornar_detalhes=False)
         resultado[s] = {}
         for p in PRODUTOS_TODOS:
             resultado[s][p] = {c: len(detalhes[s][p][c]) for c in CATEGORIAS_PRODUTO}
-            for chave in ("ganhos_mes", "ganhos_hoje", "novos_hoje", "novos_ontem", "novos_mes"):
+            for chave in ("ganhos_mes", "ganhos_hoje", "novos_hoje", "novos_ontem", "novos_mes", "reaplicacoes_hoje", "reaplicacoes_mes"):
                 resultado[s][p][f"{chave}_lista"] = [
                     {"id": item["id"], "url": item["url"]} for item in detalhes[s][p][chave]
                 ]
@@ -1045,7 +1066,7 @@ def montar_painel(ano_param=None, mes_param=None):
     prox_dia_util = proximo_dia_util(hoje, feriados)
 
     # ---- Financeiro: Olympus (mgm) e Elite ----
-    squads_fin = {s: {"bruto": 0.0, "multi": 0.0, "ontem": 0.0, "hoje": 0.0} for s in SQUADS_FINANCEIROS}
+    squads_fin = {s: {"bruto": 0.0, "multi": 0.0, "ontem": 0.0, "hoje": 0.0, "ontem_bruto": 0.0, "hoje_bruto": 0.0} for s in SQUADS_FINANCEIROS}
     for deal in deals_ganhos:
         squad = squad_do_deal(deal, colaboradores, users_map)
         if squad not in squads_fin:
@@ -1057,8 +1078,10 @@ def montar_painel(ano_param=None, mes_param=None):
         won_brt = to_brt(deal.get("won_time"))
         if won_brt and won_brt.date() == ontem:
             squads_fin[squad]["ontem"] += multi
+            squads_fin[squad]["ontem_bruto"] += bruto
         if won_brt and won_brt.date() == hoje:
             squads_fin[squad]["hoje"] += multi
+            squads_fin[squad]["hoje_bruto"] += bruto
 
     # ---- Previsto (forecast) hoje/ontem — só faz sentido no mês atual ----
     # Só negócios em aberto (revertido: não inclui mais ganhos/perdidos).
@@ -1146,6 +1169,8 @@ def montar_painel(ano_param=None, mes_param=None):
             "meta_dia_100_bruto": round(meta_dia_100_bruto, 2),
             "ontem": round(squads_fin[squad_interno]["ontem"], 2),
             "hoje": round(squads_fin[squad_interno]["hoje"], 2),
+            "ontem_bruto": round(squads_fin[squad_interno]["ontem_bruto"], 2),
+            "hoje_bruto": round(squads_fin[squad_interno]["hoje_bruto"], 2),
             "previsto_hoje_20": round(previsto_hoje.get(squad_interno, {}).get("p20", 0.0), 2),
             "previsto_hoje_50": round(previsto_hoje.get(squad_interno, {}).get("p50", 0.0), 2),
             "previsto_hoje_70": round(previsto_hoje.get(squad_interno, {}).get("p70", 0.0), 2),
@@ -1162,6 +1187,8 @@ def montar_painel(ano_param=None, mes_param=None):
     total_multi = sum(resultado["squads"][SQUAD_DISPLAY[s]]["realizado_multiplicador"] for s in SQUADS_FINANCEIROS)
     total_ontem = sum(resultado["squads"][SQUAD_DISPLAY[s]]["ontem"] for s in SQUADS_FINANCEIROS)
     total_hoje = sum(resultado["squads"][SQUAD_DISPLAY[s]]["hoje"] for s in SQUADS_FINANCEIROS)
+    total_ontem_bruto = sum(resultado["squads"][SQUAD_DISPLAY[s]]["ontem_bruto"] for s in SQUADS_FINANCEIROS)
+    total_hoje_bruto = sum(resultado["squads"][SQUAD_DISPLAY[s]]["hoje_bruto"] for s in SQUADS_FINANCEIROS)
     campos_previsto = ["previsto_hoje_20", "previsto_hoje_50", "previsto_hoje_70", "previsto_hoje_media",
                         "previsto_ontem_20", "previsto_ontem_50", "previsto_ontem_70", "previsto_ontem_media",
                         "em_aberto_hoje"]
@@ -1186,6 +1213,8 @@ def montar_painel(ano_param=None, mes_param=None):
         "meta_dia_100_bruto": round(safe_div(max(0.0, total_meta_mes - total_bruto), dias_restantes_p100), 2),
         "ontem": round(total_ontem, 2),
         "hoje": round(total_hoje, 2),
+        "ontem_bruto": round(total_ontem_bruto, 2),
+        "hoje_bruto": round(total_hoje_bruto, 2),
         **{k: round(v, 2) for k, v in totais_previsto.items()},
     }
 
@@ -1288,7 +1317,8 @@ def montar_painel(ano_param=None, mes_param=None):
     else:
         produtos_detalhes = {
             s: {p: {**{c: 0 for c in CATEGORIAS_PRODUTO}, "ganhos_mes_lista": [], "ganhos_hoje_lista": [],
-                     "novos_hoje_lista": [], "novos_ontem_lista": [], "novos_mes_lista": []}
+                     "novos_hoje_lista": [], "novos_ontem_lista": [], "novos_mes_lista": [],
+                     "reaplicacoes_hoje_lista": [], "reaplicacoes_mes_lista": []}
                 for p in PRODUTOS_TODOS}
             for s in SQUADS_PRODUTOS_ABA
         }
@@ -1305,6 +1335,21 @@ def montar_painel(ano_param=None, mes_param=None):
     )
     resultado["squads"]["Sniper"]["novos_leads_hoje"] = novos_leads_hoje
     resultado["squads"]["Sniper"]["novos_leads_ontem"] = novos_leads_ontem
+
+    total_reaplicacoes_mes = sum(
+        produtos_detalhes[s][p]["reaplicacoes_mes"] for s in ("sniper", "navigator") for p in PRODUTOS_TODOS
+    )
+    total_reaplicacoes_hoje = sum(
+        produtos_detalhes[s][p]["reaplicacoes_hoje"] for s in ("sniper", "navigator") for p in PRODUTOS_TODOS
+    )
+    total_aplicacoes_mes = sum(
+        produtos_detalhes[s][p]["novos_mes"] for s in ("sniper", "navigator") for p in PRODUTOS_TODOS
+    ) + total_reaplicacoes_mes
+    resultado["reaplicacoes"] = {
+        "hoje": total_reaplicacoes_hoje,
+        "mes": total_reaplicacoes_mes,
+        "taxa_mes_pct": round(safe_div(total_reaplicacoes_mes, total_aplicacoes_mes) * 100, 1),
+    }
 
     if e_mes_atual:
         resultado["mql_pfcc"] = analisar_mql_pfcc(ano, mes, hoje)
