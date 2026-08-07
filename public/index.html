@@ -245,6 +245,7 @@
   #resumoNovosLeadsProdutos .valor { color: var(--ink); }
   #resumoNovosLeadsProdutos { margin-bottom: 20px; }
   .card-destaque-suave { background: rgba(11, 11, 15, 0.035); }
+  .valor-taxa { font-size: 12px; font-weight: 500; color: var(--muted); }
 
   .motivos-lista { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 20px; }
   .motivo-dropdown { border-bottom: 1px solid #f3f4f6; }
@@ -531,10 +532,12 @@ const METRICAS_FINANCEIRO = [
   { label: "Meta/Dia 100%",              key: "meta_dia_100",             fmt: fmtMoeda },
   { label: "Meta/Dia 100% (Bruto)",      key: "meta_dia_100_bruto",       fmt: fmtMoeda },
   { label: "Previsto Ontem",             key: "previsto_ontem_media",     fmt: fmtMoeda, grupo: "ontem" },
-  { label: "Entrou Ontem",               key: "ontem",                    fmt: fmtMoeda, grupo: "ontem" },
+  { label: "Entrou Ontem (Multiplicador)", key: "ontem",                  fmt: fmtMoeda, grupo: "ontem" },
+  { label: "Entrou Ontem (Bruto)",       key: "ontem_bruto",              fmt: fmtMoeda, grupo: "ontem" },
   { label: "Previsto Hoje",              key: "previsto_hoje_media",      fmt: fmtMoeda, grupo: "hoje" },
   { label: "Em Aberto Hoje",             key: "em_aberto_hoje",           fmt: fmtMoeda, grupo: "hoje" },
-  { label: "Entrou Hoje",                key: "hoje",                     fmt: fmtMoeda, grupo: "hoje" },
+  { label: "Entrou Hoje (Multiplicador)", key: "hoje",                    fmt: fmtMoeda, grupo: "hoje" },
+  { label: "Entrou Hoje (Bruto)",        key: "hoje_bruto",               fmt: fmtMoeda, grupo: "hoje" },
 ];
 
 const METRICAS_SNIPER = [
@@ -640,6 +643,7 @@ async function atualizar() {
         soma + linhasProdutos.reduce((s2, p) => s2 + (((numeros[squad] || {})[p] || {})[chave] ?? 0), 0), 0);
     }
     const mql = data.mql_pfcc || { hoje: 0, mes: 0 };
+    const reapl = data.reaplicacoes || { hoje: 0, mes: 0, taxa_mes_pct: 0 };
     document.getElementById("resumoNovosLeadsProdutos").innerHTML = `
       <div class="perdidos-resumo-card card-destaque-suave">
         <div class="rotulo">Novos Leads Hoje</div>
@@ -656,12 +660,18 @@ async function atualizar() {
       <div class="perdidos-resumo-card">
         <div class="rotulo">Novos MQL's <strong>PFCC</strong> — Mês</div>
         <div class="valor">${mql.mes ?? 0}</div>
+      </div>
+      <div class="perdidos-resumo-card">
+        <div class="rotulo">Reaplicações Mês</div>
+        <div class="valor">${reapl.mes ?? 0} <span class="valor-taxa">(${reapl.taxa_mes_pct ?? 0}% de taxa)</span></div>
       </div>`;
     const CATEGORIAS = [
       { key: "abertos", label: "Abertos" },
       { key: "novos_hoje", label: "Novos Leads Hoje", destaque: true, listaKey: "novos_hoje_lista" },
       { key: "novos_ontem", label: "Novos Leads Ontem", destaque: true, listaKey: "novos_ontem_lista" },
       { key: "novos_mes", label: "Novos Leads Mês", destaque: true, listaKey: "novos_mes_lista" },
+      { key: "reaplicacoes_hoje", label: "Reaplicações Hoje", destaque: true, listaKey: "reaplicacoes_hoje_lista" },
+      { key: "reaplicacoes_mes", label: "Reaplicações Mês", destaque: true, listaKey: "reaplicacoes_mes_lista" },
       { key: "perdidos_mes", label: "Perdidos - Mês" },
       { key: "perdidos_hoje", label: "Perdidos - Hoje" },
       { key: "ganhos_mes", label: "Ganhos - Mês", listaKey: "ganhos_mes_lista" },
@@ -684,7 +694,7 @@ async function atualizar() {
       const squadsComNovosLeads = ["Sniper", "Navigator"];
       let categorias = CATEGORIAS;
       if (squad === "Sniper") categorias = categorias.filter(c => !c.key.startsWith("ganhos"));
-      if (!squadsComNovosLeads.includes(squad)) categorias = categorias.filter(c => !c.key.startsWith("novos_"));
+      if (!squadsComNovosLeads.includes(squad)) categorias = categorias.filter(c => !c.key.startsWith("novos_") && !c.key.startsWith("reaplicacoes_"));
       const grupos = categorias.map(cat => {
         if (cat.listaKey) {
           const lista = dadosProduto[cat.listaKey] || [];
