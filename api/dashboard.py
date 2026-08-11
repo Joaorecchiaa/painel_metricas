@@ -1393,6 +1393,20 @@ def montar_painel(ano_param=None, mes_param=None):
         SQUAD_DISPLAY.get(s, s): v for s, v in debug_previsto_hoje_deals.items() if s in SQUADS_FINANCEIROS
     }
 
+    nome_teste = norm("Denise Mussolin")
+    colab_teste = colaboradores.get(nome_teste)
+    deals_dela = [
+        {"id": d.get("id"), "titulo": d.get("title"), "valor": d.get("value"),
+         "dono_no_deal": owner_nome(d, users_map), "squad_atribuido": squad_do_deal(d, colaboradores, users_map)}
+        for d in deals_ganhos if norm(owner_nome(d, users_map)) == nome_teste
+    ]
+    resultado["debug_denise"] = {
+        "esta_na_colab": colab_teste is not None,
+        "dados_colab": colab_teste,
+        "qtd_deals_ganhos_dela_no_mes": len(deals_dela),
+        "deals_dela": deals_dela[:10],
+    }
+
     resultado["debug_closers"] = {
         SQUAD_DISPLAY[s]: sorted([
             {
