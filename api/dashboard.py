@@ -485,7 +485,7 @@ def buscar_deals_ganhos(ano, mes, users_map):
 
 def squad_do_deal(deal, colaboradores, users_map):
     """Retorna squad interno (mgm/elite/sniper/...) via dono normalizado, com exceção da GM.
-    Pros squads financeiros (Olympus/Elite), exige que o cargo seja Closer."""
+    Pros squads financeiros (Olympus/Elite), exige Closer, Head ou Gerente no cargo."""
     nome_dono = norm(owner_nome(deal, users_map))
     if GM_NOME_NORMALIZADO and nome_dono == GM_NOME_NORMALIZADO:
         funil = norm((deal.get("pipeline_name") or deal.get("pipeline_id") or ""))
@@ -496,7 +496,8 @@ def squad_do_deal(deal, colaboradores, users_map):
     subarea = colaborador["subarea"]
     if subarea.startswith("lic"):
         return None
-    if subarea in SQUADS_FINANCEIROS and "closer" not in colaborador.get("cargo", ""):
+    cargo = colaborador.get("cargo", "")
+    if subarea in SQUADS_FINANCEIROS and not any(termo in cargo for termo in ("closer", "head", "gerente")):
         return None
     return subarea
 
@@ -1101,7 +1102,7 @@ def montar_painel(ano_param=None, mes_param=None):
     def meta_squad(squad_interno):
         return sum(m["meta_fin"] for nome, m in metas.items()
                    if colaboradores.get(nome, {}).get("subarea") == squad_interno
-                   and "closer" in colaboradores.get(nome, {}).get("cargo", ""))
+                   and any(termo in colaboradores.get(nome, {}).get("cargo", "") for termo in ("closer", "head", "gerente")))
 
     ritmo_100 = safe_div(du["passados"], du["total"])
 
@@ -1400,7 +1401,8 @@ def montar_painel(ano_param=None, mes_param=None):
                 "meta_financeira": metas.get(nome, {}).get("meta_fin", 0),
             }
             for nome in colaboradores
-            if colaboradores[nome]["subarea"] == s and "closer" in colaboradores[nome].get("cargo", "")
+            if colaboradores[nome]["subarea"] == s
+            and any(termo in colaboradores[nome].get("cargo", "") for termo in ("closer", "head", "gerente"))
         ], key=lambda x: x["nome"])
         for s in SQUADS_FINANCEIROS
     }
