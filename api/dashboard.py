@@ -63,6 +63,7 @@ SHEET_FERIADOS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbk
 SQUAD_DISPLAY = {"mgm": "Olympus", "elite": "Elite", "sniper": "Sniper", "navigator": "Navigator"}
 SQUADS_FINANCEIROS = ["mgm", "elite"]     # closers (valor em R$)
 SQUAD_SDR = "sniper"                       # reuniões
+NOMES_EXTRAS_SNIPER = {norm("Denise Mussolin")}  # contam nas reuniões do Sniper mesmo não sendo do squad
 
 # Pessoas que nunca devem contar, mesmo que apareçam em alguma base (divergência de cadastro etc.)
 EXCLUSOES_FIXAS = {"priscila ribeiro"}
@@ -481,6 +482,12 @@ def buscar_deals_ganhos(ano, mes, users_map):
             break
         start = pag.get("next_start", start + 500)
     return itens
+
+
+def _conta_como_sniper(nome_norm, colaboradores):
+    if nome_norm in NOMES_EXTRAS_SNIPER:
+        return True
+    return colaboradores.get(nome_norm, {}).get("subarea") == SQUAD_SDR
 
 
 def squad_do_deal(deal, colaboradores, users_map):
@@ -1247,7 +1254,7 @@ def montar_painel(ano_param=None, mes_param=None):
         # "Previsto" = agendada pra aquele dia (qualquer status), independente de validação —
         # olha só o dono da atividade e a subarea dele, sem exigir Reunião Válida.
         nome_resp_previsto = norm(users_map.get(campo_owner_id(a), ""))
-        if colaboradores.get(nome_resp_previsto, {}).get("subarea") == SQUAD_SDR:
+        if _conta_como_sniper(nome_resp_previsto, colaboradores):
             due_previsto = a.get("due_date")
             if due_previsto == hoje.isoformat():
                 previsto_hoje_reu += 1
@@ -1259,7 +1266,7 @@ def montar_painel(ano_param=None, mes_param=None):
         dbg_passou_valida_sdr += 1
         # escopo só sniper: precisaria mapear owner->squad; aqui assume-se filtro já traz o universo certo
         nome_resp = norm(users_map.get(campo_owner_id(a), ""))
-        if colaboradores.get(nome_resp, {}).get("subarea") != SQUAD_SDR:
+        if not _conta_como_sniper(nome_resp, colaboradores):
             if nome_resp:
                 nomes_sem_match.add(nome_resp)
             continue
@@ -1272,7 +1279,7 @@ def montar_painel(ano_param=None, mes_param=None):
             validadas_dia_anterior_util += 1
 
     meta_reunioes = sum(m["meta_reu"] for nome, m in metas.items()
-                         if colaboradores.get(nome, {}).get("subarea") == SQUAD_SDR)
+                         if _conta_como_sniper(nome, colaboradores))
     meta_dia_reu = safe_div(meta_reunioes, du["total"])
     onde_100_reu = meta_reunioes * ritmo_100
     onde_40_reu = (PCT_GAP_INTERMEDIARIO * meta_reunioes) * ritmo_prazo
