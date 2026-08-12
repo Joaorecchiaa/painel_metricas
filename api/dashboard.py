@@ -48,6 +48,13 @@ CF_DATA_ULTIMA_APLICACAO = "23de049432e523993f69ecd456a3f755c0f07f3d"
 CF_UTM_SOURCE = "8fb3221ab3d91cddaf51e0a9e1bbcda34fc9d28e"
 CF_CARGO_NEGOCIO = "718c8aba81211c883ffd9f4616f75ee22a10b2da"  # campo "Cargo" do negócio (diferente do Cargo da COLAB)
 
+PALAVRAS_MQL = [
+    "socio", "sócio", "partner", "founder", "fundador", "propr", "owner",
+    "empresario", "empresário", "entrepreneur", "presidente", "president",
+    "ceo", "cmo", "cto", "coo", "cfo", "cpo", "ciso", "chro", "chief",
+    "vice", "vp", "c-level", "conselh", "diretor", "director", "advisor",
+]
+
 PRODUTOS = ["PFCC", "CES", "LEAN", "ABP", "COAUTORIA"]
 
 # IDs de campanha do Google Ads que também identificam PFCC (além de conter "pfcc" na utm_campaign)
@@ -767,6 +774,9 @@ def analisar_mql_pfcc(ano, mes, hoje):
                 continue
             cargo = cf_valor(d, CF_CARGO_NEGOCIO)
             if not (cargo and str(cargo).strip()):
+                continue
+            cargo_norm = norm(cargo)
+            if not any(norm(palavra) in cargo_norm for palavra in PALAVRAS_MQL):
                 continue
             campanha_norm = norm(utm_campaign_raw)
             if not ("pfcc" in campanha_norm or any(gid in campanha_norm for gid in PFCC_IDS_GOOGLE)):
