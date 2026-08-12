@@ -64,7 +64,7 @@ SHEET_FERIADOS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbk
 SQUAD_DISPLAY = {"mgm": "Olympus", "elite": "Elite", "sniper": "Sniper", "navigator": "Navigator"}
 SQUADS_FINANCEIROS = ["mgm", "elite"]     # closers (valor em R$)
 SQUAD_SDR = "sniper"                       # reuniões
-NOMES_EXTRAS_SNIPER = {norm("Denise Mussolin")}  # contam nas reuniões do Sniper mesmo não sendo do squad
+NOMES_EXTRAS_SNIPER_CRU = {"Denise Mussolin"}  # contam nas reuniões do Sniper mesmo não sendo do squad
 
 # Pessoas que nunca devem contar, mesmo que apareçam em alguma base (divergência de cadastro etc.)
 EXCLUSOES_FIXAS = {"priscila ribeiro"}
@@ -496,7 +496,7 @@ def buscar_deals_ganhos(ano, mes, users_map):
 
 
 def _conta_como_sniper(nome_norm, colaboradores):
-    if nome_norm in NOMES_EXTRAS_SNIPER:
+    if nome_norm in {norm(n) for n in NOMES_EXTRAS_SNIPER_CRU}:
         return True
     return colaboradores.get(nome_norm, {}).get("subarea") == SQUAD_SDR
 
@@ -792,6 +792,9 @@ def _papel_colaborador(nome_dono, colaboradores):
     return "Outro"
 
 
+MAX_NEGOCIOS_POR_COLABORADOR = 25  # evita payload gigante quando tem muito perdido no mês
+
+
 def _colaboradores_do_motivo(deals, colaboradores, users_map):
     """Agrupa os negócios de um motivo por colaborador (dono), separado por papel (SDR/Closer/Outro)."""
     grupos = {"Closer": {}, "SDR": {}, "Outro": {}}
@@ -804,7 +807,7 @@ def _colaboradores_do_motivo(deals, colaboradores, users_map):
         })
     resultado = {}
     for papel, pessoas in grupos.items():
-        lista = [{"nome": nome, "quantidade": len(negocios), "negocios": negocios}
+        lista = [{"nome": nome, "quantidade": len(negocios), "negocios": negocios[:MAX_NEGOCIOS_POR_COLABORADOR]}
                  for nome, negocios in pessoas.items()]
         lista.sort(key=lambda x: x["quantidade"], reverse=True)
         resultado[papel] = lista
@@ -1408,7 +1411,7 @@ def montar_painel(ano_param=None, mes_param=None):
                 "valor": float(d.get("value") or 0),
             })
     resultado["debug_previsto_hoje_deals"] = {
-        SQUAD_DISPLAY.get(s, s): v for s, v in debug_previsto_hoje_deals.items() if s in SQUADS_FINANCEIROS
+        SQUAD_DISPLAY.get(s, s): v[:30] for s, v in debug_previsto_hoje_deals.items() if s in SQUADS_FINANCEIROS
     }
 
     nome_teste = norm("Denise Mussolin")
