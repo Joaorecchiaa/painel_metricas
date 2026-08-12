@@ -17,6 +17,7 @@ import json
 import unicodedata
 import calendar
 import math
+import functools
 import datetime as dt
 from http.server import BaseHTTPRequestHandler
 from urllib.request import Request, urlopen
@@ -391,6 +392,7 @@ def pd_users():
     return {u["id"]: u.get("name", "") for u in (data.get("data") or [])}
 
 
+@functools.lru_cache(maxsize=32)
 def buscar_pipeline_id_por_nome(nome_busca):
     """Acha o pipeline_id cujo nome contém nome_busca (case-insensitive)."""
     data = http_get_json(f"{V1_BASE}/pipelines?{urlencode({'api_token': PD_TOKEN})}")
@@ -401,6 +403,7 @@ def buscar_pipeline_id_por_nome(nome_busca):
     return None
 
 
+@functools.lru_cache(maxsize=32)
 def buscar_stages_pipeline(pipeline_id):
     """Mapa stage_id -> {'norm': nome normalizado, 'nome': nome original} das etapas de um pipeline."""
     data = http_get_json(f"{V1_BASE}/stages?{urlencode({'api_token': PD_TOKEN, 'pipeline_id': pipeline_id})}")
@@ -410,12 +413,8 @@ def buscar_stages_pipeline(pipeline_id):
     return mapa
 
 
-def buscar_deals_por_pipeline(pipeline_id, status, desde_iso=None, ate_iso=None):
-    """Negócios de um status específico (open/won/lost) de um pipeline — direto,
-    sem passar por nenhum filter_id salvo. Usa API v2: a v1 ignora silenciosamente
-    o parâmetro pipeline_id (por isso todos os funis vinham juntos antes).
-    desde_iso/ate_iso limitam por update_time — reduz MUITO o volume pra won/lost
-    (senão baixaria o histórico inteiro do funil e estourava o timeout)."""
+@functools.lru_cache(maxsize=64)
+def _buscar_deals_por_pipeline_cached(pipeline_id, status, desde_iso, ate_iso):
     itens, cursor = [], None
     while True:
         params = {"status": status, "pipeline_id": pipeline_id, "limit": 500}
@@ -431,7 +430,19 @@ def buscar_deals_por_pipeline(pipeline_id, status, desde_iso=None, ate_iso=None)
         cursor = (data.get("additional_data") or {}).get("next_cursor")
         if not cursor:
             break
-    return itens
+    return tuple(itens)
+
+
+def buscar_deals_por_pipeline(pipeline_id, status, desde_iso=None, ate_iso=None):
+    """Negócios de um status específico (open/won/lost) de um pipeline — direto,
+    sem passar por nenhum filter_id salvo. Usa API v2: a v1 ignora silenciosamente
+    o parâmetro pipeline_id (por isso todos os funis vinham juntos antes).
+    desde_iso/ate_iso limitam por update_time — reduz MUITO o volume pra won/lost
+    (senão baixaria o histórico inteiro do funil e estourava o timeout).
+    Cacheado por (pipeline_id, status, desde_iso, ate_iso): Produtos/Perdidos/MQL's
+    buscam exatamente os mesmos negócios várias vezes na mesma execução — retorna
+    sempre uma lista NOVA (cópia), então quem chama pode mexer nela à vontade."""
+    return list(_buscar_deals_por_pipeline_cached(pipeline_id, status, desde_iso, ate_iso))
 
 
 def cf_valor(deal, hash_):
