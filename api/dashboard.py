@@ -757,6 +757,8 @@ def analisar_mql_pfcc(ano, mes, hoje):
     vistos = set()
     total_hoje = 0
     total_mes = 0
+    total_mes_novos = 0
+    total_mes_reaplicados = 0
     for pid in pipelines:
         deals = buscar_deals_por_pipeline(pid, "open")
         for status in ("won", "lost"):
@@ -787,8 +789,21 @@ def analisar_mql_pfcc(ano, mes, hoje):
                 total_hoje += 1
             if any(v in valor_data for v in variantes_mes):
                 total_mes += 1
+                # Novo: criado no mesmo dia da aplicação. Reaplicação: datas diferentes
+                # (ex: aplicação é desse mês, mas o negócio foi criado antes).
+                data_aplicacao = _parse_data_campo(cf_valor(d, CF_DATA_ULTIMA_APLICACAO))
+                add_brt = to_brt(d.get("add_time"))
+                if data_aplicacao and add_brt and add_brt.date() == data_aplicacao:
+                    total_mes_novos += 1
+                else:
+                    total_mes_reaplicados += 1
 
-    return {"hoje": total_hoje, "mes": total_mes}
+    return {
+        "hoje": total_hoje,
+        "mes": total_mes,
+        "mes_novos": total_mes_novos,
+        "mes_reaplicados": total_mes_reaplicados,
+    }
 
 
 def _papel_colaborador(nome_dono, colaboradores):
@@ -1386,7 +1401,7 @@ def montar_painel(ano_param=None, mes_param=None):
     if e_mes_atual:
         resultado["mql_pfcc"] = analisar_mql_pfcc(ano, mes, hoje)
     else:
-        resultado["mql_pfcc"] = {"hoje": 0, "mes": 0}
+        resultado["mql_pfcc"] = {"hoje": 0, "mes": 0, "mes_novos": 0, "mes_reaplicados": 0}
 
     if e_mes_atual:
         resultado["perdidos_analise"] = analisar_perdidos(ano, mes, hoje, colaboradores, users_map)
