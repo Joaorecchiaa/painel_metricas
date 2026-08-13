@@ -166,12 +166,12 @@ def http_get_json(url, headers=None, tentativas=2):
     raise RuntimeError(f"Falha de conexão (após {tentativas} tentativas) em {url}: {razao}") from ultimo_erro
 
 
-def http_get_text(url, tentativas=2):
+def http_get_text(url, tentativas=3):
     req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
     ultimo_erro = None
     for tentativa in range(tentativas):
         try:
-            with urlopen(req, timeout=20) as resp:
+            with urlopen(req, timeout=30) as resp:
                 return resp.read().decode("utf-8")
         except HTTPError as e:
             detalhe = e.read().decode("utf-8", errors="ignore")
@@ -181,6 +181,7 @@ def http_get_text(url, tentativas=2):
             continue
     razao = getattr(ultimo_erro, "reason", ultimo_erro)
     raise RuntimeError(f"Falha de conexão (após {tentativas} tentativas) em {url}: {razao}") from ultimo_erro
+
 
 
 def find_col(fieldnames, exact=None, contains=None, contains_all=None):
@@ -900,6 +901,40 @@ def _motivos_permitidos_na_etapa(etapa_norm):
     return None
 
 
+def analisar_perdidos_periodo(data_inicio, data_fim, colaboradores, users_map, responsavel_norm=None):
+    """Versão da análise 'Perdidos — Geral' com período customizado (não o mês inteiro)
+    e filtro opcional por responsável (dono do negócio)."""
+    desde_iso = f"{data_inicio.isoformat()}T00:00:00Z"
+    ate_iso = f"{data_fim.isoformat()}T23:59:59Z"
+
+    motivos_geral = {}
+    total = 0
+    for squad_interno in SQUADS_PRODUTOS:
+        pipeline_id = _pipeline_id_do_squad(squad_interno)
+        if pipeline_id is None:
+            continue
+        perdidos = buscar_deals_por_pipeline(pipeline_id, "lost", desde_iso, ate_iso)
+        for d in perdidos:
+            lost_brt = to_brt(d.get("lost_time"))
+            if not lost_brt:
+                continue
+            data_perda = lost_brt.date()
+            if not (data_inicio <= data_perda <= data_fim):
+                continue
+            if responsavel_norm and norm(owner_nome(d, users_map)) != responsavel_norm:
+                continue
+            total += 1
+            motivo = (d.get("lost_reason") or "").strip() or "Sem motivo"
+            motivos_geral.setdefault(motivo, []).append(d)
+
+    return {
+        "total": total,
+        "motivos": _motivos_com_percentual(motivos_geral, total, colaboradores, users_map),
+        "periodo_inicio": data_inicio.isoformat(),
+        "periodo_fim": data_fim.isoformat(),
+    }
+
+
 def analisar_perdidos(ano, mes, hoje, colaboradores, users_map):
     """Perdidos do dia/mês + motivo de perda (quantidade, % e quebra por colaborador SDR/Closer),
     geral e por funil (Olympus/Elite/Sniper), + Auditoria de Perdas (motivos fora da regra por etapa)."""
@@ -913,6 +948,7 @@ def analisar_perdidos(ano, mes, hoje, colaboradores, users_map):
     total_mes_geral = 0
     total_hoje_geral = 0
     auditoria_geral = {}  # etapa -> {motivo: [negócio, ...]}
+    responsaveis_vistos = set()
 
     for squad_interno in SQUADS_PRODUTOS:
         pipeline_id = _pipeline_id_do_squad(squad_interno)
@@ -930,6 +966,7 @@ def analisar_perdidos(ano, mes, hoje, colaboradores, users_map):
                 total_mes += 1
                 if lost_brt.date() == hoje:
                     total_hoje += 1
+                responsaveis_vistos.add(owner_nome(d, users_map) or "Sem dono")
                 motivo = (d.get("lost_reason") or "").strip() or "Sem motivo"
                 motivos_funil.setdefault(motivo, []).append(d)
                 motivos_geral.setdefault(motivo, []).append(d)
@@ -980,6 +1017,7 @@ def analisar_perdidos(ano, mes, hoje, colaboradores, users_map):
             ],
         },
         "por_funil": {SQUAD_DISPLAY[s]: por_funil[s] for s in SQUADS_PRODUTOS},
+        "responsaveis": sorted(responsaveis_vistos),
     }
 
 
@@ -1097,6 +1135,21 @@ def produtos_em_aberto_por_squad(ano, mes, hoje, ontem, retornar_detalhes=False)
                     {"id": item["id"], "url": item["url"]} for item in detalhes[s][p][chave]
                 ]
     return resultado
+
+
+def montar_resposta_perdidos_periodo(mes_param, ano_param, perdidos_inicio, perdidos_fim, perdidos_responsavel):
+    """Resposta leve — só pro filtro de período/responsável da seção 'Perdidos — Geral'.
+    Não refaz o painel inteiro (evita timeout): busca só colaboradores + usuários."""
+    hoje = dt.date.today()
+    ano, mes = ano_param or hoje.year, mes_param or hoje.month
+    colaboradores = carregar_colaboradores(mes, ano)
+    users_map = pd_users()
+    data_ini = dt.date.fromisoformat(perdidos_inicio)
+    data_fim_p = dt.date.fromisoformat(perdidos_fim)
+    resp_norm = norm(perdidos_responsavel) if perdidos_responsavel else None
+    return {
+        "perdidos_periodo": analisar_perdidos_periodo(data_ini, data_fim_p, colaboradores, users_map, resp_norm)
+    }
 
 
 def montar_painel(ano_param=None, mes_param=None):
@@ -1507,7 +1560,18 @@ class handler(BaseHTTPRequestHandler):
             query = parse_qs(urlparse(self.path).query)
             mes_param = int(query["mes"][0]) if "mes" in query else None
             ano_param = int(query["ano"][0]) if "ano" in query else None
-            payload = montar_painel(ano_param=ano_param, mes_param=mes_param)
+            perdidos_inicio = query.get("perdidos_inicio", [None])[0]
+            perdidos_fim = query.get("perdidos_fim", [None])[0]
+            perdidos_responsavel = query.get("perdidos_responsavel", [None])[0]
+
+            if perdidos_inicio and perdidos_fim:
+                # caminho leve: só o filtro de período/responsável, sem refazer o painel inteiro
+                payload = montar_resposta_perdidos_periodo(
+                    mes_param, ano_param, perdidos_inicio, perdidos_fim, perdidos_responsavel
+                )
+            else:
+                payload = montar_painel(ano_param=ano_param, mes_param=mes_param)
+
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             self.send_response(200)
         except Exception as e:
