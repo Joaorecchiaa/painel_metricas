@@ -646,12 +646,16 @@ async function atualizar() {
     const reapl = data.reaplicacoes || { hoje: 0, mes: 0, taxa_mes_pct: 0 };
     document.getElementById("resumoNovosLeadsProdutos").innerHTML = `
       <div class="perdidos-resumo-card card-destaque-suave">
-        <div class="rotulo">Novos Leads Hoje</div>
+        <div class="rotulo">Novos MQL's/Leads Hoje - Geral</div>
         <div class="valor">${totalGeralNovosLeads("novos_hoje")}</div>
       </div>
       <div class="perdidos-resumo-card card-destaque-suave">
-        <div class="rotulo">Novos Leads Mês</div>
+        <div class="rotulo">Novos MQL's/Leads Mês - Geral</div>
         <div class="valor">${totalGeralNovosLeads("novos_mes")}</div>
+      </div>
+      <div class="perdidos-resumo-card card-destaque-suave">
+        <div class="rotulo">Reaplicações Mês - Geral</div>
+        <div class="valor">${reapl.mes ?? 0} <span class="valor-taxa">(${reapl.taxa_mes_pct ?? 0}% de taxa)</span></div>
       </div>
       <div class="perdidos-resumo-card">
         <div class="rotulo">Novos MQL's <strong>PFCC</strong> — Hoje</div>
@@ -668,10 +672,6 @@ async function atualizar() {
       <div class="perdidos-resumo-card">
         <div class="rotulo">Novos MQL's <strong>PFCC</strong> — Mês (Total)</div>
         <div class="valor">${mql.mes ?? 0}</div>
-      </div>
-      <div class="perdidos-resumo-card">
-        <div class="rotulo">Reaplicações Mês</div>
-        <div class="valor">${reapl.mes ?? 0} <span class="valor-taxa">(${reapl.taxa_mes_pct ?? 0}% de taxa)</span></div>
       </div>`;
     const CATEGORIAS = [
       { key: "abertos", label: "Abertos" },
