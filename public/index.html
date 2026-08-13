@@ -227,6 +227,44 @@
   .status-id-item:hover { background: #e5e7eb; }
   .status-vazio { font-size: 11px; color: var(--muted); }
 
+  .filtro-perdidos {
+    display: flex;
+    align-items: flex-end;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+    padding: 10px 12px;
+    background: #fafafa;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .filtro-perdidos label {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .filtro-perdidos input, .filtro-perdidos select {
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--ink);
+    background: #fff;
+  }
+  .filtro-perdidos button {
+    padding: 7px 14px;
+    border-radius: 6px;
+    border: none;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  #btnFiltrarPerdidos { background: var(--accent); color: #fff; }
+  #btnLimparFiltroPerdidos { background: #f3f4f6; color: var(--ink); }
   .perdidos-resumo {
     display: flex;
     flex-wrap: wrap;
@@ -379,6 +417,15 @@
 
 <div id="paginaPerdidos" style="display:none;">
   <h2 class="titulo-tabela">PERDIDOS — GERAL</h2>
+  <div class="filtro-perdidos">
+    <label>De <input type="date" id="perdidosDataInicio"></label>
+    <label>Até <input type="date" id="perdidosDataFim"></label>
+    <label>Responsável
+      <select id="perdidosResponsavel"><option value="">Todos</option></select>
+    </label>
+    <button id="btnFiltrarPerdidos" onclick="aplicarFiltroPerdidos()">Filtrar</button>
+    <button id="btnLimparFiltroPerdidos" onclick="limparFiltroPerdidos()" style="display:none;">Limpar filtro</button>
+  </div>
   <div id="resumoPerdidosGeral" class="perdidos-resumo"></div>
   <div id="motivosPerdidosGeral"></div>
 
@@ -397,7 +444,89 @@
 const API_URL = "/api/dashboard";
 const INTERVALO_MS = 10 * 60 * 1000; // 10 minutos
 
+function listaNegociosSimples(negocios) {
+  if (!negocios || negocios.length === 0) return `<div class="status-vazio">Nenhum</div>`;
+  return negocios.map(n => `<a class="status-id-item" href="${n.url}" target="_blank" rel="noopener">#${n.id}</a>`).join("");
+}
+
+function listaColaboradores(colaboradores) {
+  if (!colaboradores) return `<div class="status-vazio" style="padding:8px 14px;">Sem dados de colaborador</div>`;
+  const papeis = ["Closer", "SDR", "Outro"];
+  const blocos = papeis.map(papel => {
+    const pessoas = colaboradores[papel] || [];
+    if (pessoas.length === 0) return "";
+    const linhasPessoas = pessoas.map(p => `
+      <details class="colaborador-dropdown">
+        <summary><span class="colaborador-nome">${p.nome}</span> <span class="colaborador-qtd">${p.quantidade}</span></summary>
+        <div class="colaborador-negocios">${listaNegociosSimples(p.negocios)}</div>
+      </details>`).join("");
+    return `<div class="papel-grupo"><div class="papel-titulo">${papel}</div>${linhasPessoas}</div>`;
+  }).join("");
+  return blocos || `<div class="status-vazio" style="padding:8px 14px;">Nenhum colaborador identificado</div>`;
+}
+
+function listaMotivos(motivos) {
+  if (!motivos || motivos.length === 0) {
+    return `<div class="status-vazio" style="padding:14px;">Nenhum motivo registrado</div>`;
+  }
+  return motivos.map(m => `
+    <details class="motivo-dropdown">
+      <summary class="motivo-linha">
+        <span class="motivo-nome">${m.motivo}</span>
+        <div class="motivo-barra-wrap"><div class="motivo-barra" style="width:${m.percentual}%"></div></div>
+        <span class="motivo-qtd">${m.quantidade} negócios</span>
+        <span class="motivo-pct">${m.percentual}%</span>
+      </summary>
+      <div class="motivo-colaboradores">${listaColaboradores(m.colaboradores)}</div>
+    </details>`).join("");
+}
+
+async function aplicarFiltroPerdidos() {
+  const inicio = document.getElementById("perdidosDataInicio").value;
+  const fim = document.getElementById("perdidosDataFim").value;
+  const responsavel = document.getElementById("perdidosResponsavel").value;
+  if (!inicio || !fim) {
+    alert("Escolhe as duas datas (De / Até) antes de filtrar.");
+    return;
+  }
+  const btn = document.getElementById("btnFiltrarPerdidos");
+  btn.disabled = true;
+  btn.textContent = "Filtrando...";
+  try {
+    const params = new URLSearchParams({ perdidos_inicio: inicio, perdidos_fim: fim });
+    if (responsavel) params.set("perdidos_responsavel", responsavel);
+    const resp = await fetch(`${API_URL}?${params.toString()}`, { cache: "no-store" });
+    const data = await resp.json();
+    if (data.erro) throw new Error(data.erro);
+    const p = data.perdidos_periodo;
+    document.getElementById("resumoPerdidosGeral").innerHTML = `
+      <div class="perdidos-resumo-card">
+        <div class="rotulo">Perdidos no Período</div>
+        <div class="valor">${p.total ?? 0}</div>
+      </div>`;
+    document.getElementById("motivosPerdidosGeral").innerHTML =
+      `<div class="motivos-lista">${listaMotivos(p.motivos)}</div>`;
+    document.getElementById("btnLimparFiltroPerdidos").style.display = "";
+  } catch (e) {
+    alert("Erro ao filtrar: " + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Filtrar";
+  }
+}
+
+function limparFiltroPerdidos() {
+  document.getElementById("perdidosDataInicio").value = "";
+  document.getElementById("perdidosDataFim").value = "";
+  document.getElementById("perdidosResponsavel").value = "";
+  document.getElementById("btnLimparFiltroPerdidos").style.display = "none";
+  renderizarPerdidos(ultimaAnalisePerdidos || {});
+}
+
+let ultimaAnalisePerdidos = null;
+
 function renderizarPerdidos(analise) {
+  ultimaAnalisePerdidos = analise;
   const geral = analise.geral || { total_mes: 0, total_hoje: 0, motivos: [] };
   document.getElementById("resumoPerdidosGeral").innerHTML = `
     <div class="perdidos-resumo-card">
@@ -409,41 +538,14 @@ function renderizarPerdidos(analise) {
       <div class="valor">${geral.total_mes ?? 0}</div>
     </div>`;
 
-  function listaNegociosSimples(negocios) {
-    if (!negocios || negocios.length === 0) return `<div class="status-vazio">Nenhum</div>`;
-    return negocios.map(n => `<a class="status-id-item" href="${n.url}" target="_blank" rel="noopener">#${n.id}</a>`).join("");
-  }
-
-  function listaColaboradores(colaboradores) {
-    if (!colaboradores) return `<div class="status-vazio" style="padding:8px 14px;">Sem dados de colaborador</div>`;
-    const papeis = ["Closer", "SDR", "Outro"];
-    const blocos = papeis.map(papel => {
-      const pessoas = colaboradores[papel] || [];
-      if (pessoas.length === 0) return "";
-      const linhasPessoas = pessoas.map(p => `
-        <details class="colaborador-dropdown">
-          <summary><span class="colaborador-nome">${p.nome}</span> <span class="colaborador-qtd">${p.quantidade}</span></summary>
-          <div class="colaborador-negocios">${listaNegociosSimples(p.negocios)}</div>
-        </details>`).join("");
-      return `<div class="papel-grupo"><div class="papel-titulo">${papel}</div>${linhasPessoas}</div>`;
-    }).join("");
-    return blocos || `<div class="status-vazio" style="padding:8px 14px;">Nenhum colaborador identificado</div>`;
-  }
-
-  function listaMotivos(motivos) {
-    if (!motivos || motivos.length === 0) {
-      return `<div class="status-vazio" style="padding:14px;">Nenhum motivo registrado</div>`;
-    }
-    return motivos.map(m => `
-      <details class="motivo-dropdown">
-        <summary class="motivo-linha">
-          <span class="motivo-nome">${m.motivo}</span>
-          <div class="motivo-barra-wrap"><div class="motivo-barra" style="width:${m.percentual}%"></div></div>
-          <span class="motivo-qtd">${m.quantidade} negócios</span>
-          <span class="motivo-pct">${m.percentual}%</span>
-        </summary>
-        <div class="motivo-colaboradores">${listaColaboradores(m.colaboradores)}</div>
-      </details>`).join("");
+  const seletorResp = document.getElementById("perdidosResponsavel");
+  if (seletorResp && seletorResp.options.length <= 1) {
+    (analise.responsaveis || []).forEach(nome => {
+      const opt = document.createElement("option");
+      opt.value = nome;
+      opt.textContent = nome;
+      seletorResp.appendChild(opt);
+    });
   }
 
   document.getElementById("motivosPerdidosGeral").innerHTML =
