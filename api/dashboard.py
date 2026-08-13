@@ -18,6 +18,7 @@ import unicodedata
 import calendar
 import math
 import functools
+import socket
 import datetime as dt
 from http.server import BaseHTTPRequestHandler
 from urllib.request import Request, urlopen
@@ -148,28 +149,38 @@ def to_brt(iso_ts):
 
 from urllib.error import HTTPError, URLError
 
-def http_get_json(url, headers=None):
+def http_get_json(url, headers=None, tentativas=2):
     req = Request(url, headers=headers or {})
-    try:
-        with urlopen(req, timeout=25) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except HTTPError as e:
-        detalhe = e.read().decode("utf-8", errors="ignore")
-        raise RuntimeError(f"Erro HTTP {e.code} em {url}: {detalhe[:600]}") from e
-    except URLError as e:
-        raise RuntimeError(f"Falha de conexão em {url}: {e.reason}") from e
+    ultimo_erro = None
+    for tentativa in range(tentativas):
+        try:
+            with urlopen(req, timeout=20) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except HTTPError as e:
+            detalhe = e.read().decode("utf-8", errors="ignore")
+            raise RuntimeError(f"Erro HTTP {e.code} em {url}: {detalhe[:600]}") from e
+        except (URLError, TimeoutError, socket.timeout) as e:
+            ultimo_erro = e
+            continue  # tenta de novo (timeout de leitura costuma ser passageiro)
+    razao = getattr(ultimo_erro, "reason", ultimo_erro)
+    raise RuntimeError(f"Falha de conexão (após {tentativas} tentativas) em {url}: {razao}") from ultimo_erro
 
 
-def http_get_text(url):
+def http_get_text(url, tentativas=2):
     req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    try:
-        with urlopen(req, timeout=25) as resp:
-            return resp.read().decode("utf-8")
-    except HTTPError as e:
-        detalhe = e.read().decode("utf-8", errors="ignore")
-        raise RuntimeError(f"Erro HTTP {e.code} em {url}: {detalhe[:600]}") from e
-    except URLError as e:
-        raise RuntimeError(f"Falha de conexão em {url}: {e.reason}") from e
+    ultimo_erro = None
+    for tentativa in range(tentativas):
+        try:
+            with urlopen(req, timeout=20) as resp:
+                return resp.read().decode("utf-8")
+        except HTTPError as e:
+            detalhe = e.read().decode("utf-8", errors="ignore")
+            raise RuntimeError(f"Erro HTTP {e.code} em {url}: {detalhe[:600]}") from e
+        except (URLError, TimeoutError, socket.timeout) as e:
+            ultimo_erro = e
+            continue
+    razao = getattr(ultimo_erro, "reason", ultimo_erro)
+    raise RuntimeError(f"Falha de conexão (após {tentativas} tentativas) em {url}: {razao}") from ultimo_erro
 
 
 def find_col(fieldnames, exact=None, contains=None, contains_all=None):
