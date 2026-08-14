@@ -147,6 +147,14 @@ def to_brt(iso_ts):
     return None
 
 
+def hoje_brt():
+    """'Hoje' correto pro fuso de Brasília — NÃO usar dt.date.today() sozinho,
+    que pega a data do servidor (UTC na Vercel). Entre ~21h e 23h59 BRT, o UTC já
+    virou o dia seguinte, e dt.date.today() erradamente aponta pra 'amanhã',
+    zerando tudo que compara com 'hoje' (Novos Leads Hoje, MQL Hoje, etc)."""
+    return (dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=TZ_OFFSET_HORAS)).date()
+
+
 from urllib.error import HTTPError, URLError
 
 def http_get_json(url, headers=None, tentativas=2):
@@ -331,7 +339,7 @@ def dias_uteis_mes(ano, mes, feriados):
 
 
 def calcular_dias_uteis(ano, mes, feriados, hoje=None):
-    hoje = hoje or dt.date.today()
+    hoje = hoje or hoje_brt()
     total, ultimo_dia = dias_uteis_mes(ano, mes, feriados)
 
     if (ano, mes) < (hoje.year, hoje.month):
@@ -1140,7 +1148,7 @@ def produtos_em_aberto_por_squad(ano, mes, hoje, ontem, retornar_detalhes=False)
 def montar_resposta_perdidos_periodo(mes_param, ano_param, perdidos_inicio, perdidos_fim, perdidos_responsavel):
     """Resposta leve — só pro filtro de período/responsável da seção 'Perdidos — Geral'.
     Não refaz o painel inteiro (evita timeout): busca só colaboradores + usuários."""
-    hoje = dt.date.today()
+    hoje = hoje_brt()
     ano, mes = ano_param or hoje.year, mes_param or hoje.month
     colaboradores = carregar_colaboradores(mes, ano)
     users_map = pd_users()
@@ -1153,7 +1161,7 @@ def montar_resposta_perdidos_periodo(mes_param, ano_param, perdidos_inicio, perd
 
 
 def montar_painel(ano_param=None, mes_param=None):
-    hoje = dt.date.today()
+    hoje = hoje_brt()
     ano, mes = ano_param or hoje.year, mes_param or hoje.month
     e_mes_atual = (ano, mes) == (hoje.year, hoje.month)
 
