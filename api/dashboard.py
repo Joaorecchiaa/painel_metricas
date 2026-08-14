@@ -157,6 +157,65 @@ def hoje_brt():
 
 from urllib.error import HTTPError, URLError
 
+# ---------------------------------------------------------------------------
+# LOGIN / CONTROLE DE ACESSO POR PAPEL — mesma lógica de login.py e me.py.
+# admin: vê tudo. elite/sniper/olympus: Métricas e Produtos iguais pra todos;
+# na aba Perdidos, só o próprio funil. Sem login: Perdidos fica bloqueado.
+# ---------------------------------------------------------------------------
+import hmac
+import base64
+import time as _time
+import hashlib
+
+PAPEIS_VALIDOS = {"admin", "elite", "sniper", "olympus"}
+AUTH_SECRET = (os.environ.get("AUTH_SECRET", "") or "troque-este-segredo").encode()
+PAPEL_PARA_SQUAD_DISPLAY = {"elite": "Elite", "sniper": "Sniper", "olympus": "Olympus"}
+PAPEL_PARA_SQUAD_INTERNO = {"elite": "elite", "sniper": "sniper", "olympus": "mgm"}
+
+
+def _valida_token(token):
+    if not token:
+        return None
+    try:
+        bruto = base64.urlsafe_b64decode(token.encode()).decode()
+        usuario, papel, exp, assinatura = bruto.rsplit("|", 3)
+        corpo = f"{usuario}|{papel}|{exp}"
+        esperado = hmac.new(AUTH_SECRET, corpo.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(esperado, assinatura):
+            return None
+        if int(exp) < int(_time.time()):
+            return None
+        if papel not in PAPEIS_VALIDOS:
+            return None
+        return {"usuario": usuario, "papel": papel}
+    except Exception:
+        return None
+
+
+def sessao_da_requisicao(headers):
+    auth = headers.get("Authorization") or headers.get("authorization") or ""
+    if auth.startswith("Bearer "):
+        return _valida_token(auth[7:])
+    return None
+
+
+def filtrar_perdidos_por_papel(perdidos_analise, papel):
+    """admin (ou sem papel reconhecido de restrição) vê tudo; elite/sniper/olympus só o próprio funil."""
+    if papel == "admin":
+        return perdidos_analise
+    squad_nome = PAPEL_PARA_SQUAD_DISPLAY.get(papel)
+    if not squad_nome:
+        return None  # sem login válido -> Perdidos fica bloqueado
+    vazio = {"total_mes": 0, "total_hoje": 0, "motivos": [], "auditoria": []}
+    dados_funil = (perdidos_analise.get("por_funil") or {}).get(squad_nome, vazio)
+    return {
+        "geral": dados_funil,
+        "por_funil": {squad_nome: dados_funil},
+        "responsaveis": perdidos_analise.get("responsaveis", []),
+    }
+
+
+
 def http_get_json(url, headers=None, tentativas=2):
     req = Request(url, headers=headers or {})
     ultimo_erro = None
@@ -909,15 +968,17 @@ def _motivos_permitidos_na_etapa(etapa_norm):
     return None
 
 
-def analisar_perdidos_periodo(data_inicio, data_fim, colaboradores, users_map, responsavel_norm=None):
+def analisar_perdidos_periodo(data_inicio, data_fim, colaboradores, users_map, responsavel_norm=None, squad_unico=None):
     """Versão da análise 'Perdidos — Geral' com período customizado (não o mês inteiro)
-    e filtro opcional por responsável (dono do negócio)."""
+    e filtro opcional por responsável (dono do negócio). squad_unico restringe a busca
+    a só um funil (usado pra papéis não-admin, que só podem ver o próprio funil)."""
     desde_iso = f"{data_inicio.isoformat()}T00:00:00Z"
     ate_iso = f"{data_fim.isoformat()}T23:59:59Z"
 
     motivos_geral = {}
     total = 0
-    for squad_interno in SQUADS_PRODUTOS:
+    squads_para_buscar = [squad_unico] if squad_unico else SQUADS_PRODUTOS
+    for squad_interno in squads_para_buscar:
         pipeline_id = _pipeline_id_do_squad(squad_interno)
         if pipeline_id is None:
             continue
@@ -1145,9 +1206,12 @@ def produtos_em_aberto_por_squad(ano, mes, hoje, ontem, retornar_detalhes=False)
     return resultado
 
 
-def montar_resposta_perdidos_periodo(mes_param, ano_param, perdidos_inicio, perdidos_fim, perdidos_responsavel):
+def montar_resposta_perdidos_periodo(mes_param, ano_param, perdidos_inicio, perdidos_fim, perdidos_responsavel, papel):
     """Resposta leve — só pro filtro de período/responsável da seção 'Perdidos — Geral'.
-    Não refaz o painel inteiro (evita timeout): busca só colaboradores + usuários."""
+    Não refaz o painel inteiro (evita timeout): busca só colaboradores + usuários.
+    Exige login (papel != None); papéis não-admin ficam restritos ao próprio funil."""
+    if papel is None:
+        return {"erro": "Login necessário pra ver a aba Perdidos."}
     hoje = hoje_brt()
     ano, mes = ano_param or hoje.year, mes_param or hoje.month
     colaboradores = carregar_colaboradores(mes, ano)
@@ -1155,12 +1219,15 @@ def montar_resposta_perdidos_periodo(mes_param, ano_param, perdidos_inicio, perd
     data_ini = dt.date.fromisoformat(perdidos_inicio)
     data_fim_p = dt.date.fromisoformat(perdidos_fim)
     resp_norm = norm(perdidos_responsavel) if perdidos_responsavel else None
+    squad_unico = None if papel == "admin" else PAPEL_PARA_SQUAD_INTERNO.get(papel)
+    if papel != "admin" and squad_unico is None:
+        return {"erro": "Papel de acesso inválido."}
     return {
-        "perdidos_periodo": analisar_perdidos_periodo(data_ini, data_fim_p, colaboradores, users_map, resp_norm)
+        "perdidos_periodo": analisar_perdidos_periodo(data_ini, data_fim_p, colaboradores, users_map, resp_norm, squad_unico)
     }
 
 
-def montar_painel(ano_param=None, mes_param=None):
+def montar_painel(ano_param=None, mes_param=None, papel=None):
     hoje = hoje_brt()
     ano, mes = ano_param or hoje.year, mes_param or hoje.month
     e_mes_atual = (ano, mes) == (hoje.year, hoje.month)
@@ -1482,6 +1549,8 @@ def montar_painel(ano_param=None, mes_param=None):
             "geral": {"total_mes": 0, "total_hoje": 0, "motivos": [], "auditoria": []},
             "por_funil": {SQUAD_DISPLAY[s]: {"total_mes": 0, "total_hoje": 0, "motivos": [], "auditoria": []} for s in SQUADS_PRODUTOS},
         }
+    resultado["perdidos_analise"] = filtrar_perdidos_por_papel(resultado["perdidos_analise"], papel)
+    resultado["papel_usuario"] = papel
 
     debug_previsto_hoje_deals = {s: [] for s in SQUADS_FINANCEIROS}
     if e_mes_atual:
@@ -1572,13 +1641,16 @@ class handler(BaseHTTPRequestHandler):
             perdidos_fim = query.get("perdidos_fim", [None])[0]
             perdidos_responsavel = query.get("perdidos_responsavel", [None])[0]
 
+            sessao = sessao_da_requisicao(self.headers)
+            papel = sessao["papel"] if sessao else None
+
             if perdidos_inicio and perdidos_fim:
                 # caminho leve: só o filtro de período/responsável, sem refazer o painel inteiro
                 payload = montar_resposta_perdidos_periodo(
-                    mes_param, ano_param, perdidos_inicio, perdidos_fim, perdidos_responsavel
+                    mes_param, ano_param, perdidos_inicio, perdidos_fim, perdidos_responsavel, papel
                 )
             else:
-                payload = montar_painel(ano_param=ano_param, mes_param=mes_param)
+                payload = montar_painel(ano_param=ano_param, mes_param=mes_param, papel=papel)
 
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             self.send_response(200)
