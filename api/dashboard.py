@@ -199,6 +199,45 @@ def sessao_da_requisicao(headers):
     return None
 
 
+def _sha256_senha(txt):
+    return hashlib.sha256(txt.encode("utf-8")).hexdigest()
+
+
+def _carregar_usuarios_painel():
+    raw = os.environ.get("USUARIOS_PAINEL", "") or ""
+    raw = raw.strip().strip('"').strip("'").strip()
+    usuarios = {}
+    for par in raw.split(","):
+        par = par.strip()
+        if not par:
+            continue
+        partes = par.split(":")
+        if len(partes) != 3:
+            continue
+        u, h, papel = partes
+        papel = papel.strip().lower()
+        if papel not in PAPEIS_VALIDOS:
+            continue
+        usuarios[u.strip().lower()] = {"hash": h.strip().lower(), "papel": papel}
+    return usuarios
+
+
+def checa_login(usuario, senha):
+    usuarios = _carregar_usuarios_painel()
+    info = usuarios.get(str(usuario).strip().lower())
+    if info and hmac.compare_digest(info["hash"], _sha256_senha(str(senha))):
+        return info["papel"]
+    return None
+
+
+def gera_token(usuario, papel):
+    exp = int(_time.time()) + 12 * 3600
+    corpo = f"{usuario}|{papel}|{exp}"
+    assinatura = hmac.new(AUTH_SECRET, corpo.encode(), hashlib.sha256).hexdigest()
+    bruto = f"{corpo}|{assinatura}"
+    return base64.urlsafe_b64encode(bruto.encode()).decode()
+
+
 def filtrar_perdidos_por_papel(perdidos_analise, papel):
     """admin (ou sem papel reconhecido de restrição) vê tudo; elite/sniper/olympus só o próprio funil."""
     if papel == "admin":
@@ -1635,6 +1674,12 @@ class handler(BaseHTTPRequestHandler):
         try:
             from urllib.parse import urlparse, parse_qs
             query = parse_qs(urlparse(self.path).query)
+            rota = query.get("route", [None])[0]
+
+            if rota == "me":
+                self._responder_me()
+                return
+
             mes_param = int(query["mes"][0]) if "mes" in query else None
             ano_param = int(query["ano"][0]) if "ano" in query else None
             perdidos_inicio = query.get("perdidos_inicio", [None])[0]
@@ -1661,3 +1706,58 @@ class handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(body)
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.end_headers()
+
+    def do_POST(self):
+        from urllib.parse import urlparse, parse_qs
+        query = parse_qs(urlparse(self.path).query)
+        rota = query.get("route", [None])[0]
+        if rota == "login":
+            self._responder_login()
+            return
+        body = json.dumps({"erro": "rota não encontrada"}, ensure_ascii=False).encode("utf-8")
+        self.send_response(404)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _responder_login(self):
+        try:
+            tamanho = int(self.headers.get("Content-Length", 0) or 0)
+            corpo_bruto = self.rfile.read(tamanho) if tamanho else b"{}"
+            dados = json.loads(corpo_bruto or b"{}")
+            usuario = str(dados.get("usuario", "")).strip().lower()
+            senha = str(dados.get("senha", ""))
+            papel_encontrado = checa_login(usuario, senha)
+            if papel_encontrado:
+                resp = {"token": gera_token(usuario, papel_encontrado), "usuario": usuario, "papel": papel_encontrado}
+                self.send_response(200)
+            else:
+                resp = {"error": "Usuário ou senha inválidos"}
+                self.send_response(401)
+        except Exception as e:
+            resp = {"error": str(e)}
+            self.send_response(500)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(json.dumps(resp, ensure_ascii=False).encode("utf-8"))
+
+    def _responder_me(self):
+        sessao = sessao_da_requisicao(self.headers)
+        if sessao:
+            resp = {"logado": True, "usuario": sessao["usuario"], "papel": sessao["papel"]}
+        else:
+            resp = {"logado": False}
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(json.dumps(resp, ensure_ascii=False).encode("utf-8"))
