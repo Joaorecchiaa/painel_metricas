@@ -88,6 +88,41 @@
     color: #fff;
   }
   .meta-info { font-size: 10px; color: rgba(255,255,255,0.5); text-align: right; margin-top: 5px; }
+
+  .authbar { display: inline-flex; align-items: center; gap: 8px; margin-left: 4px; }
+  .authbar .who { color: #fbbf24; font-size: 10px; }
+  .btn-auth {
+    background: transparent;
+    color: rgba(255,255,255,0.75);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 200; }
+  .modal-bg.show { display: flex; }
+  .modal { background: #0b0b0f; color: #f2f2f2; border: 1px solid #2a2a2a; border-top: 3px solid #fbbf24; border-radius: 12px; padding: 22px; width: 300px; max-width: 90vw; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
+  .modal h3 { margin: 0 0 14px; font-size: 14px; color: #fbbf24; text-transform: uppercase; letter-spacing: .5px; }
+  .modal label { display: block; font-size: 10px; color: #9a9a9a; text-transform: uppercase; letter-spacing: .5px; margin: 10px 0 4px; }
+  .modal input { width: 100%; background: #1a1a1a; color: #f2f2f2; border: 1px solid #2a2a2a; border-radius: 6px; padding: 8px 9px; font-size: 13px; box-sizing: border-box; }
+  .modal input:focus { outline: none; border-color: #fbbf24; }
+  .modal .m-actions { display: flex; gap: 8px; margin-top: 16px; }
+  .modal .m-actions button { flex: 1; padding: 8px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer; border: none; }
+  .modal .m-ok { background: #fbbf24; color: #1a1a1a; }
+  .modal .m-cancel { background: #1a1a1a; color: #f2f2f2; border: 1px solid #2a2a2a; }
+  .modal .m-erro { color: #f87171; font-size: 11px; margin-top: 8px; min-height: 13px; }
+  .perdidos-bloqueado {
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    padding: 30px 20px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .perdidos-bloqueado button { margin-top: 10px; }
+
   table {
     width: 100%;
     border-collapse: collapse;
@@ -366,10 +401,29 @@
       <select id="seletorMes"></select>
       <select id="seletorAno"></select>
       <button id="refresh" onclick="atualizar()">Atualizar painel</button>
+      <span class="authbar">
+        <span class="who" id="authWho"></span>
+        <button class="btn-auth" id="btnAuth">Entrar</button>
+      </span>
     </div>
     <div class="meta-info" id="ultimaAtualizacao">—</div>
   </div>
 </header>
+
+<div class="modal-bg" id="loginModal">
+  <div class="modal">
+    <h3>Acesso restrito</h3>
+    <label>Usuário</label>
+    <input id="in-user" autocomplete="username">
+    <label>Senha</label>
+    <input id="in-pass" type="password" autocomplete="current-password">
+    <div class="m-erro" id="loginErro"></div>
+    <div class="m-actions">
+      <button class="m-cancel" id="loginCancel">Cancelar</button>
+      <button class="m-ok" id="loginOk">Entrar</button>
+    </div>
+  </div>
+</div>
 
 <nav class="abas">
   <button class="aba-btn ativa" id="btnAbaMetricas" onclick="mostrarPagina('metricas')">Métricas</button>
@@ -416,26 +470,32 @@
 </div>
 
 <div id="paginaPerdidos" style="display:none;">
-  <h2 class="titulo-tabela">PERDIDOS — GERAL</h2>
-  <div class="filtro-perdidos">
-    <label>De <input type="date" id="perdidosDataInicio"></label>
-    <label>Até <input type="date" id="perdidosDataFim"></label>
-    <label>Responsável
-      <select id="perdidosResponsavel"><option value="">Todos</option></select>
-    </label>
-    <button id="btnFiltrarPerdidos" onclick="aplicarFiltroPerdidos()">Filtrar</button>
-    <button id="btnLimparFiltroPerdidos" onclick="limparFiltroPerdidos()" style="display:none;">Limpar filtro</button>
+  <div id="perdidosBloqueado" class="perdidos-bloqueado" style="display:none;">
+    <div>🔒 Essa aba é restrita — faça login pra ver os dados de Perdidos.</div>
+    <button class="btn-auth" onclick="abreLogin()">Entrar</button>
   </div>
-  <div id="resumoPerdidosGeral" class="perdidos-resumo"></div>
-  <div id="motivosPerdidosGeral"></div>
+  <div id="perdidosConteudo">
+    <h2 class="titulo-tabela">PERDIDOS — GERAL</h2>
+    <div class="filtro-perdidos">
+      <label>De <input type="date" id="perdidosDataInicio"></label>
+      <label>Até <input type="date" id="perdidosDataFim"></label>
+      <label>Responsável
+        <select id="perdidosResponsavel"><option value="">Todos</option></select>
+      </label>
+      <button id="btnFiltrarPerdidos" onclick="aplicarFiltroPerdidos()">Filtrar</button>
+      <button id="btnLimparFiltroPerdidos" onclick="limparFiltroPerdidos()" style="display:none;">Limpar filtro</button>
+    </div>
+    <div id="resumoPerdidosGeral" class="perdidos-resumo"></div>
+    <div id="motivosPerdidosGeral"></div>
 
-  <h2 class="titulo-tabela">PERDIDOS — POR FUNIL</h2>
-  <div id="cardsPerdidosFunil" class="perdidos-funis"></div>
+    <h2 class="titulo-tabela">PERDIDOS — POR FUNIL</h2>
+    <div id="cardsPerdidosFunil" class="perdidos-funis"></div>
 
-  <h2 class="titulo-tabela">AUDITORIA DE PERDAS</h2>
-  <div class="sub" style="color:var(--muted); margin-bottom:10px;">Motivos de perda fora do esperado pra etapa em que o negócio estava</div>
-  <div id="auditoriaPerdidosGeral"></div>
-  <div id="cardsAuditoriaFunil" class="perdidos-funis"></div>
+    <h2 class="titulo-tabela">AUDITORIA DE PERDAS</h2>
+    <div class="sub" style="color:var(--muted); margin-bottom:10px;">Motivos de perda fora do esperado pra etapa em que o negócio estava</div>
+    <div id="auditoriaPerdidosGeral"></div>
+    <div id="cardsAuditoriaFunil" class="perdidos-funis"></div>
+  </div>
 </div>
 
 <div id="erro"></div>
@@ -443,6 +503,92 @@
 <script>
 const API_URL = "/api/dashboard";
 const INTERVALO_MS = 10 * 60 * 1000; // 10 minutos
+
+// ---- login / autenticação ----
+let TOKEN = sessionStorage.getItem("dash_token") || null;
+let PAPEL = sessionStorage.getItem("dash_papel") || null;
+let USUARIO = sessionStorage.getItem("dash_usuario") || null;
+
+function authHeaders() {
+  return TOKEN ? { "Authorization": "Bearer " + TOKEN } : {};
+}
+function estaLogado() { return !!TOKEN; }
+
+function abreLogin() {
+  document.getElementById("loginErro").textContent = "";
+  document.getElementById("in-user").value = "";
+  document.getElementById("in-pass").value = "";
+  document.getElementById("loginModal").classList.add("show");
+  document.getElementById("in-user").focus();
+}
+function fechaLogin() { document.getElementById("loginModal").classList.remove("show"); }
+
+async function fazLogin() {
+  const usuario = document.getElementById("in-user").value.trim();
+  const senha = document.getElementById("in-pass").value;
+  document.getElementById("loginErro").textContent = "";
+  try {
+    const res = await fetch("/api/login", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ usuario, senha }),
+    });
+    const d = await res.json();
+    if (!res.ok) {
+      document.getElementById("loginErro").textContent = d.error || "Falha no login";
+      return;
+    }
+    TOKEN = d.token; PAPEL = d.papel; USUARIO = d.usuario;
+    sessionStorage.setItem("dash_token", TOKEN);
+    sessionStorage.setItem("dash_papel", PAPEL);
+    sessionStorage.setItem("dash_usuario", USUARIO);
+    fechaLogin();
+    atualizaAuthUI();
+    atualizar();
+  } catch (e) {
+    document.getElementById("loginErro").textContent = "Erro de conexão";
+  }
+}
+
+function logout() {
+  TOKEN = null; PAPEL = null; USUARIO = null;
+  sessionStorage.removeItem("dash_token");
+  sessionStorage.removeItem("dash_papel");
+  sessionStorage.removeItem("dash_usuario");
+  atualizaAuthUI();
+  atualizar();
+}
+
+function atualizaAuthUI() {
+  if (estaLogado()) {
+    document.getElementById("authWho").textContent = `● ${USUARIO} (${PAPEL})`;
+    document.getElementById("btnAuth").textContent = "Sair";
+  } else {
+    document.getElementById("authWho").textContent = "";
+    document.getElementById("btnAuth").textContent = "Entrar";
+  }
+}
+
+async function validaTokenSalvo() {
+  if (!TOKEN) return;
+  try {
+    const me = await (await fetch("/api/me", { headers: authHeaders() })).json();
+    if (!me.logado) {
+      TOKEN = null; PAPEL = null; USUARIO = null;
+      sessionStorage.removeItem("dash_token");
+      sessionStorage.removeItem("dash_papel");
+      sessionStorage.removeItem("dash_usuario");
+    } else {
+      PAPEL = me.papel; USUARIO = me.usuario;
+    }
+  } catch (e) {}
+  atualizaAuthUI();
+}
+
+document.getElementById("btnAuth").addEventListener("click", () => { estaLogado() ? logout() : abreLogin(); });
+document.getElementById("loginCancel").addEventListener("click", fechaLogin);
+document.getElementById("loginOk").addEventListener("click", fazLogin);
+document.getElementById("in-pass").addEventListener("keydown", e => { if (e.key === "Enter") fazLogin(); });
+document.getElementById("loginModal").addEventListener("click", e => { if (e.target.id === "loginModal") fechaLogin(); });
 
 function listaNegociosSimples(negocios) {
   if (!negocios || negocios.length === 0) return `<div class="status-vazio">Nenhum</div>`;
@@ -495,7 +641,7 @@ async function aplicarFiltroPerdidos() {
   try {
     const params = new URLSearchParams({ perdidos_inicio: inicio, perdidos_fim: fim });
     if (responsavel) params.set("perdidos_responsavel", responsavel);
-    const resp = await fetch(`${API_URL}?${params.toString()}`, { cache: "no-store" });
+    const resp = await fetch(`${API_URL}?${params.toString()}`, { cache: "no-store", headers: authHeaders() });
     const data = await resp.json();
     if (data.erro) throw new Error(data.erro);
     const p = data.perdidos_periodo;
@@ -520,13 +666,22 @@ function limparFiltroPerdidos() {
   document.getElementById("perdidosDataFim").value = "";
   document.getElementById("perdidosResponsavel").value = "";
   document.getElementById("btnLimparFiltroPerdidos").style.display = "none";
-  renderizarPerdidos(ultimaAnalisePerdidos || {});
+  renderizarPerdidos(ultimaAnalisePerdidos);
 }
 
 let ultimaAnalisePerdidos = null;
 
 function renderizarPerdidos(analise) {
   ultimaAnalisePerdidos = analise;
+
+  if (!analise) {
+    document.getElementById("perdidosBloqueado").style.display = "";
+    document.getElementById("perdidosConteudo").style.display = "none";
+    return;
+  }
+  document.getElementById("perdidosBloqueado").style.display = "none";
+  document.getElementById("perdidosConteudo").style.display = "";
+
   const geral = analise.geral || { total_mes: 0, total_hoje: 0, motivos: [] };
   document.getElementById("resumoPerdidosGeral").innerHTML = `
     <div class="perdidos-resumo-card">
@@ -552,7 +707,8 @@ function renderizarPerdidos(analise) {
     `<div class="motivos-lista">${listaMotivos(geral.motivos)}</div>`;
 
   const porFunil = analise.por_funil || {};
-  document.getElementById("cardsPerdidosFunil").innerHTML = ["Olympus", "Elite", "Sniper"].map(squad => {
+  const funis = Object.keys(porFunil); // 1 funil (papel restrito) ou os 3 (admin)
+  document.getElementById("cardsPerdidosFunil").innerHTML = funis.map(squad => {
     const dados = porFunil[squad] || { total_mes: 0, total_hoje: 0, motivos: [] };
     return `
       <div class="perdidos-funil-card">
@@ -578,7 +734,7 @@ function renderizarPerdidos(analise) {
 
   document.getElementById("auditoriaPerdidosGeral").innerHTML = listaAuditoria(geral.auditoria);
 
-  document.getElementById("cardsAuditoriaFunil").innerHTML = ["Olympus", "Elite", "Sniper"].map(squad => {
+  document.getElementById("cardsAuditoriaFunil").innerHTML = funis.map(squad => {
     const dados = porFunil[squad] || { auditoria: [] };
     return `
       <div class="perdidos-funil-card">
@@ -717,7 +873,7 @@ async function atualizar() {
   btn.textContent = "Atualizando...";
   erroBox.style.display = "none";
   try {
-    const resp = await fetch(`${API_URL}?mes=${mesSelecionado}&ano=${anoSelecionado}`, { cache: "no-store" });
+    const resp = await fetch(`${API_URL}?mes=${mesSelecionado}&ano=${anoSelecionado}`, { cache: "no-store", headers: authHeaders() });
     const data = await resp.json();
     if (data.erro) throw new Error(data.erro);
     premissasAtual = data.premissas || {};
@@ -838,7 +994,7 @@ async function atualizar() {
         </div>
       </details>`).join("");
 
-    renderizarPerdidos(data.perdidos_analise || {});
+    renderizarPerdidos(data.perdidos_analise);
 
     document.getElementById("ultimaAtualizacao").textContent =
       "Atualizado às " + new Date(data.geradoEm).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo" });
@@ -851,7 +1007,8 @@ async function atualizar() {
   }
 }
 
-atualizar();
+atualizaAuthUI();
+validaTokenSalvo().then(atualizar);
 setInterval(atualizar, INTERVALO_MS);
 </script>
 
