@@ -1,888 +1,858 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<title>Verificação Negócios e Etapas - Board Academy</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Métricas Comerciais - 2026</title>
 <style>
   :root {
-    --gold: #FFD700;
     --bg: #ffffff;
-    --card-bg: #f4f4f4;
-    --border: #dddddd;
-    --text: #111111;
-    --muted: #5a5a5a;
-    --header-bg: #000000;
-    --header-text: #f0f0f0;
+    --ink: #1a1d21;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --accent: #111827;
+    --ok: #15803d;
+    --warn: #b45309;
+    --bad: #b91c1c;
+    --head-bg: #f3f4f6;
+    --total-bg: #f9fafb;
   }
   * { box-sizing: border-box; }
   body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     margin: 0;
-    padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    padding: 20px 24px 30px;
   }
   header {
     display: flex;
-    align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    background: var(--header-bg);
-    color: var(--header-text);
-    padding: 18px 24px;
+    align-items: center;
+    background: #0b0b0f;
+    color: #fff;
+    padding: 14px 20px;
+    margin: -20px -24px 20px;
+    border-radius: 0 0 10px 10px;
   }
-  header .brand { color: var(--gold); font-weight: 800; letter-spacing: 1px; }
-  h1 { color: var(--header-text); font-size: 16px; margin: 0; display: inline; font-weight: 500; }
-  .separator { color: var(--header-text); font-weight: 400; }
-  .header-update-info {
-    text-align: right;
+  .header-esquerda { display: flex; align-items: center; gap: 14px; }
+  h1 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; color: #fff; }
+  h2.titulo-tabela { font-size: 12px; font-weight: 600; margin: 18px 0 8px; color: var(--ink); }
+  .abas {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 4px;
+  }
+  .aba-btn {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 6px 2px;
+    margin-right: 14px;
     font-size: 11px;
-    color: #bbbbbb;
-    line-height: 1.5;
-    white-space: nowrap;
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
   }
-  .header-update-info .live-dot {
-    display: inline-block;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: #6fe28a;
-    margin-right: 5px;
-  }
-  .header-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
-  .authbar { display: flex; align-items: center; gap: 10px; font-size: 12px; }
-  .authbar .who { color: #f0f0f0; }
-  .btn-auth {
-    background: transparent;
-    color: #bbbbbb;
-    border: 1px solid #333333;
-    border-radius: 8px;
+  .aba-btn.ativa { color: var(--ink); border-bottom-color: #0b0b0f; }
+  .aba-btn:hover { color: var(--ink); }
+  .sub { color: rgba(255,255,255,0.55); font-size: 10px; margin-top: 2px; letter-spacing: 0.03em; text-transform: uppercase; }
+  .badge-dias-uteis {
+    font-size: 11px;
+    color: rgba(255,255,255,0.85);
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 999px;
     padding: 5px 14px;
+  }
+  .badge-dias-uteis .destaque { color: #fbbf24; font-weight: 600; }
+  button#refresh {
+    background: #fff;
+    color: #0b0b0f;
+    border: none;
+    padding: 7px 13px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button#refresh:disabled { opacity: 0.5; cursor: default; }
+  .seletor-periodo { display: flex; gap: 8px; align-items: center; }
+  .seletor-periodo select {
+    padding: 7px 10px;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 6px;
+    font-size: 11px;
+    background: rgba(255,255,255,0.06);
+    color: #fff;
+  }
+  .meta-info { font-size: 10px; color: rgba(255,255,255,0.5); text-align: right; margin-top: 5px; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10.5px;
+    table-layout: fixed;
+  }
+  th, td {
+    padding: 5px 6px;
+    text-align: right;
+    border-bottom: 1px solid var(--border);
+    overflow-wrap: break-word;
+  }
+  th:first-child, td:first-child { text-align: left; }
+  thead th {
+    background: var(--head-bg);
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+  td.total, #tabela-financeiro th:nth-child(4) { background: var(--total-bg); font-weight: 600; border-left: 2px solid var(--border); }
+  #tabelaFinanceiro td:nth-child(2), #tabela-financeiro th:nth-child(2) { background: #f0f9f4; }
+  #tabelaFinanceiro td:nth-child(3), #tabela-financeiro th:nth-child(3) { background: #fff7ed; }
+  th.col-olympus, td.col-olympus { background: #eef2ff; }
+  th.col-elite, td.col-elite { background: #ecfdf5; }
+  .pill {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 999px;
+  }
+  .pill.ok { background: #dcfce7; color: var(--ok); }
+  .pill.warn { background: #fef3c7; color: var(--warn); }
+  .pill.bad { background: #fee2e2; color: var(--bad); }
+  #erro { color: var(--bad); font-size: 13px; margin-top: 20px; display: none; }
+
+  .produto-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+  .produto-card > summary {
+    cursor: pointer;
+    list-style: none;
+    background: var(--head-bg);
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--ink);
+    padding: 9px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .produto-total-abertos {
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--muted);
+  }
+  .produto-card > summary::-webkit-details-marker { display: none; }
+  .produto-card > summary::before { content: "▸ "; color: var(--muted); }
+  .produto-card[open] > summary::before { content: "▾ "; }
+  .produto-card[open] > summary { border-bottom: 1px solid var(--border); }
+
+  .produto-squads {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .produto-squads-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .produto-squads-3 .produto-squad:not(:last-child) { border-right: 1px solid var(--border); }
+  .produto-squads-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+  .produto-squads-4 .produto-squad:not(:last-child) { border-right: 1px solid var(--border); }
+  .produto-squad { padding: 12px 16px; }
+  .produto-squad:first-child { border-right: 1px solid var(--border); }
+  .produto-squad-titulo {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  .status-grupo {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    font-size: 12px;
+    border-bottom: 1px solid #f3f4f6;
+  }
+  .status-grupo-destaque {
+    background: #f8fafc;
+    padding: 4px 0;
+    border-bottom: none;
+  }
+  .status-grupo-destaque .status-titulo { color: var(--ink); font-weight: 600; }
+  .status-grupo-destaque .status-numero { color: var(--ink); font-weight: 600; }
+  .status-grupo-destaque summary { cursor: pointer; }
+  .status-grupo:last-child { border-bottom: none; }
+  .status-titulo { color: var(--muted); }
+  .status-numero { font-weight: 600; }
+
+  .status-grupo-dropdown {
+    padding: 4px 0;
+    border-bottom: 1px solid #f3f4f6;
+  }
+  .status-grupo-dropdown:last-child { border-bottom: none; }
+  .status-grupo-dropdown summary {
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+  }
+  .status-grupo-dropdown summary .status-titulo { text-decoration: underline; }
+  .status-grupo-dropdown summary::-webkit-details-marker { display: none; }
+  .status-ids-lista {
+    margin-top: 6px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .status-id-item {
+    font-size: 11px;
+    color: var(--accent);
+    background: #f3f4f6;
+    border-radius: 4px;
+    padding: 2px 7px;
+    text-decoration: none;
+  }
+  .status-id-item:hover { background: #e5e7eb; }
+  .status-vazio { font-size: 11px; color: var(--muted); }
+
+  .filtro-perdidos {
+    display: flex;
+    align-items: flex-end;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+    padding: 10px 12px;
+    background: #fafafa;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .filtro-perdidos label {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .filtro-perdidos input, .filtro-perdidos select {
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--ink);
+    background: #fff;
+  }
+  .filtro-perdidos button {
+    padding: 7px 14px;
+    border-radius: 6px;
+    border: none;
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
-    letter-spacing: 0.3px;
   }
-  .btn-auth:hover { border-color: var(--gold); color: #ffffff; }
-
-  .modal-bg {
-    position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none;
-    align-items: center; justify-content: center; z-index: 200;
-  }
-  .modal-bg.show { display: flex; }
-  .modal {
-    background: #ffffff; color: var(--text); border: 1px solid var(--border);
-    border-top: 3px solid var(--gold); border-radius: 14px; padding: 24px;
-    width: 320px; max-width: 90vw; box-shadow: 0 10px 40px rgba(0,0,0,.25);
-  }
-  .modal h3 { margin: 0 0 16px; font-size: 15px; color: var(--text); text-transform: uppercase; letter-spacing: .5px; }
-  .modal label { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin: 10px 0 4px; }
-  .modal input {
-    width: 100%; background: #ffffff; color: var(--text); border: 1px solid var(--border);
-    border-radius: 8px; padding: 9px 10px; font-size: 14px;
-  }
-  .modal input:focus { outline: none; border-color: var(--gold); }
-  .modal .m-actions { display: flex; gap: 10px; margin-top: 18px; }
-  .modal .m-actions button { flex: 1; padding: 9px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; border: none; }
-  .modal .m-ok { background: #000000; color: var(--gold); }
-  .modal .m-cancel { background: #f4f4f4; color: var(--text); border: 1px solid var(--border); }
-  .modal .m-erro { color: #a11212; font-size: 12px; margin-top: 10px; min-height: 14px; }
-
-  .login-gate {
-    display: flex; align-items: center; justify-content: center;
-    min-height: 60vh; padding: 24px;
-  }
-  .login-gate-card {
-    text-align: center; background: var(--card-bg); border: 1px solid var(--border);
-    border-radius: 14px; padding: 40px 32px; max-width: 320px;
-  }
-  .login-gate-card h2 { margin: 0 0 8px; font-size: 18px; }
-  .login-gate-card p { color: var(--muted); font-size: 13px; margin: 0 0 20px; }
-  .login-gate-card .m-ok { background: #000000; color: var(--gold); border: none; padding: 10px 24px; border-radius: 8px; font-weight: 700; cursor: pointer; }
-
-  main.page-content { padding: 24px; }
-  footer.signature {
-    margin-top: 40px;
-    padding-top: 12px;
-    border-top: 1px solid var(--border);
-    font-size: 11px;
-    letter-spacing: 0.3px;
-    text-transform: none;
-    font-weight: 400;
-    color: var(--muted);
-  }
-  .kpis {
+  #btnFiltrarPerdidos { background: var(--accent); color: #fff; }
+  #btnLimparFiltroPerdidos { background: #f3f4f6; color: var(--ink); }
+  .perdidos-resumo {
     display: flex;
-    gap: 16px;
-    margin-bottom: 24px;
     flex-wrap: wrap;
-  }
-  .kpi {
-    background: rgba(0,0,0,0.06);
-    border: 1px solid rgba(0,0,0,0.12);
-    border-radius: 10px;
-    padding: 14px 20px;
-    min-width: 140px;
-  }
-  .kpi .label { font-size: 12px; color: var(--muted); text-transform: uppercase; }
-  .kpi .value { font-size: 26px; font-weight: 700; color: var(--text); }
-
-  .funil-block {
-    margin-bottom: 32px;
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    overflow: hidden;
-  }
-  .funil-header {
-    background: var(--card-bg);
-    padding: 14px 18px;
-    font-weight: 700;
-    color: var(--text);
-    display: flex;
-    justify-content: space-between;
-  }
-  .funil-body { padding: 18px; }
-  .funil-header.clickable-header { cursor: pointer; }
-  .funil-header .funil-total-info { color: var(--muted); }
-
-  .cargo-group { margin-top: 22px; }
-  .cargo-group:first-child { margin-top: 0; }
-  .cargo-title {
-    font-size: 15px;
-    font-weight: 700;
-    color: var(--text);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 8px;
-    padding-bottom: 6px;
-    border-bottom: 1px solid var(--border);
-  }
-  .colab-table { table-layout: fixed; width: 100%; }
-  .colab-table th:nth-child(1), .colab-table td:nth-child(1) { width: 46%; }
-  .colab-table th:nth-child(2), .colab-table td:nth-child(2) { width: 27%; text-align: center; }
-  .colab-table th:nth-child(3), .colab-table td:nth-child(3) { width: 27%; text-align: center; }
-  .etapa-colab-table th:nth-child(1), .etapa-colab-table td:nth-child(1) { width: 32%; }
-  .etapa-colab-table th:nth-child(2), .etapa-colab-table td:nth-child(2) { width: 18%; text-align: center; }
-  .etapa-colab-table th:nth-child(3), .etapa-colab-table td:nth-child(3) { width: 18%; text-align: center; }
-  .etapa-colab-table th:nth-child(4), .etapa-colab-table td:nth-child(4) { width: 32%; text-align: center; }
-
-  .cargo-cards {
-    display: flex;
     gap: 12px;
-    margin-bottom: 18px;
-    flex-wrap: wrap;
+    margin-bottom: 16px;
   }
-  .cargo-card {
-    background: var(--card-bg);
+  .perdidos-resumo-card {
+    flex: 1;
+    min-width: 160px;
     border: 1px solid var(--border);
     border-radius: 8px;
-    padding: 10px 16px;
-    min-width: 100px;
+    padding: 14px 16px;
   }
-  .cargo-card .label { font-size: 11px; color: var(--muted); text-transform: uppercase; }
-  .cargo-card .value { font-size: 20px; font-weight: 700; }
+  .perdidos-resumo-card .rotulo { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+  .perdidos-resumo-card .valor { font-size: 22px; font-weight: 700; color: var(--bad); margin-top: 4px; }
+  #resumoNovosLeadsProdutos .valor { color: var(--ink); }
+  #resumoNovosLeadsProdutos { margin-bottom: 20px; }
+  .card-destaque-suave { background: rgba(11, 11, 15, 0.035); }
+  .valor-taxa { font-size: 12px; font-weight: 500; color: var(--muted); }
 
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td {
-    text-align: left;
-    padding: 8px 10px;
-    border-bottom: 1px solid var(--border);
-  }
-  th { color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: 11px; }
-  tr:hover { background: rgba(0,0,0,0.03); }
-  .empty { color: var(--muted); font-style: italic; padding: 10px; }
-  .filters { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
-  select {
-    background: var(--card-bg);
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 6px 10px;
-  }
-  .cargo-card.clickable { cursor: pointer; transition: border-color 0.15s, background 0.15s; }
-  .cargo-card.clickable:hover { border-color: var(--gold); }
-  .cargo-card.clickable.active { border-color: var(--gold); background: rgba(255,215,0,0.08); }
-  .cargo-card.total-card { border-color: var(--gold); background: rgba(255,215,0,0.05); }
-  .badge {
-    display: inline-block;
-    font-size: 10px;
-    padding: 2px 6px;
-    border-radius: 4px;
-    background: var(--border);
-    color: var(--muted);
-    margin-left: 6px;
-  }
-  .status-badge {
-    display: inline-block;
-    font-size: 11px;
-    font-weight: 700;
-    padding: 3px 10px;
-    border-radius: 5px;
-  }
-  .status-green { background: #d9f2df; color: #146c2e; }
-  .status-yellow { background: #fdedc8; color: #8a5a00; }
-  .status-red { background: #fbdada; color: #a11212; }
-  .pessoa-row { cursor: pointer; }
-  .pessoa-nome { color: var(--text); text-decoration: underline; text-decoration-style: solid; }
-  .dropdown-row td { background: #f8f8f8; padding: 10px 10px 14px 24px; }
-  .negocios-table { font-size: 12px; }
-  .negocios-table th, .negocios-table td { border-bottom: 1px solid #e5e5e5; padding: 6px 8px; }
-  .negocios-table a { color: #1a56c4; text-decoration: none; }
-  .negocios-table a:hover { text-decoration: underline; }
-
-  .tabs {
+  .motivos-lista { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 20px; }
+  .motivo-dropdown { border-bottom: 1px solid #f3f4f6; }
+  .motivo-dropdown:last-child { border-bottom: none; }
+  .motivo-linha {
     display: flex;
-    gap: 8px;
-    background: var(--header-bg);
-    padding: 0 24px;
-    margin: 0;
-  }
-  .tab-btn {
-    background: transparent;
-    border: none;
-    border-bottom: 3px solid transparent;
-    color: #999999;
-    font-weight: 700;
-    font-size: 13px;
-    letter-spacing: 0.5px;
-    padding: 12px 6px;
-    margin-right: 18px;
-    cursor: pointer;
-  }
-  .tab-btn.active { color: var(--header-text); border-bottom-color: var(--gold); }
-  .etapa-group { margin-top: 18px; }
-  .etapa-group:first-child { margin-top: 0; }
-  .etapa-header {
-    display: flex;
-    justify-content: space-between;
     align-items: center;
-    background: var(--card-bg);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 10px 14px;
-    cursor: pointer;
-    font-weight: 700;
-  }
-  .etapa-header .dias-tag {
-    font-size: 11px;
-    font-weight: 700;
-    color: #a11212;
-    background: #fbdada;
-    padding: 3px 8px;
-    border-radius: 5px;
-    margin-left: 8px;
-  }
-  .colab-list { margin-top: 4px; }
-  .colab-item { border-bottom: 1px solid var(--border); }
-  .colab-item:last-child { border-bottom: none; }
-  .colab-item-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 4px;
-    cursor: pointer;
-  }
-  .colab-item-header:hover { background: rgba(0,0,0,0.03); }
-  .colab-item-seta { color: var(--muted); font-size: 11px; }
-  .colab-item-body { padding: 4px 4px 16px 16px; }
-  .colab-item-stats {
-    display: flex;
-    gap: 16px;
+    gap: 12px;
+    padding: 8px 14px;
     font-size: 12px;
-    color: var(--muted);
-    margin-bottom: 10px;
+    cursor: pointer;
+    list-style: none;
   }
+  .motivo-linha::-webkit-details-marker { display: none; }
+  .motivo-linha:hover { background: #f8fafc; }
+  .motivo-nome { flex: 1; }
+  .motivo-barra-wrap { flex: 2; background: #f3f4f6; border-radius: 999px; height: 8px; overflow: hidden; }
+  .motivo-barra { background: var(--bad); height: 100%; }
+  .motivo-qtd { width: 90px; text-align: right; color: var(--muted); }
+  .motivo-pct { width: 50px; text-align: right; font-weight: 600; }
+  .motivo-colaboradores { padding: 6px 14px 10px 28px; background: #fafafa; }
+  .papel-grupo { margin-bottom: 8px; }
+  .papel-titulo { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); margin-bottom: 4px; }
+  .colaborador-dropdown { border-bottom: 1px solid #f0f0f0; }
+  .colaborador-dropdown:last-child { border-bottom: none; }
+  .colaborador-dropdown summary {
+    display: flex;
+    justify-content: space-between;
+    padding: 5px 8px;
+    font-size: 12px;
+    cursor: pointer;
+    list-style: none;
+  }
+  .colaborador-dropdown summary::-webkit-details-marker { display: none; }
+  .colaborador-dropdown summary:hover { background: #f0f0f0; }
+  .colaborador-nome { text-decoration: underline; }
+  .colaborador-qtd { color: var(--muted); font-weight: 600; }
+  .colaborador-negocios { padding: 6px 8px 8px 16px; display: flex; flex-wrap: wrap; gap: 6px; }
+
+  .perdidos-funis {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 14px;
+  }
+  .perdidos-funil-card { border: 1px solid var(--border); border-radius: 8px; padding: 14px; background: rgba(11, 11, 15, 0.035); }
+  .perdidos-funil-titulo { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 10px; }
+  .perdidos-funil-resumo { display: flex; gap: 10px; margin-bottom: 10px; font-size: 12px; color: var(--muted); }
+  .perdidos-funil-resumo strong { color: var(--ink); font-size: 14px; }
+  .auditoria-etapa { margin-bottom: 16px; }
+  .auditoria-etapa-titulo {
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 6px;
+    color: var(--ink);
+  }
+  .auditoria-etapa-titulo .qtd { color: var(--bad); font-weight: 500; font-size: 11px; }
+  .tabela-wrap { border: 1px solid var(--border); border-radius: 8px; }
+  .tabela-wrap-estreita { max-width: 48vw; min-width: 520px; }
+  .tabela-wrap-estreita table { width: 100%; table-layout: auto; }
+  .tabela-wrap-estreita td:first-child, .tabela-wrap-estreita th:first-child { padding-right: 40px; }
+  .tabela-wrap-estreita td:last-child, .tabela-wrap-estreita th:last-child { padding-left: 40px; }
+  th.grupo-hoje, td.grupo-hoje { background: #eff6ff; }
+  th.grupo-ontem, td.grupo-ontem { background: #f9fafb; }
+  th.grupo-inicio, td.grupo-inicio { border-left: 2px solid var(--border); }
+  thead tr:first-child th { border-bottom: 1px solid var(--border); }
 </style>
 </head>
 <body>
 
-<div class="modal-bg" id="loginModal">
-  <div class="modal">
-    <h3>Acesso restrito</h3>
-    <label>Usuário</label>
-    <input id="in-user" autocomplete="username" />
-    <label>Senha</label>
-    <input id="in-pass" type="password" autocomplete="current-password" />
-    <div class="m-erro" id="loginErro"></div>
-    <div class="m-actions">
-      <button class="m-cancel" id="loginCancel">Cancelar</button>
-      <button class="m-ok" id="loginOk">Entrar</button>
-    </div>
-  </div>
-</div>
-
 <header>
-  <div><span class="brand">BOARD ACADEMY</span> <span class="separator">-</span> <h1>Verificação Negócios e Etapas</h1></div>
-  <div class="header-right">
-    <span class="header-update-info" id="headerUpdateInfo"></span>
-    <div class="authbar">
-      <span class="who" id="authWho"></span>
-      <button class="btn-auth" id="btnAuth">Entrar</button>
+  <div class="header-esquerda">
+    <div>
+      <h1>Métricas Comerciais - 2026</h1>
+      <div class="sub">Board Academy</div>
     </div>
+    <div class="badge-dias-uteis" id="badgeDiasUteis">—</div>
+  </div>
+  <div>
+    <div class="seletor-periodo">
+      <select id="seletorMes"></select>
+      <select id="seletorAno"></select>
+      <button id="refresh" onclick="atualizar()">Atualizar painel</button>
+    </div>
+    <div class="meta-info" id="ultimaAtualizacao">—</div>
   </div>
 </header>
 
-<div class="login-gate" id="loginGate">
-  <div class="login-gate-card">
-    <h2>Acesso restrito</h2>
-    <p>Faça login pra ver o painel.</p>
-    <button class="m-ok" onclick="abreLogin()">Entrar</button>
-  </div>
-</div>
-
-<div id="appContent" style="display: none;">
-<nav class="tabs">
-  <button class="tab-btn active" id="tabBtnNegocios" onclick="switchTab('negocios')">NEGÓCIOS ABERTOS</button>
-  <button class="tab-btn" id="tabBtnEtapas" onclick="switchTab('etapas')">ETAPAS</button>
+<nav class="abas">
+  <button class="aba-btn ativa" id="btnAbaMetricas" onclick="mostrarPagina('metricas')">Métricas</button>
+  <button class="aba-btn" id="btnAbaProdutos" onclick="mostrarPagina('produtos')">Produtos</button>
+  <button class="aba-btn" id="btnAbaPerdidos" onclick="mostrarPagina('perdidos')">Perdidos</button>
 </nav>
 
-<main class="page-content">
-<div id="tabNegocios">
-  <div class="kpis" id="kpis"></div>
-
-  <div class="funil-block" id="resumoEquipes"></div>
-
-  <div class="funil-block" id="totalColaboradores"></div>
-
-  <div class="filters">
-    <select id="filterTime">
-      <option value="">Todos os times</option>
-      <option value="SNIPER">Sniper</option>
-      <option value="OLYMPUS">Olympus</option>
-      <option value="ELITE">Elite</option>
-      <option value="NAVIGATOR">Navigator</option>
-      <option value="ZENITE">Zenite</option>
-    </select>
+<div id="paginaMetricas">
+  <h2 class="titulo-tabela">OLYMPUS &amp; ELITE</h2>
+  <div class="tabela-wrap">
+    <table id="tabela-financeiro">
+      <thead>
+        <tr>
+          <th>Métrica</th>
+          <th>Olympus</th>
+          <th>Elite</th>
+          <th>Total Consolidado</th>
+        </tr>
+      </thead>
+      <tbody id="tabelaFinanceiro"></tbody>
+    </table>
   </div>
 
-  <div id="dashboard">Carregando...</div>
+  <h2 class="titulo-tabela">SNIPER</h2>
+  <div class="tabela-wrap tabela-wrap-estreita">
+    <table>
+      <thead>
+        <tr>
+          <th>Métrica</th>
+          <th>Sniper</th>
+        </tr>
+      </thead>
+      <tbody id="tabelaSniper"></tbody>
+    </table>
+  </div>
 </div>
 
-<div id="tabEtapas" style="display: none;">
-  <div class="kpis" id="etapasKpis"></div>
-  <div id="etapasDashboard">Carregando...</div>
+<div id="paginaProdutos" style="display:none;">
+  <div id="secaoProdutos">
+    <div id="resumoNovosLeadsProdutos" class="perdidos-resumo"></div>
+    <h2 class="titulo-tabela">PRODUTOS - DETALHAMENTO</h2>
+    <div id="cardsProdutos"></div>
+  </div>
 </div>
 
-<footer class="signature">
-  Board Academy · Time Comercial
-</footer>
-</main>
+<div id="paginaPerdidos" style="display:none;">
+  <h2 class="titulo-tabela">PERDIDOS — GERAL</h2>
+  <div class="filtro-perdidos">
+    <label>De <input type="date" id="perdidosDataInicio"></label>
+    <label>Até <input type="date" id="perdidosDataFim"></label>
+    <label>Responsável
+      <select id="perdidosResponsavel"><option value="">Todos</option></select>
+    </label>
+    <button id="btnFiltrarPerdidos" onclick="aplicarFiltroPerdidos()">Filtrar</button>
+    <button id="btnLimparFiltroPerdidos" onclick="limparFiltroPerdidos()" style="display:none;">Limpar filtro</button>
+  </div>
+  <div id="resumoPerdidosGeral" class="perdidos-resumo"></div>
+  <div id="motivosPerdidosGeral"></div>
+
+  <h2 class="titulo-tabela">PERDIDOS — POR FUNIL</h2>
+  <div id="cardsPerdidosFunil" class="perdidos-funis"></div>
+
+  <h2 class="titulo-tabela">AUDITORIA DE PERDAS</h2>
+  <div class="sub" style="color:var(--muted); margin-bottom:10px;">Motivos de perda fora do esperado pra etapa em que o negócio estava</div>
+  <div id="auditoriaPerdidosGeral"></div>
+  <div id="cardsAuditoriaFunil" class="perdidos-funis"></div>
 </div>
+
+<div id="erro"></div>
 
 <script>
-let rawData = null;
+const API_URL = "/api/dashboard";
+const INTERVALO_MS = 10 * 60 * 1000; // 10 minutos
 
-async function loadData() {
-  const res = await fetch('/api/deals', { headers: authHeaders() });
-  if (res.status === 401) { return forcaLogout(); }
-  rawData = await res.json();
-  atualizaOpcoesFiltro();
-  renderKpis();
-  renderResumoEquipes();
-  renderTotalColaboradores();
-  renderDashboard();
-  updateHeaderTimestamp();
+function listaNegociosSimples(negocios) {
+  if (!negocios || negocios.length === 0) return `<div class="status-vazio">Nenhum</div>`;
+  return negocios.map(n => `<a class="status-id-item" href="${n.url}" target="_blank" rel="noopener">#${n.id}</a>`).join("");
 }
 
-function updateHeaderTimestamp() {
-  const el = document.getElementById('headerUpdateInfo');
-  if (!el) return;
-  const agora = new Date();
-  const dataFormatada = agora.toLocaleDateString('pt-BR');
-  const horaFormatada = agora.toLocaleTimeString('pt-BR');
-  el.innerHTML = `
-    Atualizado: ${dataFormatada}, ${horaFormatada}<br>
-    <span class="live-dot"></span>atualiza sozinho a cada 30 min
-  `;
+function listaColaboradores(colaboradores) {
+  if (!colaboradores) return `<div class="status-vazio" style="padding:8px 14px;">Sem dados de colaborador</div>`;
+  const papeis = ["Closer", "SDR", "Outro"];
+  const blocos = papeis.map(papel => {
+    const pessoas = colaboradores[papel] || [];
+    if (pessoas.length === 0) return "";
+    const linhasPessoas = pessoas.map(p => `
+      <details class="colaborador-dropdown">
+        <summary><span class="colaborador-nome">${p.nome}</span> <span class="colaborador-qtd">${p.quantidade}</span></summary>
+        <div class="colaborador-negocios">${listaNegociosSimples(p.negocios)}</div>
+      </details>`).join("");
+    return `<div class="papel-grupo"><div class="papel-titulo">${papel}</div>${linhasPessoas}</div>`;
+  }).join("");
+  return blocos || `<div class="status-vazio" style="padding:8px 14px;">Nenhum colaborador identificado</div>`;
 }
 
-function renderKpis() {
-  const kpisEl = document.getElementById('kpis');
-  kpisEl.innerHTML = `
-    <div class="kpi"><div class="label">Total de negócios</div><div class="value">${rawData.total_negocios}</div></div>
-    <div class="kpi"><div class="label">Donos não mapeados</div><div class="value">${rawData.donos_nao_mapeados.length}</div></div>
-  `;
-}
-
-function renderResumoEquipes() {
-  const el = document.getElementById('resumoEquipes');
-  const timeFilter = document.getElementById('filterTime').value;
-  const totalGeral = rawData.resumo_equipes.reduce((acc, r) => acc + r.total, 0);
-  el.innerHTML = `
-    <div class="funil-header"><span>TOTAL GERAL POR EQUIPE</span></div>
-    <div class="funil-body">
-      <div class="cargo-cards">
-        ${rawData.resumo_equipes.map(r => `
-          <div class="cargo-card clickable ${timeFilter === r.time ? 'active' : ''}" onclick="selectTeamFilter('${r.time}')">
-            <div class="label">${r.time}</div><div class="value">${r.total}</div>
-          </div>
-        `).join('')}
-        <div class="cargo-card total-card">
-          <div class="label">Total</div><div class="value">${totalGeral}</div>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function selectTeamFilter(time) {
-  const select = document.getElementById('filterTime');
-  select.value = (select.value === time) ? '' : time;
-  renderResumoEquipes();
-  renderDashboard();
-}
-
-let totalColaboradoresAberto = false;
-
-function toggleTotalColaboradores() {
-  totalColaboradoresAberto = !totalColaboradoresAberto;
-  renderTotalColaboradores();
-}
-
-function renderTotalColaboradores() {
-  const el = document.getElementById('totalColaboradores');
-  const pessoas = rawData.total_por_colaborador || [];
-
-  const ordem = ['SDR', 'CLOSER', 'HEAD', 'TEAM_LEADER', 'OUTROS', 'NAO_MAPEADO'];
-  const grupos = {};
-  ordem.forEach(c => grupos[c] = []);
-  pessoas.forEach(p => {
-    if (!grupos[p.cargo]) grupos[p.cargo] = [];
-    grupos[p.cargo].push(p);
-  });
-
-  const corpo = totalColaboradoresAberto
-    ? `
-      <div class="funil-body">
-        ${ordem.filter(c => grupos[c].length).map(cargo => `
-          <div class="cargo-group">
-            <div class="cargo-title">${cargoLabel(cargo)} (${grupos[cargo].length})</div>
-            <table class="colab-table">
-              <thead><tr><th>Colaborador</th><th>Negócios abertos</th><th>Status</th></tr></thead>
-              <tbody>
-                ${grupos[cargo].map(p => {
-                  const dropdownId = `dropdown-${dropdownCounter++}`;
-                  return `
-                    <tr class="pessoa-row" onclick="togglePessoa('${dropdownId}')">
-                      <td><span class="pessoa-nome">${p.nome}</span></td>
-                      <td>${p.quantidade}</td>
-                      <td>${p.status ? `<span class="status-badge status-${p.status.color}">${p.status.label}</span>` : '-'}</td>
-                    </tr>
-                    <tr id="${dropdownId}" class="dropdown-row" style="display: none;">
-                      <td colspan="3">
-                        <table class="negocios-table">
-                          <thead><tr><th>Funil</th><th>Negócios abertos</th></tr></thead>
-                          <tbody>
-                            ${(p.por_funil || []).map(f => `
-                              <tr><td>${f.funil}</td><td>${f.quantidade}</td></tr>
-                            `).join('')}
-                          </tbody>
-                        </table>
-                      </td>
-                    </tr>
-                  `;
-                }).join('')}
-              </tbody>
-            </table>
-          </div>
-        `).join('')}
-      </div>
-    `
-    : '';
-
-  el.innerHTML = `
-    <div class="funil-header clickable-header" onclick="toggleTotalColaboradores()">
-      <span>TOTAL POR COLABORADOR</span>
-      <span>${totalColaboradoresAberto ? '▲' : '▼'}</span>
-    </div>
-    ${corpo}
-  `;
-}
-
-function cargoLabel(cargo) {
-  const labels = {
-    SDR: 'SDR',
-    CLOSER: 'Closer',
-    HEAD: 'Head',
-    TEAM_LEADER: 'Team Leader',
-    OUTROS: 'Outros',
-    NAO_MAPEADO: 'não mapeado',
-  };
-  return labels[cargo] || cargo;
-}
-
-let dropdownCounter = 0;
-
-function renderNegocioValor(negocio) {
-  if (!negocio.valor) return '-';
-  return Number(negocio.valor).toLocaleString('pt-BR', {style: 'currency', currency: negocio.moeda || 'BRL'});
-}
-
-function renderNegociosDropdown(negocios, dropdownId) {
-  return `
-    <tr id="${dropdownId}" class="dropdown-row" style="display: none;">
-      <td colspan="4">
-        <table class="negocios-table">
-          <thead><tr><th>Negócio</th><th>Valor</th><th>Etapa</th></tr></thead>
-          <tbody>
-            ${negocios.map(n => `
-              <tr>
-                <td><a href="${n.url}" target="_blank" rel="noopener">${n.nome || 'Negócio #' + n.id}</a></td>
-                <td>${renderNegocioValor(n)}</td>
-                <td>${n.etapa || '-'}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </td>
-    </tr>
-  `;
-}
-
-function togglePessoa(dropdownId) {
-  const row = document.getElementById(dropdownId);
-  if (row) {
-    row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
+function listaMotivos(motivos) {
+  if (!motivos || motivos.length === 0) {
+    return `<div class="status-vazio" style="padding:14px;">Nenhum motivo registrado</div>`;
   }
+  return motivos.map(m => `
+    <details class="motivo-dropdown">
+      <summary class="motivo-linha">
+        <span class="motivo-nome">${m.motivo}</span>
+        <div class="motivo-barra-wrap"><div class="motivo-barra" style="width:${m.percentual}%"></div></div>
+        <span class="motivo-qtd">${m.quantidade} negócios</span>
+        <span class="motivo-pct">${m.percentual}%</span>
+      </summary>
+      <div class="motivo-colaboradores">${listaColaboradores(m.colaboradores)}</div>
+    </details>`).join("");
 }
 
-function renderPessoaTable(pessoas) {
-  if (!pessoas.length) return '<div class="empty">Nenhum negócio</div>';
-  return `
-    <table>
-      <thead><tr><th>Proprietário</th><th>Cargo</th><th>Negócios abertos</th><th>Status</th></tr></thead>
-      <tbody>
-        ${pessoas.map(p => {
-          const dropdownId = `dropdown-${dropdownCounter++}`;
-          return `
-            <tr class="pessoa-row" onclick="togglePessoa('${dropdownId}')">
-              <td><span class="pessoa-nome">${p.nome}</span></td>
-              <td>${p.cargo === 'NAO_MAPEADO' ? `<span class="badge">${cargoLabel(p.cargo)}</span>` : cargoLabel(p.cargo)}</td>
-              <td>${p.quantidade}</td>
-              <td>${p.status ? `<span class="status-badge status-${p.status.color}">${p.status.label}</span>` : '-'}</td>
-            </tr>
-            ${renderNegociosDropdown(p.negocios || [], dropdownId)}
-          `;
-        }).join('')}
-      </tbody>
-    </table>
-  `;
-}
-
-let funisAbertos = {};
-
-function toggleFunil(nome) {
-  funisAbertos[nome] = !funisAbertos[nome];
-  renderDashboard();
-}
-
-function renderDashboard() {
-  const timeFilter = document.getElementById('filterTime').value;
-  const dashboardEl = document.getElementById('dashboard');
-  dashboardEl.innerHTML = '';
-
-  Object.entries(rawData.funis).forEach(([funilNome, info]) => {
-    if (timeFilter && timeFilter !== funilNome) return;
-
-    const aberto = !!funisAbertos[funilNome];
-
-    const block = document.createElement('div');
-    block.className = 'funil-block';
-
-    const corpo = aberto
-      ? `
-        <div class="funil-body">
-          <div class="cargo-cards">
-            <div class="cargo-card"><div class="label">SDR</div><div class="value">${info.por_cargo.SDR}</div></div>
-            <div class="cargo-card"><div class="label">Closer</div><div class="value">${info.por_cargo.CLOSER}</div></div>
-            <div class="cargo-card"><div class="label">Head</div><div class="value">${info.por_cargo.HEAD}</div></div>
-            <div class="cargo-card"><div class="label">Team Leader</div><div class="value">${info.por_cargo.TEAM_LEADER}</div></div>
-            <div class="cargo-card"><div class="label">Outros</div><div class="value">${info.por_cargo.OUTROS}</div></div>
-            <div class="cargo-card"><div class="label">Não mapeados</div><div class="value">${info.por_cargo.NAO_MAPEADO}</div></div>
-          </div>
-          ${renderPessoaTable(info.por_pessoa)}
-        </div>
-      `
-      : '';
-
-    block.innerHTML = `
-      <div class="funil-header clickable-header" onclick="toggleFunil('${funilNome}')">
-        <span>${funilNome}</span>
-        <span class="funil-total-info">${info.total} negócios ${aberto ? '▲' : '▼'}</span>
-      </div>
-      ${corpo}
-    `;
-    dashboardEl.appendChild(block);
-  });
-}
-
-document.getElementById('filterTime').addEventListener('change', renderDashboard);
-
-// ---------------------------------------------------------------------------
-// Aba ETAPAS (negócios parados por funil/etapa/colaborador)
-// ---------------------------------------------------------------------------
-
-let etapasData = null;
-let etapasFunisAbertos = {};
-let etapasEtapasAbertas = {};
-
-function switchTab(tab) {
-  document.getElementById('tabBtnNegocios').classList.toggle('active', tab === 'negocios');
-  document.getElementById('tabBtnEtapas').classList.toggle('active', tab === 'etapas');
-  document.getElementById('tabNegocios').style.display = tab === 'negocios' ? '' : 'none';
-  document.getElementById('tabEtapas').style.display = tab === 'etapas' ? '' : 'none';
-  if (tab === 'etapas' && !etapasData) {
-    loadEtapasData();
+async function aplicarFiltroPerdidos() {
+  const inicio = document.getElementById("perdidosDataInicio").value;
+  const fim = document.getElementById("perdidosDataFim").value;
+  const responsavel = document.getElementById("perdidosResponsavel").value;
+  if (!inicio || !fim) {
+    alert("Escolhe as duas datas (De / Até) antes de filtrar.");
+    return;
   }
-}
-
-async function loadEtapasData() {
-  document.getElementById('etapasDashboard').innerHTML = 'Carregando...';
-  const res = await fetch('/api/etapas', { headers: authHeaders() });
-  if (res.status === 401) { return forcaLogout(); }
-  etapasData = await res.json();
-  renderEtapasKpis();
-  renderEtapasDashboard();
-}
-
-function renderEtapasKpis() {
-  const el = document.getElementById('etapasKpis');
-  const totalParados = Object.values(etapasData.funis).reduce((acc, f) => acc + f.total_parados, 0);
-  el.innerHTML = `
-    <div class="kpi"><div class="label">Negócios parados (≥ ${etapasData.dias_limite} dias)</div><div class="value">${totalParados}</div></div>
-  `;
-}
-
-function toggleEtapaFunil(nome) {
-  etapasFunisAbertos[nome] = !etapasFunisAbertos[nome];
-  renderEtapasDashboard();
-}
-
-function toggleEtapaGrupo(chave) {
-  etapasEtapasAbertas[chave] = !etapasEtapasAbertas[chave];
-  renderEtapasDashboard();
-}
-
-function toggleColaboradorEtapa(itemId) {
-  const el = document.getElementById(itemId);
-  if (!el) return;
-  const aberto = el.style.display !== 'none';
-  el.style.display = aberto ? 'none' : 'block';
-  const seta = document.getElementById(itemId + '-seta');
-  if (seta) seta.textContent = aberto ? '▼' : '▲';
-}
-
-function renderDiasSemAtividade(dias) {
-  if (dias === null || dias === undefined) return '-';
-  if (dias <= 3) {
-    return `<span class="status-badge status-green">OK</span>`;
-  }
-  return `${dias} dias`;
-}
-
-function renderEtapaNegociosTable(negocios) {
-  return `
-    <table class="negocios-table">
-      <thead><tr><th>Negócio</th><th>Dias parado</th><th>Dias sem atividade</th><th>Dias sem anotações</th><th>Situação</th></tr></thead>
-      <tbody>
-        ${negocios.map(n => `
-          <tr>
-            <td><a href="${n.url}" target="_blank" rel="noopener">${n.nome || 'Negócio #' + n.id}</a></td>
-            <td>${n.dias_parado}</td>
-            <td>${renderDiasSemAtividade(n.dias_sem_atividade)}</td>
-            <td>${renderDiasSemAtividade(n.dias_sem_nota)}</td>
-            <td>${n.motivo ? `<span class="status-badge status-${n.motivo.startsWith('Acima') ? 'red' : 'yellow'}">${n.motivo}</span>` : '-'}</td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
-  `;
-}
-
-function renderEtapaPessoaTable(pessoas) {
-  if (!pessoas.length) return '<div class="empty">Nenhum negócio parado</div>';
-  return `
-    <div class="colab-list">
-      ${pessoas.map(p => {
-        const itemId = `colab-etapa-${dropdownCounter++}`;
-        return `
-          <div class="colab-item">
-            <div class="colab-item-header" onclick="toggleColaboradorEtapa('${itemId}')">
-              <span class="pessoa-nome">${p.nome}</span>
-              <span class="colab-item-seta" id="${itemId}-seta">▼</span>
-            </div>
-            <div class="colab-item-body" id="${itemId}" style="display: none;">
-              <div class="colab-item-stats">
-                <span>${cargoLabel(p.cargo)}</span>
-                <span>${p.quantidade} parado${p.quantidade === 1 ? '' : 's'}</span>
-                <span>${p.media_dias} / ${p.max_dias} dias (méd. / máx.)</span>
-              </div>
-              ${renderEtapaNegociosTable(p.negocios || [])}
-            </div>
-          </div>
-        `;
-      }).join('')}
-    </div>
-  `;
-}
-
-function renderEtapasDashboard() {
-  const el = document.getElementById('etapasDashboard');
-  el.innerHTML = '';
-
-  Object.entries(etapasData.funis).forEach(([funilNome, info]) => {
-    const abertoFunil = !!etapasFunisAbertos[funilNome];
-    const block = document.createElement('div');
-    block.className = 'funil-block';
-
-    const corpo = abertoFunil
-      ? `
-        <div class="funil-body">
-          ${info.etapas.length ? info.etapas.map(etapa => {
-            const chave = `${funilNome}::${etapa.etapa}`;
-            const abertoEtapa = !!etapasEtapasAbertas[chave];
-            return `
-              <div class="etapa-group">
-                <div class="etapa-header" onclick="toggleEtapaGrupo('${chave}')">
-                  <span>${etapa.etapa}</span>
-                  <span><span class="dias-tag">${etapa.total} parado${etapa.total === 1 ? '' : 's'}</span> ${abertoEtapa ? '▲' : '▼'}</span>
-                </div>
-                ${abertoEtapa ? renderEtapaPessoaTable(etapa.por_pessoa) : ''}
-              </div>
-            `;
-          }).join('') : '<div class="empty">Nenhum negócio parado nesse funil</div>'}
-        </div>
-      `
-      : '';
-
-    block.innerHTML = `
-      <div class="funil-header clickable-header" onclick="toggleEtapaFunil('${funilNome}')">
-        <span>${funilNome}</span>
-        <span class="funil-total-info">${info.total_parados} parados ${abertoFunil ? '▲' : '▼'}</span>
-      </div>
-      ${corpo}
-    `;
-    el.appendChild(block);
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Autenticação (login com papéis ADMIN / ELITE / OLYMPUS)
-// ---------------------------------------------------------------------------
-
-let TOKEN = sessionStorage.getItem('dash_token') || null;
-let USUARIO = sessionStorage.getItem('dash_user') || null;
-let PAPEL = sessionStorage.getItem('dash_papel') || null;
-
-function authHeaders() {
-  return TOKEN ? { 'Authorization': 'Bearer ' + TOKEN } : {};
-}
-function ehPriv() { return !!TOKEN; }
-
-function atualizaOpcoesFiltro() {
-  const select = document.getElementById('filterTime');
-  if (!select || !rawData) return;
-  const atual = select.value;
-  const times = Object.keys(rawData.funis || {});
-  select.innerHTML = '<option value="">Todos os times</option>' +
-    times.map(t => `<option value="${t}">${t.charAt(0) + t.slice(1).toLowerCase()}</option>`).join('');
-  if (times.includes(atual)) select.value = atual;
-}
-
-function abreLogin() {
-  document.getElementById('loginErro').textContent = '';
-  document.getElementById('in-user').value = '';
-  document.getElementById('in-pass').value = '';
-  document.getElementById('loginModal').classList.add('show');
-  document.getElementById('in-user').focus();
-}
-function fechaLogin() { document.getElementById('loginModal').classList.remove('show'); }
-
-async function fazLogin() {
-  const usuario = document.getElementById('in-user').value.trim();
-  const senha = document.getElementById('in-pass').value;
-  document.getElementById('loginErro').textContent = '';
+  const btn = document.getElementById("btnFiltrarPerdidos");
+  btn.disabled = true;
+  btn.textContent = "Filtrando...";
   try {
-    const res = await fetch('/api/login', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({usuario, senha}),
+    const params = new URLSearchParams({ perdidos_inicio: inicio, perdidos_fim: fim });
+    if (responsavel) params.set("perdidos_responsavel", responsavel);
+    const resp = await fetch(`${API_URL}?${params.toString()}`, { cache: "no-store" });
+    const data = await resp.json();
+    if (data.erro) throw new Error(data.erro);
+    const p = data.perdidos_periodo;
+    document.getElementById("resumoPerdidosGeral").innerHTML = `
+      <div class="perdidos-resumo-card">
+        <div class="rotulo">Perdidos no Período</div>
+        <div class="valor">${p.total ?? 0}</div>
+      </div>`;
+    document.getElementById("motivosPerdidosGeral").innerHTML =
+      `<div class="motivos-lista">${listaMotivos(p.motivos)}</div>`;
+    document.getElementById("btnLimparFiltroPerdidos").style.display = "";
+  } catch (e) {
+    alert("Erro ao filtrar: " + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Filtrar";
+  }
+}
+
+function limparFiltroPerdidos() {
+  document.getElementById("perdidosDataInicio").value = "";
+  document.getElementById("perdidosDataFim").value = "";
+  document.getElementById("perdidosResponsavel").value = "";
+  document.getElementById("btnLimparFiltroPerdidos").style.display = "none";
+  renderizarPerdidos(ultimaAnalisePerdidos || {});
+}
+
+let ultimaAnalisePerdidos = null;
+
+function renderizarPerdidos(analise) {
+  ultimaAnalisePerdidos = analise;
+  const geral = analise.geral || { total_mes: 0, total_hoje: 0, motivos: [] };
+  document.getElementById("resumoPerdidosGeral").innerHTML = `
+    <div class="perdidos-resumo-card">
+      <div class="rotulo">Perdidos Hoje</div>
+      <div class="valor">${geral.total_hoje ?? 0}</div>
+    </div>
+    <div class="perdidos-resumo-card">
+      <div class="rotulo">Perdidos no Mês</div>
+      <div class="valor">${geral.total_mes ?? 0}</div>
+    </div>`;
+
+  const seletorResp = document.getElementById("perdidosResponsavel");
+  if (seletorResp && seletorResp.options.length <= 1) {
+    (analise.responsaveis || []).forEach(nome => {
+      const opt = document.createElement("option");
+      opt.value = nome;
+      opt.textContent = nome;
+      seletorResp.appendChild(opt);
     });
-    const d = await res.json();
-    if (!res.ok) {
-      document.getElementById('loginErro').textContent = d.error || 'Falha no login';
-      return;
+  }
+
+  document.getElementById("motivosPerdidosGeral").innerHTML =
+    `<div class="motivos-lista">${listaMotivos(geral.motivos)}</div>`;
+
+  const porFunil = analise.por_funil || {};
+  document.getElementById("cardsPerdidosFunil").innerHTML = ["Olympus", "Elite", "Sniper"].map(squad => {
+    const dados = porFunil[squad] || { total_mes: 0, total_hoje: 0, motivos: [] };
+    return `
+      <div class="perdidos-funil-card">
+        <div class="perdidos-funil-titulo">${squad}</div>
+        <div class="perdidos-funil-resumo">
+          <span>Hoje: <strong>${dados.total_hoje ?? 0}</strong></span>
+          <span>Mês: <strong>${dados.total_mes ?? 0}</strong></span>
+        </div>
+        <div class="motivos-lista">${listaMotivos(dados.motivos)}</div>
+      </div>`;
+  }).join("");
+
+  function listaAuditoria(auditoria) {
+    if (!auditoria || auditoria.length === 0) {
+      return `<div class="status-vazio" style="padding:14px;">Nenhum motivo fora da regra encontrado 🎉</div>`;
     }
-    TOKEN = d.token; USUARIO = d.usuario; PAPEL = d.papel;
-    sessionStorage.setItem('dash_token', TOKEN);
-    sessionStorage.setItem('dash_user', USUARIO);
-    sessionStorage.setItem('dash_papel', PAPEL);
-    fechaLogin();
-    entrarNoApp();
-  } catch (e) {
-    document.getElementById('loginErro').textContent = 'Erro de conexão';
+    return auditoria.map(a => `
+      <div class="auditoria-etapa">
+        <div class="auditoria-etapa-titulo">${a.etapa} <span class="qtd">(${a.total} fora da regra)</span></div>
+        <div class="motivos-lista">${listaMotivos(a.motivos)}</div>
+      </div>`).join("");
   }
+
+  document.getElementById("auditoriaPerdidosGeral").innerHTML = listaAuditoria(geral.auditoria);
+
+  document.getElementById("cardsAuditoriaFunil").innerHTML = ["Olympus", "Elite", "Sniper"].map(squad => {
+    const dados = porFunil[squad] || { auditoria: [] };
+    return `
+      <div class="perdidos-funil-card">
+        <div class="perdidos-funil-titulo">${squad}</div>
+        ${listaAuditoria(dados.auditoria)}
+      </div>`;
+  }).join("");
 }
 
-function logout() {
-  TOKEN = null; USUARIO = null; PAPEL = null;
-  rawData = null; etapasData = null;
-  sessionStorage.removeItem('dash_token');
-  sessionStorage.removeItem('dash_user');
-  sessionStorage.removeItem('dash_papel');
-  atualizaAuthUI();
-  document.getElementById('appContent').style.display = 'none';
-  document.getElementById('loginGate').style.display = 'flex';
+function mostrarPagina(pagina) {
+  document.getElementById("paginaMetricas").style.display = pagina === "metricas" ? "" : "none";
+  document.getElementById("paginaProdutos").style.display = pagina === "produtos" ? "" : "none";
+  document.getElementById("paginaPerdidos").style.display = pagina === "perdidos" ? "" : "none";
+  document.getElementById("btnAbaMetricas").classList.toggle("ativa", pagina === "metricas");
+  document.getElementById("btnAbaProdutos").classList.toggle("ativa", pagina === "produtos");
+  document.getElementById("btnAbaPerdidos").classList.toggle("ativa", pagina === "perdidos");
 }
 
-function forcaLogout() {
-  // token expirou/inválido no meio da sessão
-  logout();
+function fmtMoeda(v) {
+  return (v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+}
+function fmtNum(v) {
+  return (v ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+}
+function pillClasse(pct) {
+  if (pct >= 100) return "ok";
+  if (pct >= 70) return "warn";
+  return "bad";
+}
+function pill(pct) {
+  return `<span class="pill ${pillClasse(pct)}">${fmtNum(pct)}%</span>`;
 }
 
-function atualizaAuthUI() {
-  if (ehPriv()) {
-    document.getElementById('authWho').textContent = `● ${USUARIO} (${PAPEL})`;
-    document.getElementById('btnAuth').textContent = 'Sair';
-  } else {
-    document.getElementById('authWho').textContent = '';
-    document.getElementById('btnAuth').textContent = 'Entrar';
+let premissasAtual = {};
+function fmtMoedaComPct(pctKey) {
+  return (v) => `${fmtMoeda(v)} <span style="color:var(--muted);font-size:11px;">(${fmtNum(premissasAtual[pctKey] ?? 0)}%)</span>`;
+}
+function fmtNumComPct(pctKey) {
+  return (v) => `${fmtNum(v)} <span style="color:var(--muted);font-size:11px;">(${fmtNum(premissasAtual[pctKey] ?? 0)}%)</span>`;
+}
+
+const METRICAS_FINANCEIRO = [
+  { label: "Meta Mês",                   key: "meta_mes",                fmt: fmtMoeda },
+  { label: "Meta Dia",                   key: "meta_dia",                 fmt: fmtMoeda },
+  { label: "Realizado Bruto",            key: "realizado_bruto",          fmt: fmtMoeda },
+  { label: "Realizado Multiplicador",    key: "realizado_multiplicador",  fmt: fmtMoeda },
+  { label: "Deveria (100%) - MTD",       key: "onde_deveria_100",         fmt: fmtMoedaComPct("ritmo_100_pct") },
+  { label: "Deveria (40%) - MTD",        key: "onde_deveria_40",          fmt: fmtMoedaComPct("ritmo_40_pct") },
+  { label: "Atingimento",                key: "atingimento",              fmt: pill },
+  { label: "Gap 100%",                   key: "gap_100",                  fmt: fmtMoeda },
+  { label: "Gap 40%",                    key: "gap_40",                   fmt: fmtMoeda },
+  { label: "Meta/Dia 40%",               key: "meta_dia_40",              fmt: fmtMoeda },
+  { label: "Meta/Dia 100%",              key: "meta_dia_100",             fmt: fmtMoeda },
+  { label: "Meta/Dia 100% (Bruto)",      key: "meta_dia_100_bruto",       fmt: fmtMoeda },
+  { label: "Previsto Ontem",             key: "previsto_ontem_media",     fmt: fmtMoeda, grupo: "ontem" },
+  { label: "Entrou Ontem (Multiplicador)", key: "ontem",                  fmt: fmtMoeda, grupo: "ontem" },
+  { label: "Entrou Ontem (Bruto)",       key: "ontem_bruto",              fmt: fmtMoeda, grupo: "ontem" },
+  { label: "Previsto Hoje",              key: "previsto_hoje_media",      fmt: fmtMoeda, grupo: "hoje" },
+  { label: "Em Aberto Hoje",             key: "em_aberto_hoje",           fmt: fmtMoeda, grupo: "hoje" },
+  { label: "Entrou Hoje (Multiplicador)", key: "hoje",                    fmt: fmtMoeda, grupo: "hoje" },
+  { label: "Entrou Hoje (Bruto)",        key: "hoje_bruto",               fmt: fmtMoeda, grupo: "hoje" },
+];
+
+const METRICAS_SNIPER = [
+  { label: "Meta Mês",             key: "meta_mes_reunioes",    fmt: v => v },
+  { label: "Meta Dia",             key: "meta_dia_reunioes",    fmt: fmtNum },
+  { label: "Realizado",            key: "realizado_reunioes",   fmt: v => v },
+  { label: "Deveria (100%) - MTD", key: "onde_deveria_100",     fmt: fmtNumComPct("ritmo_100_pct") },
+  { label: "Deveria (40%) - MTD",  key: "onde_deveria_40",      fmt: fmtNumComPct("ritmo_40_pct") },
+  { label: "Atingimento",          key: "atingimento",          fmt: pill },
+  { label: "Gap 100%",             key: "gap_100",              fmt: fmtNum },
+  { label: "Gap 40%",              key: "gap_40",               fmt: fmtNum },
+  { label: "Meta/Dia 40%",         key: "meta_dia_40",          fmt: fmtNum },
+  { label: "Meta/Dia 100%",        key: "meta_dia_100",         fmt: fmtNum },
+  { label: "Previsto Ontem",       key: "previsto_ontem",        fmt: v => v, grupo: "ontem" },
+  { label: "Realizadas Ontem",     key: "dia_anterior_reunioes", fmt: v => v, grupo: "ontem" },
+  { label: "Gap Ontem",            key: "gap_ontem",             fmt: v => v, grupo: "ontem" },
+  { label: "Novos Leads Ontem",    key: "novos_leads_ontem",     fmt: v => v, grupo: "ontem" },
+  { label: "Previsto Hoje",        key: "previsto_hoje",         fmt: v => v, grupo: "hoje" },
+  { label: "Realizadas Hoje",      key: "reunioes_hoje",         fmt: v => v, grupo: "hoje" },
+  { label: "Gap Hoje",             key: "gap_hoje",              fmt: v => v, grupo: "hoje" },
+  { label: "Novos Leads Hoje",     key: "novos_leads_hoje",      fmt: v => v, grupo: "hoje" },
+];
+
+function classesGrupo(grupo) {
+  if (!grupo) return "";
+  return `grupo-${grupo} grupo-inicio`;
+}
+
+let mesAtualSelecionado = true;
+
+function tabelaTransposta(metricas, colunas) {
+  // colunas: [{label, dados, isTotal}]
+  const linhas = mesAtualSelecionado ? metricas : metricas.filter(m => !m.grupo);
+  return linhas.map(m => `
+    <tr>
+      <td class="${classesGrupo(m.grupo)}">${m.label}</td>
+      ${colunas.map(c => `<td class="${c.isTotal ? 'total ' : ''}${classesGrupo(m.grupo)}">${m.fmt(c.dados[m.key])}</td>`).join("")}
+    </tr>`).join("");
+}
+
+const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+
+function popularSeletores() {
+  const hoje = new Date();
+  const anoAtual = hoje.getFullYear();
+  const mesAtual = hoje.getMonth() + 1; // 1-12
+  const selMes = document.getElementById("seletorMes");
+  const selAno = document.getElementById("seletorAno");
+
+  MESES.forEach((nome, i) => {
+    const opt = document.createElement("option");
+    opt.value = i + 1;
+    opt.textContent = nome;
+    selMes.appendChild(opt);
+  });
+
+  for (let ano = anoAtual; ano >= 2026; ano--) {
+    const opt = document.createElement("option");
+    opt.value = ano;
+    opt.textContent = ano;
+    selAno.appendChild(opt);
   }
-}
 
-function entrarNoApp() {
-  atualizaAuthUI();
-  document.getElementById('loginGate').style.display = 'none';
-  document.getElementById('appContent').style.display = 'block';
-  loadData();
+  selMes.value = mesAtual;
+  selAno.value = anoAtual;
 }
+popularSeletores();
 
-async function validaTokenSalvo() {
-  if (!TOKEN) { atualizaAuthUI(); return; }
+async function atualizar() {
+  const btn = document.getElementById("refresh");
+  const erroBox = document.getElementById("erro");
+  const mesSelecionado = document.getElementById("seletorMes").value;
+  const anoSelecionado = document.getElementById("seletorAno").value;
+  btn.disabled = true;
+  btn.textContent = "Atualizando...";
+  erroBox.style.display = "none";
   try {
-    const me = await (await fetch('/api/me', { headers: authHeaders() })).json();
-    if (!me.autenticado) {
-      TOKEN = null; USUARIO = null; PAPEL = null;
-      sessionStorage.removeItem('dash_token');
-      sessionStorage.removeItem('dash_user');
-      sessionStorage.removeItem('dash_papel');
-      atualizaAuthUI();
-      return;
+    const resp = await fetch(`${API_URL}?mes=${mesSelecionado}&ano=${anoSelecionado}`, { cache: "no-store" });
+    const data = await resp.json();
+    if (data.erro) throw new Error(data.erro);
+    premissasAtual = data.premissas || {};
+    const nomeMes = MESES[(data.mes || 1) - 1];
+    document.getElementById("badgeDiasUteis").innerHTML =
+      `${nomeMes} ${data.ano} · <span class="destaque">${premissasAtual.dias_uteis_passados ?? "—"}/${premissasAtual.dias_uteis_total ?? "—"}</span> dias úteis · <span class="destaque">${premissasAtual.dias_uteis_restantes ?? "—"}</span> restantes`;
+    mesAtualSelecionado = !!data.e_mes_atual;
+    document.getElementById("secaoProdutos").style.display = mesAtualSelecionado ? "" : "none";
+
+    document.getElementById("tabelaFinanceiro").innerHTML = tabelaTransposta(METRICAS_FINANCEIRO, [
+      { dados: data.squads.Olympus },
+      { dados: data.squads.Elite },
+      { dados: data.squads.Total, isTotal: true },
+    ]);
+
+    document.getElementById("tabelaSniper").innerHTML = tabelaTransposta(METRICAS_SNIPER, [
+      { dados: data.squads.Sniper },
+    ]);
+
+    const numeros = data.produtos_em_aberto_detalhes || {};
+    const linhasProdutos = ["PFCC", "CES", "LEAN", "ABP", "COAUTORIA", "Não classificado"];
+
+    function totalGeralNovosLeads(chave) {
+      return ["Sniper", "Navigator"].reduce((soma, squad) =>
+        soma + linhasProdutos.reduce((s2, p) => s2 + (((numeros[squad] || {})[p] || {})[chave] ?? 0), 0), 0);
     }
-    USUARIO = me.usuario; PAPEL = me.papel;
-    entrarNoApp();
+    const mql = data.mql_pfcc || { hoje: 0, mes: 0 };
+    const reapl = data.reaplicacoes || { hoje: 0, mes: 0, taxa_mes_pct: 0 };
+    document.getElementById("resumoNovosLeadsProdutos").innerHTML = `
+      <div class="perdidos-resumo-card card-destaque-suave">
+        <div class="rotulo">Novos MQL's/Leads Hoje - Geral</div>
+        <div class="valor">${totalGeralNovosLeads("novos_hoje")}</div>
+      </div>
+      <div class="perdidos-resumo-card card-destaque-suave">
+        <div class="rotulo">Novos MQL's/Leads Mês - Geral</div>
+        <div class="valor">${totalGeralNovosLeads("novos_mes")}</div>
+      </div>
+      <div class="perdidos-resumo-card card-destaque-suave">
+        <div class="rotulo">Reaplicações Mês - Geral</div>
+        <div class="valor">${reapl.mes ?? 0} <span class="valor-taxa">(${reapl.taxa_mes_pct ?? 0}% de taxa)</span></div>
+      </div>
+      <div class="perdidos-resumo-card">
+        <div class="rotulo">Novos MQL's <strong>PFCC</strong> — Hoje</div>
+        <div class="valor">${mql.hoje ?? 0}</div>
+      </div>
+      <div class="perdidos-resumo-card">
+        <div class="rotulo">Novos MQL's <strong>PFCC</strong> — Mês (Novos)</div>
+        <div class="valor">${mql.mes_novos ?? 0}</div>
+      </div>
+      <div class="perdidos-resumo-card">
+        <div class="rotulo">Novos MQL's <strong>PFCC</strong> — Mês (Reaplicados)</div>
+        <div class="valor">${mql.mes_reaplicados ?? 0}</div>
+      </div>
+      <div class="perdidos-resumo-card">
+        <div class="rotulo">Novos MQL's <strong>PFCC</strong> — Mês (Total)</div>
+        <div class="valor">${mql.mes ?? 0}</div>
+      </div>`;
+    const CATEGORIAS = [
+      { key: "abertos", label: "Abertos" },
+      { key: "novos_hoje", label: "Novos Leads Hoje", destaque: true, listaKey: "novos_hoje_lista" },
+      { key: "novos_ontem", label: "Novos Leads Ontem", destaque: true, listaKey: "novos_ontem_lista" },
+      { key: "novos_mes", label: "Novos Leads Mês", destaque: true, listaKey: "novos_mes_lista" },
+      { key: "reaplicacoes_hoje", label: "Reaplicações Hoje", destaque: true, listaKey: "reaplicacoes_hoje_lista" },
+      { key: "reaplicacoes_mes", label: "Reaplicações Mês", destaque: true, listaKey: "reaplicacoes_mes_lista" },
+      { key: "perdidos_mes", label: "Perdidos - Mês" },
+      { key: "perdidos_hoje", label: "Perdidos - Hoje" },
+      { key: "ganhos_mes", label: "Ganhos - Mês", listaKey: "ganhos_mes_lista" },
+      { key: "ganhos_hoje", label: "Ganhos - Hoje", listaKey: "ganhos_hoje_lista" },
+    ];
+
+    function listaIds(lista) {
+      if (!lista || lista.length === 0) return "<div class=\"status-vazio\">Nenhum</div>";
+      return lista.map(n => `<a class="status-id-item" href="${n.url}" target="_blank" rel="noopener">#${n.id}</a>`).join("");
+    }
+
+    function totalAbertosProduto(produto) {
+      return ["Olympus", "Elite", "Sniper", "Navigator"].reduce(
+        (soma, squad) => soma + (((numeros[squad] || {})[produto] || {}).abertos ?? 0), 0
+      );
+    }
+
+    function blocoSquad(squad, produto) {
+      const dadosProduto = ((numeros[squad] || {})[produto]) || {};
+      const squadsComNovosLeads = ["Sniper", "Navigator"];
+      let categorias = CATEGORIAS;
+      if (squad === "Sniper") categorias = categorias.filter(c => !c.key.startsWith("ganhos"));
+      if (!squadsComNovosLeads.includes(squad)) categorias = categorias.filter(c => !c.key.startsWith("novos_") && !c.key.startsWith("reaplicacoes_"));
+      const grupos = categorias.map(cat => {
+        if (cat.listaKey) {
+          const lista = dadosProduto[cat.listaKey] || [];
+          return `
+            <details class="status-grupo-dropdown${cat.destaque ? ' status-grupo-destaque' : ''}">
+              <summary><span class="status-titulo">${cat.label}:</span> <span class="status-numero">${dadosProduto[cat.key] ?? 0}</span></summary>
+              <div class="status-ids-lista">${listaIds(lista)}</div>
+            </details>`;
+        }
+        return `
+          <div class="status-grupo${cat.destaque ? ' status-grupo-destaque' : ''}">
+            <span class="status-titulo">${cat.label}:</span>
+            <span class="status-numero">${dadosProduto[cat.key] ?? 0}</span>
+          </div>`;
+      }).join("");
+      return `
+        <div class="produto-squad">
+          <div class="produto-squad-titulo">${squad}</div>
+          ${grupos}
+        </div>`;
+    }
+
+    document.getElementById("cardsProdutos").innerHTML = linhasProdutos.map(p => `
+      <details class="produto-card">
+        <summary>${p} <span class="produto-total-abertos">Total aberto: ${totalAbertosProduto(p)}</span></summary>
+        <div class="produto-squads produto-squads-4">
+          ${blocoSquad("Olympus", p)}
+          ${blocoSquad("Elite", p)}
+          ${blocoSquad("Sniper", p)}
+          ${blocoSquad("Navigator", p)}
+        </div>
+      </details>`).join("");
+
+    renderizarPerdidos(data.perdidos_analise || {});
+
+    document.getElementById("ultimaAtualizacao").textContent =
+      "Atualizado às " + new Date(data.geradoEm).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo" });
   } catch (e) {
-    atualizaAuthUI();
+    erroBox.textContent = "Erro ao atualizar: " + e.message;
+    erroBox.style.display = "block";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Atualizar painel";
   }
 }
 
-document.getElementById('btnAuth').addEventListener('click', () => { ehPriv() ? logout() : abreLogin(); });
-document.getElementById('loginCancel').addEventListener('click', fechaLogin);
-document.getElementById('loginOk').addEventListener('click', fazLogin);
-document.getElementById('in-pass').addEventListener('keydown', e => { if (e.key === 'Enter') fazLogin(); });
-document.getElementById('loginModal').addEventListener('click', e => { if (e.target.id === 'loginModal') fechaLogin(); });
-
-setInterval(() => { if (ehPriv()) loadData(); }, 30 * 60 * 1000);
-validaTokenSalvo();
+atualizar();
+setInterval(atualizar, INTERVALO_MS);
 </script>
 
 </body>
