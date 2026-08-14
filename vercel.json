@@ -1,4 +1,15 @@
 {
+  "functions": {
+    "api/dashboard.py": {
+      "maxDuration": 60
+    },
+    "api/login.py": {
+      "maxDuration": 15
+    },
+    "api/me.py": {
+      "maxDuration": 15
+    }
+  },
   "rewrites": [
     { "source": "/", "destination": "/public/index.html" }
   ]
