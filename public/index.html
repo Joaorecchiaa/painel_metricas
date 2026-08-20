@@ -342,6 +342,28 @@
   .motivo-colaboradores { padding: 6px 14px 10px 28px; background: #fafafa; }
   .papel-grupo { margin-bottom: 8px; }
   .papel-titulo { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); margin-bottom: 4px; }
+
+  .bloco-ba { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .bloco-ba .papel-titulo {
+    background: #0b0b0f;
+    color: #fff;
+    margin: 0;
+    padding: 8px 14px;
+    font-size: 10.5px;
+  }
+  .ba-linha {
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    padding: 6px 14px;
+    font-size: 12px;
+    border-bottom: 1px solid #ececec;
+  }
+  .ba-linha:last-child { border-bottom: none; }
+  .ba-linha:nth-child(even) { background: #f4f6f8; }
+  .ba-nome { flex: 0 0 78px; font-weight: 700; color: var(--ink); }
+  .ba-metrica { color: var(--muted); white-space: nowrap; }
+  .ba-metrica strong { color: var(--ink); font-weight: 700; }
   .colaborador-dropdown { border-bottom: 1px solid #f0f0f0; }
   .colaborador-dropdown:last-child { border-bottom: none; }
   .colaborador-dropdown summary {
@@ -509,21 +531,21 @@
 
     <h2 class="titulo-tabela">QUANTO ESTAMOS DA META</h2>
     <div id="metaCardsPrincipais" class="perdidos-resumo"></div>
-    <div id="metaMqlPorProduto" class="motivos-lista" style="margin-top:12px;"></div>
-    <div id="metaGanhosPorProduto" class="motivos-lista" style="margin-top:12px;"></div>
+    <div id="metaMqlPorProduto" class="bloco-ba" style="margin-top:12px;"></div>
+    <div id="metaGanhosPorProduto" class="bloco-ba" style="margin-top:12px;"></div>
     <div id="metaTaxas" class="perdidos-resumo" style="margin-top:12px;"></div>
     <div id="metaGargalo" class="perdidos-bloqueado" style="text-align:left; margin-top:12px;"></div>
 
     <h2 class="titulo-tabela">NO MÊS, NO GERAL</h2>
     <div id="geralCardsPrincipais" class="perdidos-resumo"></div>
-    <div id="geralLeadsPorProduto" class="motivos-lista" style="margin-top:12px;"></div>
-    <div id="geralMqlPorProduto2" class="motivos-lista" style="margin-top:12px;"></div>
-    <div id="geralMqlHojeOntemPorProduto" class="motivos-lista" style="margin-top:12px;"></div>
-    <div id="geralTkmPorProduto" class="motivos-lista" style="margin-top:12px;"></div>
+    <div id="geralLeadsPorProduto" class="bloco-ba" style="margin-top:12px;"></div>
+    <div id="geralMqlPorProduto2" class="bloco-ba" style="margin-top:12px;"></div>
+    <div id="geralMqlHojeOntemPorProduto" class="bloco-ba" style="margin-top:12px;"></div>
+    <div id="geralTkmPorProduto" class="bloco-ba" style="margin-top:12px;"></div>
 
     <h2 class="titulo-tabela">HISTÓRICO CONSOLIDADO (JAN–JUN/2026)</h2>
     <div id="historicoResumo" class="perdidos-resumo"></div>
-    <div id="historicoMix" class="motivos-lista" style="margin-top:12px;"></div>
+    <div id="historicoMix" class="bloco-ba" style="margin-top:12px;"></div>
 
   </div>
 </div>
@@ -811,10 +833,10 @@ function cardMetaBA(rotulo, realizado, meta, pct, formatador) {
 }
 function linhaMotivoSimplesBA(nome, valor1, rotulo1, valor2, rotulo2) {
   return `
-    <div class="motivo-linha" style="cursor:default;">
-      <span class="motivo-nome">${nome}</span>
-      <span class="motivo-qtd">${rotulo1}: <strong>${valor1}</strong></span>
-      <span class="motivo-pct">${rotulo2}: <strong>${valor2}</strong></span>
+    <div class="ba-linha">
+      <span class="ba-nome">${nome}</span>
+      <span class="ba-metrica">${rotulo1}: <strong>${valor1}</strong></span>
+      <span class="ba-metrica">${rotulo2}: <strong>${valor2}</strong></span>
     </div>`;
 }
 
@@ -860,14 +882,14 @@ function renderizarMetasBA(m) {
     cardMetaBA("Receita", q.receita.realizado, q.receita.meta, q.receita.pct, fmtMoedaBA);
 
   document.getElementById("metaMqlPorProduto").innerHTML =
-    `<div class="papel-titulo" style="padding:8px 14px 0;">MQL por produto (meta)</div>` +
+    `<div class="papel-titulo">MQL por produto (meta)</div>` +
     ["PFCC", "LEAN", "CES"].map(p => {
       const d = q.mql.por_produto[p] || { realizado: 0, meta: 0 };
       return linhaMotivoSimplesBA(p, d.realizado, "Realizado", d.meta, "Meta");
     }).join("");
 
   document.getElementById("metaGanhosPorProduto").innerHTML =
-    `<div class="papel-titulo" style="padding:8px 14px 0;">Ganhos por produto (meta)</div>` +
+    `<div class="papel-titulo">Ganhos por produto (meta)</div>` +
     Object.keys(q.ganhos.por_produto).map(p => {
       const d = q.ganhos.por_produto[p];
       return linhaMotivoSimplesBA(p, d.realizado, "Realizado", d.meta, "Meta");
@@ -931,35 +953,35 @@ function renderizarMetasBA(m) {
     </div>`;
 
   document.getElementById("geralLeadsPorProduto").innerHTML =
-    `<div class="papel-titulo" style="padding:8px 14px 0;">Leads por produto</div>` +
+    `<div class="papel-titulo">Leads por produto</div>` +
     Object.keys(g.leads_por_produto).map(p => linhaMotivoSimplesBA(p, g.leads_por_produto[p], "Leads", g.receita_por_produto?.[p] ?? "-", "—")).join("");
 
   document.getElementById("geralMqlPorProduto2").innerHTML =
-    `<div class="papel-titulo" style="padding:8px 14px 0;">MQL / Ganhos / Receita por produto</div>` +
+    `<div class="papel-titulo">MQL / Ganhos / Receita por produto</div>` +
     Array.from(new Set([...Object.keys(g.mql_por_produto), ...Object.keys(g.ganhos_por_produto)])).map(p => `
-      <div class="motivo-linha" style="cursor:default;">
-        <span class="motivo-nome">${p}</span>
-        <span class="motivo-qtd">MQL: <strong>${g.mql_por_produto[p] ?? 0}</strong></span>
-        <span class="motivo-qtd">Ganhos: <strong>${g.ganhos_por_produto[p] ?? 0}</strong></span>
-        <span class="motivo-pct">${fmtMoedaBA(g.receita_por_produto[p] ?? 0)}</span>
+      <div class="ba-linha">
+        <span class="ba-nome">${p}</span>
+        <span class="ba-metrica">MQL: <strong>${g.mql_por_produto[p] ?? 0}</strong></span>
+        <span class="ba-metrica">Ganhos: <strong>${g.ganhos_por_produto[p] ?? 0}</strong></span>
+        <span class="ba-metrica">${fmtMoedaBA(g.receita_por_produto[p] ?? 0)}</span>
       </div>`).join("");
 
   const produtosMqlHojeOntem = ["PFCC", "LEAN", "CES"];
   document.getElementById("geralMqlHojeOntemPorProduto").innerHTML =
-    `<div class="papel-titulo" style="padding:8px 14px 0;">MQL Hoje / Ontem por produto</div>` +
+    `<div class="papel-titulo">MQL Hoje / Ontem por produto</div>` +
     produtosMqlHojeOntem.map(p => `
-      <div class="motivo-linha" style="cursor:default;">
-        <span class="motivo-nome">${p}</span>
-        <span class="motivo-qtd">Hoje: <strong>${(g.mql_hoje_por_produto || {})[p] ?? 0}</strong></span>
-        <span class="motivo-pct">Ontem: <strong>${(g.mql_ontem_por_produto || {})[p] ?? 0}</strong></span>
+      <div class="ba-linha">
+        <span class="ba-nome">${p}</span>
+        <span class="ba-metrica">Hoje: <strong>${(g.mql_hoje_por_produto || {})[p] ?? 0}</strong></span>
+        <span class="ba-metrica">Ontem: <strong>${(g.mql_ontem_por_produto || {})[p] ?? 0}</strong></span>
       </div>`).join("");
 
   document.getElementById("geralTkmPorProduto").innerHTML =
-    `<div class="papel-titulo" style="padding:8px 14px 0;">Ticket Médio Realizado (TKM) — Blended: ${fmtMoedaBA(g.tkm_blended)}</div>` +
+    `<div class="papel-titulo">Ticket Médio Realizado (TKM) — Blended: ${fmtMoedaBA(g.tkm_blended)}</div>` +
     Object.keys(g.tkm_por_produto).map(p => `
-      <div class="motivo-linha" style="cursor:default;">
-        <span class="motivo-nome">${p}</span>
-        <span class="motivo-qtd">${fmtMoedaBA(g.tkm_por_produto[p])}</span>
+      <div class="ba-linha">
+        <span class="ba-nome">${p}</span>
+        <span class="ba-metrica">${fmtMoedaBA(g.tkm_por_produto[p])}</span>
       </div>`).join("");
 
   // ---- Seção 3: Histórico consolidado ----
@@ -978,13 +1000,13 @@ function renderizarMetasBA(m) {
     </div>`;
 
   document.getElementById("historicoMix").innerHTML =
-    `<div class="papel-titulo" style="padding:8px 14px 0;">Mix histórico de produto</div>` +
+    `<div class="papel-titulo">Mix histórico de produto</div>` +
     h.mix.map(item => `
-      <div class="motivo-linha" style="cursor:default;">
-        <span class="motivo-nome">${item.produto}</span>
+      <div class="ba-linha">
+        <span class="ba-nome">${item.produto}</span>
         <div class="motivo-barra-wrap"><div class="motivo-barra" style="width:${item.pct}%"></div></div>
-        <span class="motivo-qtd">${item.qtd} negócios</span>
-        <span class="motivo-pct">${item.pct}%</span>
+        <span class="ba-metrica">${item.qtd} negócios</span>
+        <span class="ba-metrica"><strong>${item.pct}%</strong></span>
       </div>`).join("");
 }
 
