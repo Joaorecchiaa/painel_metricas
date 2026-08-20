@@ -38,6 +38,17 @@
   .header-esquerda { display: flex; align-items: center; gap: 14px; }
   h1 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; color: #fff; }
   h2.titulo-tabela { font-size: 12px; font-weight: 600; margin: 18px 0 8px; color: var(--ink); }
+  h2.titulo-ba-destaque {
+    background: #0b0b0f;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 10px 16px;
+    margin: 26px 0 12px;
+    border-radius: 8px;
+    border-left: 4px solid #fbbf24;
+  }
   .abas {
     display: flex;
     gap: 4px;
@@ -529,21 +540,21 @@
   <div id="metasBaCarregando" class="status-vazio" style="padding:20px 0;">Clique em "Metas BA" pra carregar (consulta pesada — só busca quando você abre a aba)</div>
   <div id="metasBaConteudo" style="display:none;">
 
-    <h2 class="titulo-tabela">QUANTO ESTAMOS DA META</h2>
+    <h2 class="titulo-tabela titulo-ba-destaque">QUANTO ESTAMOS DA META</h2>
     <div id="metaCardsPrincipais" class="perdidos-resumo"></div>
     <div id="metaMqlPorProduto" class="bloco-ba" style="margin-top:12px;"></div>
     <div id="metaGanhosPorProduto" class="bloco-ba" style="margin-top:12px;"></div>
     <div id="metaTaxas" class="perdidos-resumo" style="margin-top:12px;"></div>
     <div id="metaGargalo" class="perdidos-bloqueado" style="text-align:left; margin-top:12px;"></div>
 
-    <h2 class="titulo-tabela">NO MÊS, NO GERAL</h2>
+    <h2 class="titulo-tabela titulo-ba-destaque">NO MÊS, NO GERAL</h2>
     <div id="geralCardsPrincipais" class="perdidos-resumo"></div>
     <div id="geralLeadsPorProduto" class="bloco-ba" style="margin-top:12px;"></div>
     <div id="geralMqlPorProduto2" class="bloco-ba" style="margin-top:12px;"></div>
     <div id="geralMqlHojeOntemPorProduto" class="bloco-ba" style="margin-top:12px;"></div>
     <div id="geralTkmPorProduto" class="bloco-ba" style="margin-top:12px;"></div>
 
-    <h2 class="titulo-tabela">HISTÓRICO CONSOLIDADO (JAN–JUN/2026)</h2>
+    <h2 class="titulo-tabela titulo-ba-destaque">HISTÓRICO CONSOLIDADO (JAN–JUN/2026)</h2>
     <div id="historicoResumo" class="perdidos-resumo"></div>
     <div id="historicoMix" class="bloco-ba" style="margin-top:12px;"></div>
 
