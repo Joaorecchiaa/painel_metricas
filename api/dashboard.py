@@ -19,6 +19,7 @@ import calendar
 import math
 import functools
 import socket
+import re
 import datetime as dt
 from http.server import BaseHTTPRequestHandler
 from urllib.request import Request, urlopen
@@ -51,13 +52,16 @@ CF_CARGO_NEGOCIO = "718c8aba81211c883ffd9f4616f75ee22a10b2da"  # campo "Cargo" d
 CF_PONTUACAO = "673fc401f8cb6d72a16ee7775464f80ec974e2b6"  # "Pontuação"/score — só roda pra LEAN e CES
 
 # Lista MQL_BASE da skill "filtros-mqls-pipedrive" — usada pra achar o Cargo que qualifica um lead PFCC como MQL
-PALAVRAS_MQL = [
-    "socio", "sócio", "partner", "founder", "fundador", "proprietario", "proprietário", "propr", "owner",
+PALAVRAS_MQL_EXATAS = [
+    "socio", "sócio", "partner", "founder", "fundador", "proprietario", "proprietário", "owner",
     "empresario", "empresário", "entrepreneur", "presidente", "president",
     "ceo", "cmo", "cto", "coo", "cfo", "cpo", "ciso", "chro", "cro", "cio", "chief",
-    "c-level", "c level", "vice-presidente", "vice", "vp",
-    "conselh", "diretor", "director", "advisor", "board member",
+    "c-level", "c level", "vice-presidente", "vp",
+    "director", "advisor", "board member",
 ]
+PALAVRAS_MQL_PREFIXO = ["conselh", "diretor"]  # conselh* / diretor* — aceita continuação (conselheiro, diretoria...)
+# mantido só pra compatibilidade de quem ainda importa PALAVRAS_MQL diretamente
+PALAVRAS_MQL = PALAVRAS_MQL_EXATAS + PALAVRAS_MQL_PREFIXO
 
 PRODUTOS = ["PFCC", "CES", "LEAN", "ABP", "COAUTORIA"]
 
@@ -902,6 +906,21 @@ def _pipeline_id_do_squad(squad_interno):
     return buscar_pipeline_id_por_nome(SQUAD_NOME_PIPELINE[squad_interno])
 
 
+def _cargo_eh_mql(cargo_raw):
+    """Cargo contém um termo da lista MQL — com word-boundary nas siglas curtas,
+    pra 'cio'/'cro'/'vp' etc não baterem dentro de palavras comuns tipo 'negócios'."""
+    cargo_norm = norm(cargo_raw or "")
+    if not cargo_norm:
+        return False
+    for termo in PALAVRAS_MQL_EXATAS:
+        if re.search(r"\b" + re.escape(norm(termo)) + r"\b", cargo_norm):
+            return True
+    for termo in PALAVRAS_MQL_PREFIXO:
+        if re.search(r"\b" + re.escape(norm(termo)), cargo_norm):
+            return True
+    return False
+
+
 def analisar_mql_pfcc(ano, mes, hoje):
     """'NOVOS MQL's PFCC' — skill 'filtros-mqls-pipedrive': negócio precisa ser um PFCC
     válido (utm sem exclusões, sem placeholder) + utm_source != 'org' + Cargo contendo
@@ -937,13 +956,10 @@ def analisar_mql_pfcc(ano, mes, hoje):
 
             if not _pfcc_valido(cf_valor(d, CF_UTM_CAMPAIGN)):
                 continue
-            if norm(cf_valor(d, CF_UTM_SOURCE)) == "org":
-                continue
             cargo = cf_valor(d, CF_CARGO_NEGOCIO)
             if not (cargo and str(cargo).strip()):
                 continue
-            cargo_norm = norm(cargo)
-            if not any(norm(palavra) in cargo_norm for palavra in PALAVRAS_MQL):
+            if not _cargo_eh_mql(cargo):
                 continue
 
             valor_data = str(cf_valor(d, CF_DATA_ULTIMA_APLICACAO) or "")
@@ -966,6 +982,266 @@ def analisar_mql_pfcc(ano, mes, hoje):
         "mes_novos": total_mes_novos,
         "mes_reaplicados": total_mes_reaplicados,
     }
+
+
+# ---------------------------------------------------------------------------
+# ABA "METAS BOARD ACADEMY" — spec-painel-metas-board-academy.md
+# Sempre nos 4 pipelines: Sniper(88) + Elite(87) + Olympus(46) + Navigator(51).
+# ---------------------------------------------------------------------------
+PIPELINE_ID_OLYMPUS_BA = 46
+PIPELINE_ID_ELITE_BA = 87
+PIPELINES_METAS_BA = {"Sniper": PIPELINE_ID_SNIPER, "Elite": PIPELINE_ID_ELITE_BA,
+                       "Olympus": PIPELINE_ID_OLYMPUS_BA, "Navigator": PIPELINE_ID_NAVIGATOR}
+
+META_RECEITA_MES = 2_700_000.0
+META_TKM_BLENDED = 13140.34
+META_GANHOS_MES = 206
+META_GANHOS_POR_PRODUTO = {"PFCC": 155, "LEAN": 17, "CES": 8, "ABP": 5, "Outros": 21}
+TX_MQL_PARA_GANHO = 0.05
+TX_LEAD_PARA_MQL = 0.44
+META_MQL_TOTAL = 4120
+META_MQL_POR_PRODUTO = {"PFCC": 3100, "LEAN": 340, "CES": 160}
+META_LEADS_TOTAL = 9364
+TKM_FIXO_POR_PRODUTO = {"PFCC": 15000.0, "LEAN": 8990.0, "CES": 12990.0, "ABP": 25000.0}
+
+HISTORICO_JAN_JUN_2026 = {
+    "negocios_criados": 22442,
+    "negocios_ganhos": 445,
+    "tx_conversao_pct": 1.98,
+    "mix": [
+        {"produto": "PFCC", "qtd": 334, "pct": 75.06},
+        {"produto": "LEAN", "qtd": 38, "pct": 8.54},
+        {"produto": "CES", "qtd": 17, "pct": 3.82},
+        {"produto": "ABP", "qtd": 11, "pct": 2.47},
+        {"produto": "Outros", "qtd": 45, "pct": 10.11},
+    ],
+}
+
+
+def _produto_lead_gerado_ba(deal):
+    """2.2 — Leads Gerados por produto: cascata simples via utm_campaign."""
+    utm = norm(cf_valor(deal, CF_UTM_CAMPAIGN) or "")
+    if "lean" in utm:
+        return "LEAN"
+    if "ces" in utm:
+        return "CES"
+    if "pfcc" in utm and "workshop" not in utm:
+        return "PFCC"
+    return "Outros"
+
+
+def _mql_lean_ces_ba(deal):
+    """2.3 — LEAN/CES: Pontuação >= 6 (utm já garantido por quem chama)."""
+    try:
+        pontuacao_raw = cf_valor(deal, CF_PONTUACAO)
+        pontuacao = float(pontuacao_raw) if pontuacao_raw not in (None, "") else None
+    except (TypeError, ValueError):
+        pontuacao = None
+    return pontuacao is not None and pontuacao >= PONTUACAO_MINIMA_LEAN_CES
+
+
+def _produto_ganho_ba(deal):
+    """2.4 — Negócios Ganhos: cascata lean, pfcc, ces, campo Produto, Outros."""
+    utm = norm(cf_valor(deal, CF_UTM_CAMPAIGN) or "")
+    if "lean" in utm:
+        return "LEAN"
+    if "pfcc" in utm:
+        return "PFCC"
+    if "ces" in utm:
+        return "CES"
+    produto_campo = norm(cf_valor(deal, CF_PRODUTO) or cf_valor(deal, CF_NOME_PRODUTO) or "")
+    for produto, chave in (("LEAN", "lean"), ("PFCC", "pfcc"), ("CES", "ces"), ("ABP", "abp")):
+        if chave in produto_campo:
+            return produto
+    return "Outros"
+
+
+def _nome_base_titulo(titulo):
+    """Remove o sufixo 'N / M' (aceita variações de espaço ao redor da barra) do título."""
+    if not titulo:
+        return ""
+    m = re.search(r"\s*\d+\s*/\s*\d+\s*$", titulo)
+    if m:
+        return titulo[: m.start()].strip()
+    return titulo.strip()
+
+
+def consolidar_parcelas_ba(deals_ganhos):
+    """Agrupa negócios ganhos que são parcelas do mesmo pagamento (título 'Nome N/M'):
+    soma o valor, conta como 1 negócio ganho só. Produto do grupo = produto do 1º deal."""
+    grupos = {}
+    ordem = []
+    for d in deals_ganhos:
+        titulo = d.get("title") or ""
+        nome_exibicao = _nome_base_titulo(titulo) or titulo
+        chave = norm(nome_exibicao)
+        if chave not in grupos:
+            grupos[chave] = {"deals": [], "valor_total": 0.0, "nome": nome_exibicao}
+            ordem.append(chave)
+        grupos[chave]["deals"].append(d)
+        grupos[chave]["valor_total"] += float(d.get("value") or 0)
+
+    consolidados = []
+    for chave in ordem:
+        g = grupos[chave]
+        consolidados.append({
+            "nome": g["nome"],
+            "valor": round(g["valor_total"], 2),
+            "produto": _produto_ganho_ba(g["deals"][0]),
+            "qtd_parcelas": len(g["deals"]),
+            "ids": [dd.get("id") for dd in g["deals"]],
+        })
+    return consolidados
+
+
+def montar_metas_board_academy(ano, mes, hoje, ontem):
+    inicio_mes = dt.date(ano, mes, 1)
+    fim_mes = dt.date(ano + 1, 1, 1) - dt.timedelta(days=1) if mes == 12 else dt.date(ano, mes + 1, 1) - dt.timedelta(days=1)
+    desde_iso = f"{inicio_mes.isoformat()}T00:00:00Z"
+    ate_iso = f"{fim_mes.isoformat()}T23:59:59Z"
+
+    todos_deals = []
+    deals_ganhos_mes = []
+    vistos_gerais = set()
+
+    for pid in PIPELINES_METAS_BA.values():
+        abertos = buscar_deals_por_pipeline(pid, "open")
+        ganhos = buscar_deals_por_pipeline(pid, "won", desde_iso, ate_iso)
+        perdidos = buscar_deals_por_pipeline(pid, "lost", desde_iso, ate_iso)
+        for d in abertos + ganhos + perdidos:
+            did = d.get("id")
+            if did not in vistos_gerais:
+                vistos_gerais.add(did)
+                todos_deals.append(d)
+        for d in ganhos:
+            won_brt = to_brt(d.get("won_time"))
+            if won_brt and (won_brt.year, won_brt.month) == (ano, mes):
+                deals_ganhos_mes.append(d)
+
+    # ---- 2.1/2.2/2.3: universo de Leads Gerados (Data da última aplicação no mês) ----
+    leads_mes = []
+    for d in todos_deals:
+        data_aplicacao = _parse_data_campo(cf_valor(d, CF_DATA_ULTIMA_APLICACAO))
+        if data_aplicacao and (data_aplicacao.year, data_aplicacao.month) == (ano, mes):
+            leads_mes.append((d, data_aplicacao))
+
+    leads_novos = 0
+    leads_reaplicacao = 0
+    leads_hoje = 0
+    leads_ontem = 0
+    leads_por_produto = {"PFCC": 0, "LEAN": 0, "CES": 0, "Outros": 0}
+    mql_por_produto = {"PFCC": 0, "LEAN": 0, "CES": 0}
+    mql_hoje = 0
+    mql_ontem = 0
+
+    for d, data_aplicacao in leads_mes:
+        if data_aplicacao == hoje:
+            leads_hoje += 1
+        if data_aplicacao == ontem:
+            leads_ontem += 1
+
+        add_brt = to_brt(d.get("add_time"))
+        if add_brt and add_brt.date() == data_aplicacao:
+            leads_novos += 1
+        else:
+            leads_reaplicacao += 1
+
+        produto_lead = _produto_lead_gerado_ba(d)
+        leads_por_produto[produto_lead] = leads_por_produto.get(produto_lead, 0) + 1
+
+        eh_mql = False
+        if produto_lead == "PFCC":
+            eh_mql = _pfcc_valido(cf_valor(d, CF_UTM_CAMPAIGN)) and _cargo_eh_mql(cf_valor(d, CF_CARGO_NEGOCIO))
+        elif produto_lead in ("LEAN", "CES"):
+            eh_mql = _mql_lean_ces_ba(d)
+        if eh_mql:
+            mql_por_produto[produto_lead] = mql_por_produto.get(produto_lead, 0) + 1
+            if data_aplicacao == hoje:
+                mql_hoje += 1
+            if data_aplicacao == ontem:
+                mql_ontem += 1
+
+    total_leads = len(leads_mes)
+    total_mql = sum(mql_por_produto.values())
+
+    # ---- 2.4/2.5: Ganhos consolidados (parcelas) + TKM ----
+    consolidados = consolidar_parcelas_ba(deals_ganhos_mes)
+    ganhos_por_produto = {}
+    receita_por_produto = {}
+    for c in consolidados:
+        ganhos_por_produto[c["produto"]] = ganhos_por_produto.get(c["produto"], 0) + 1
+        receita_por_produto[c["produto"]] = round(receita_por_produto.get(c["produto"], 0.0) + c["valor"], 2)
+    total_ganhos = len(consolidados)
+    receita_total = round(sum(c["valor"] for c in consolidados), 2)
+    tkm_por_produto = {p: round(safe_div(receita_por_produto.get(p, 0.0), ganhos_por_produto.get(p, 0)), 2)
+                        for p in ganhos_por_produto}
+    tkm_blended = round(safe_div(receita_total, total_ganhos), 2)
+
+    tx_lead_para_mql_real = round(safe_div(total_mql, total_leads) * 100, 1)
+    tx_mql_para_ganho_real = round(safe_div(total_ganhos, total_mql) * 100, 1)
+
+    return {
+        "quanto_estamos_da_meta": {
+            "leads": {"realizado": total_leads, "meta": META_LEADS_TOTAL,
+                      "pct": round(safe_div(total_leads, META_LEADS_TOTAL) * 100, 1)},
+            "mql": {"realizado": total_mql, "meta": META_MQL_TOTAL,
+                    "pct": round(safe_div(total_mql, META_MQL_TOTAL) * 100, 1),
+                    "por_produto": {p: {"realizado": mql_por_produto.get(p, 0), "meta": META_MQL_POR_PRODUTO.get(p, 0)}
+                                     for p in ("PFCC", "LEAN", "CES")}},
+            "ganhos": {"realizado": total_ganhos, "meta": META_GANHOS_MES,
+                       "pct": round(safe_div(total_ganhos, META_GANHOS_MES) * 100, 1),
+                       "por_produto": {p: {"realizado": ganhos_por_produto.get(p, 0), "meta": META_GANHOS_POR_PRODUTO.get(p, 0)}
+                                        for p in META_GANHOS_POR_PRODUTO}},
+            "receita": {"realizado": receita_total, "meta": META_RECEITA_MES,
+                        "pct": round(safe_div(receita_total, META_RECEITA_MES) * 100, 1)},
+            "taxas": {
+                "lead_para_mql_real_pct": tx_lead_para_mql_real,
+                "lead_para_mql_assumida_pct": round(TX_LEAD_PARA_MQL * 100, 1),
+                "mql_para_ganho_real_pct": tx_mql_para_ganho_real,
+                "mql_para_ganho_assumida_pct": round(TX_MQL_PARA_GANHO * 100, 1),
+            },
+        },
+        "no_mes_geral": {
+            "leads_total": total_leads,
+            "leads_novos": leads_novos,
+            "leads_reaplicacao": leads_reaplicacao,
+            "leads_hoje": leads_hoje,
+            "leads_ontem": leads_ontem,
+            "leads_por_produto": leads_por_produto,
+            "mql_total": total_mql,
+            "mql_hoje": mql_hoje,
+            "mql_ontem": mql_ontem,
+            "mql_por_produto": mql_por_produto,
+            "ganhos_total": total_ganhos,
+            "ganhos_por_produto": ganhos_por_produto,
+            "receita_total": receita_total,
+            "receita_por_produto": receita_por_produto,
+            "tkm_por_produto": tkm_por_produto,
+            "tkm_blended": tkm_blended,
+        },
+        "historico": HISTORICO_JAN_JUN_2026,
+        "metas_config": {
+            "receita_mensal": META_RECEITA_MES,
+            "tkm_blended_meta": META_TKM_BLENDED,
+            "ganhos_mes": META_GANHOS_MES,
+            "ganhos_por_produto": META_GANHOS_POR_PRODUTO,
+            "tx_mql_para_negocio": TX_MQL_PARA_GANHO,
+            "tx_lead_para_mql": TX_LEAD_PARA_MQL,
+            "mql_total": META_MQL_TOTAL,
+            "mql_por_produto": META_MQL_POR_PRODUTO,
+            "leads_total": META_LEADS_TOTAL,
+            "tkm_fixo_por_produto": TKM_FIXO_POR_PRODUTO,
+        },
+    }
+
+
+def montar_resposta_metas_ba(mes_param, ano_param):
+    """Rota leve — só a aba 'Metas Board Academy', carregada sob demanda (não entra
+    no payload principal, é pesada: 4 pipelines x 3 status cada)."""
+    hoje = hoje_brt()
+    ano, mes = ano_param or hoje.year, mes_param or hoje.month
+    ontem = dia_util_anterior(hoje, carregar_feriados())
+    return {"metas_board_academy": montar_metas_board_academy(ano, mes, hoje, ontem)}
 
 
 def _papel_colaborador(nome_dono, colaboradores):
@@ -1726,6 +2002,16 @@ class handler(BaseHTTPRequestHandler):
 
             mes_param = int(query["mes"][0]) if "mes" in query else None
             ano_param = int(query["ano"][0]) if "ano" in query else None
+
+            if rota == "metas_ba":
+                payload = montar_resposta_metas_ba(mes_param, ano_param)
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(body)
+                return
             perdidos_inicio = query.get("perdidos_inicio", [None])[0]
             perdidos_fim = query.get("perdidos_fim", [None])[0]
             perdidos_responsavel = query.get("perdidos_responsavel", [None])[0]
