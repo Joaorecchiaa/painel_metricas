@@ -1130,9 +1130,13 @@ def montar_metas_board_academy(ano, mes, hoje, ontem):
     leads_hoje = 0
     leads_ontem = 0
     leads_por_produto = {"PFCC": 0, "LEAN": 0, "CES": 0, "Outros": 0}
+    leads_hoje_por_produto = {"PFCC": 0, "LEAN": 0, "CES": 0, "Outros": 0}
+    leads_ontem_por_produto = {"PFCC": 0, "LEAN": 0, "CES": 0, "Outros": 0}
     mql_por_produto = {"PFCC": 0, "LEAN": 0, "CES": 0}
     mql_hoje = 0
     mql_ontem = 0
+    mql_hoje_por_produto = {"PFCC": 0, "LEAN": 0, "CES": 0}
+    mql_ontem_por_produto = {"PFCC": 0, "LEAN": 0, "CES": 0}
 
     for d, data_aplicacao in leads_mes:
         if data_aplicacao == hoje:
@@ -1148,6 +1152,10 @@ def montar_metas_board_academy(ano, mes, hoje, ontem):
 
         produto_lead = _produto_lead_gerado_ba(d)
         leads_por_produto[produto_lead] = leads_por_produto.get(produto_lead, 0) + 1
+        if data_aplicacao == hoje:
+            leads_hoje_por_produto[produto_lead] = leads_hoje_por_produto.get(produto_lead, 0) + 1
+        if data_aplicacao == ontem:
+            leads_ontem_por_produto[produto_lead] = leads_ontem_por_produto.get(produto_lead, 0) + 1
 
         eh_mql = False
         if produto_lead == "PFCC":
@@ -1158,8 +1166,10 @@ def montar_metas_board_academy(ano, mes, hoje, ontem):
             mql_por_produto[produto_lead] = mql_por_produto.get(produto_lead, 0) + 1
             if data_aplicacao == hoje:
                 mql_hoje += 1
+                mql_hoje_por_produto[produto_lead] = mql_hoje_por_produto.get(produto_lead, 0) + 1
             if data_aplicacao == ontem:
                 mql_ontem += 1
+                mql_ontem_por_produto[produto_lead] = mql_ontem_por_produto.get(produto_lead, 0) + 1
 
     total_leads = len(leads_mes)
     total_mql = sum(mql_por_produto.values())
@@ -1208,10 +1218,14 @@ def montar_metas_board_academy(ano, mes, hoje, ontem):
             "leads_hoje": leads_hoje,
             "leads_ontem": leads_ontem,
             "leads_por_produto": leads_por_produto,
+            "leads_hoje_por_produto": leads_hoje_por_produto,
+            "leads_ontem_por_produto": leads_ontem_por_produto,
             "mql_total": total_mql,
             "mql_hoje": mql_hoje,
             "mql_ontem": mql_ontem,
             "mql_por_produto": mql_por_produto,
+            "mql_hoje_por_produto": mql_hoje_por_produto,
+            "mql_ontem_por_produto": mql_ontem_por_produto,
             "ganhos_total": total_ganhos,
             "ganhos_por_produto": ganhos_por_produto,
             "receita_total": receita_total,
