@@ -543,13 +543,13 @@
     <h2 class="titulo-tabela titulo-ba-destaque">QUANTO ESTAMOS DA META</h2>
     <div id="metaCardsPrincipais" class="perdidos-resumo"></div>
     <div id="metaMqlPorProduto" class="bloco-ba" style="margin-top:12px;"></div>
+    <div id="geralLeadsPorProduto" class="bloco-ba" style="margin-top:12px;"></div>
     <div id="metaGanhosPorProduto" class="bloco-ba" style="margin-top:12px;"></div>
     <div id="metaTaxas" class="perdidos-resumo" style="margin-top:12px;"></div>
     <div id="metaGargalo" class="perdidos-bloqueado" style="text-align:left; margin-top:12px;"></div>
 
     <h2 class="titulo-tabela titulo-ba-destaque">NO MÊS, NO GERAL</h2>
     <div id="geralCardsPrincipais" class="perdidos-resumo"></div>
-    <div id="geralLeadsPorProduto" class="bloco-ba" style="margin-top:12px;"></div>
     <div id="geralMqlPorProduto2" class="bloco-ba" style="margin-top:12px;"></div>
     <div id="geralMqlHojeOntemPorProduto" class="bloco-ba" style="margin-top:12px;"></div>
     <div id="geralTkmPorProduto" class="bloco-ba" style="margin-top:12px;"></div>
@@ -908,12 +908,12 @@ function renderizarMetasBA(m) {
 
   document.getElementById("metaTaxas").innerHTML = `
     <div class="perdidos-resumo-card">
-      <div class="rotulo">Taxa Lead → MQL</div>
+      <div class="rotulo">Tx. Qualificação</div>
       <div class="valor" style="font-size:18px;">${fmtPctBA(q.taxas.lead_para_mql_real_pct)}</div>
       <div style="font-size:11px; color:var(--muted); margin-top:4px;">Assumida: ${fmtPctBA(q.taxas.lead_para_mql_assumida_pct)}</div>
     </div>
     <div class="perdidos-resumo-card">
-      <div class="rotulo">Taxa MQL → Ganho</div>
+      <div class="rotulo">Tx. Conversão</div>
       <div class="valor" style="font-size:18px;">${fmtPctBA(q.taxas.mql_para_ganho_real_pct)}</div>
       <div style="font-size:11px; color:var(--muted); margin-top:4px;">Assumida: ${fmtPctBA(q.taxas.mql_para_ganho_assumida_pct)}</div>
     </div>`;
@@ -937,6 +937,10 @@ function renderizarMetasBA(m) {
 
   // ---- Seção 2: No mês, no geral ----
   document.getElementById("geralCardsPrincipais").innerHTML = `
+    <div class="perdidos-resumo-card card-destaque-suave">
+      <div class="rotulo">MQL Hoje / Ontem</div>
+      <div class="valor">${g.mql_hoje} <span style="font-size:13px; color:var(--muted);">/ ${g.mql_ontem}</span></div>
+    </div>
     <div class="perdidos-resumo-card">
       <div class="rotulo">Leads (Novos / Reaplicação)</div>
       <div class="valor">${g.leads_total}</div>
@@ -949,10 +953,6 @@ function renderizarMetasBA(m) {
     <div class="perdidos-resumo-card">
       <div class="rotulo">MQL Total</div>
       <div class="valor">${g.mql_total}</div>
-    </div>
-    <div class="perdidos-resumo-card card-destaque-suave">
-      <div class="rotulo">MQL Hoje / Ontem</div>
-      <div class="valor">${g.mql_hoje} <span style="font-size:13px; color:var(--muted);">/ ${g.mql_ontem}</span></div>
     </div>
     <div class="perdidos-resumo-card">
       <div class="rotulo">Ganhos</div>
