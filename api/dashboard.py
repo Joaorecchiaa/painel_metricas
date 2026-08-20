@@ -1258,6 +1258,37 @@ def montar_resposta_metas_ba(mes_param, ano_param):
     return {"metas_board_academy": montar_metas_board_academy(ano, mes, hoje, ontem)}
 
 
+def montar_historico_mql_ganhos_real(ano):
+    """Só cálculo (não vai pro painel) — soma MQL e Ganhos por produto mês a mês
+    (Jan a Jun) e calcula a taxa real MQL->Ganho e quantos MQL's por venda."""
+    totais_mql = {}
+    totais_ganhos = {}
+    por_mes = []
+    for mes in range(1, 7):
+        dados = montar_metas_board_academy(ano, mes, dt.date(ano, mes, 15), dt.date(ano, mes, 14))
+        g = dados["no_mes_geral"]
+        por_mes.append({
+            "mes": mes,
+            "mql_por_produto": g["mql_por_produto"],
+            "ganhos_por_produto": g["ganhos_por_produto"],
+        })
+        for p, v in g["mql_por_produto"].items():
+            totais_mql[p] = totais_mql.get(p, 0) + v
+        for p, v in g["ganhos_por_produto"].items():
+            totais_ganhos[p] = totais_ganhos.get(p, 0) + v
+
+    taxas = {}
+    for p in sorted(set(list(totais_mql.keys()) + list(totais_ganhos.keys()))):
+        mql = totais_mql.get(p, 0)
+        ganhos = totais_ganhos.get(p, 0)
+        taxa_pct = round(safe_div(ganhos, mql) * 100, 2) if mql else None
+        mqls_por_venda = round(safe_div(mql, ganhos), 1) if ganhos else None
+        taxas[p] = {"mql_total": mql, "ganhos_total": ganhos, "taxa_conversao_pct": taxa_pct, "mqls_por_venda": mqls_por_venda}
+
+    return {"ano": ano, "por_mes": por_mes, "totais_mql_por_produto": totais_mql,
+            "totais_ganhos_por_produto": totais_ganhos, "taxas_reais_por_produto": taxas}
+
+
 def _papel_colaborador(nome_dono, colaboradores):
     """Classifica o dono do negócio como SDR/Closer/Outro, via cargo cadastrado na COLAB."""
     colab = colaboradores.get(norm(nome_dono), {})
@@ -2019,6 +2050,16 @@ class handler(BaseHTTPRequestHandler):
 
             if rota == "metas_ba":
                 payload = montar_resposta_metas_ba(mes_param, ano_param)
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            if rota == "historico_mql_ganhos":
+                payload = montar_historico_mql_ganhos_real(ano_param or 2026)
                 body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
