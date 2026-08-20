@@ -48,12 +48,15 @@ CF_NOME_PRODUTO = "09d57fd58b8cac693f5901417f758df746223273"
 CF_DATA_ULTIMA_APLICACAO = "23de049432e523993f69ecd456a3f755c0f07f3d"
 CF_UTM_SOURCE = "8fb3221ab3d91cddaf51e0a9e1bbcda34fc9d28e"
 CF_CARGO_NEGOCIO = "718c8aba81211c883ffd9f4616f75ee22a10b2da"  # campo "Cargo" do negócio (diferente do Cargo da COLAB)
+CF_PONTUACAO = "673fc401f8cb6d72a16ee7775464f80ec974e2b6"  # "Pontuação"/score — só roda pra LEAN e CES
 
+# Lista MQL_BASE da skill "filtros-mqls-pipedrive" — usada pra achar o Cargo que qualifica um lead PFCC como MQL
 PALAVRAS_MQL = [
-    "socio", "sócio", "partner", "founder", "fundador", "propr", "owner",
+    "socio", "sócio", "partner", "founder", "fundador", "proprietario", "proprietário", "propr", "owner",
     "empresario", "empresário", "entrepreneur", "presidente", "president",
-    "ceo", "cmo", "cto", "coo", "cfo", "cpo", "ciso", "chro", "chief",
-    "vice", "vp", "c-level", "conselh", "diretor", "director", "advisor",
+    "ceo", "cmo", "cto", "coo", "cfo", "cpo", "ciso", "chro", "cro", "cio", "chief",
+    "c-level", "c level", "vice-presidente", "vice", "vp",
+    "conselh", "diretor", "director", "advisor", "board member",
 ]
 
 PRODUTOS = ["PFCC", "CES", "LEAN", "ABP", "COAUTORIA"]
@@ -63,6 +66,16 @@ PFCC_IDS_GOOGLE = {
     "22822740395", "23869952762", "22675029313", "23874401647",
     "23397388987", "22508119133", "23963147748",
 }
+
+# Skill "filtros-mqls-pipedrive": pra ser PFCC, a utm_campaign NÃO pode conter nada disso
+PFCC_EXCLUSOES_CAMPANHA = [
+    "mexico", "chile", "lean", "ces",
+    "hotseat", "summit", "ppc", "pesquisa", "masterclass", "coautoria", "workshop", "lic-bc",
+]
+# valores "vazios" que às vezes aparecem escritos por extenso no campo
+VALORES_VAZIOS_TEXTO = {"", "null", "none", "undefined", "-", "n/a", "na"}
+
+PONTUACAO_MINIMA_LEAN_CES = 6
 
 SHEET_COLAB = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=1782440078&single=true&output=csv"
 SHEET_METAS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=0&single=true&output=csv"
@@ -794,6 +807,8 @@ def valor_abertos_por_squad(pool, colaboradores, users_map, data_alvo):
 
 
 def _match_produto_no_texto(texto):
+    """Match simples por substring — usado só pro campo 'Produto'/'Nome produto' dos ganhos
+    (não passa pelas exclusões/pontuação, que são regras específicas da utm_campaign)."""
     t = norm(texto or "")
     if "pfcc" in t or any(gid in t for gid in PFCC_IDS_GOOGLE):
         return "PFCC"
@@ -802,6 +817,21 @@ def _match_produto_no_texto(texto):
     if "ces" in t:
         return "CES"
     return None
+
+
+def _pfcc_valido(utm_raw):
+    """Regras da skill 'filtros-mqls-pipedrive' pro PFCC: a utm_campaign precisa conter
+    'pfcc' (ou um dos IDs do Google), não pode estar vazia/ser um placeholder tipo
+    'null'/'n/a', e não pode conter nenhuma das palavras de exclusão."""
+    if utm_raw is None:
+        return False
+    bruto = str(utm_raw).strip()
+    t = norm(bruto)
+    if t in VALORES_VAZIOS_TEXTO:
+        return False
+    if any(excl in t for excl in PFCC_EXCLUSOES_CAMPANHA):
+        return False
+    return "pfcc" in t or any(gid in t for gid in PFCC_IDS_GOOGLE)
 
 
 def _match_abp_coautoria(deal):
@@ -816,11 +846,30 @@ def _match_abp_coautoria(deal):
 
 
 def classificar_produto(deal):
-    """PFCC/LEAN/CES pela utm_campaign; ABP/COAUTORIA pelo campo 'Nome produto'/'Produto'."""
+    """PFCC: regras completas da skill (utm contém pfcc/ID do Google, sem exclusões, sem placeholder).
+    LEAN/CES: utm contém a palavra E Pontuação >= 6 (score que só roda pra esses dois).
+    ABP/COAUTORIA: pelo campo 'Nome produto'/'Produto'."""
     produto = _match_abp_coautoria(deal)
     if produto:
         return produto
-    return _match_produto_no_texto(cf_valor(deal, CF_UTM_CAMPAIGN))
+
+    utm_raw = cf_valor(deal, CF_UTM_CAMPAIGN)
+    if _pfcc_valido(utm_raw):
+        return "PFCC"
+
+    t = norm(utm_raw or "")
+    try:
+        pontuacao_raw = cf_valor(deal, CF_PONTUACAO)
+        pontuacao_num = float(pontuacao_raw) if pontuacao_raw not in (None, "") else None
+    except (TypeError, ValueError):
+        pontuacao_num = None
+
+    if pontuacao_num is not None and pontuacao_num >= PONTUACAO_MINIMA_LEAN_CES:
+        if "lean" in t:
+            return "LEAN"
+        if "ces" in t:
+            return "CES"
+    return None
 
 
 def classificar_produto_ganho(deal):
@@ -854,10 +903,9 @@ def _pipeline_id_do_squad(squad_interno):
 
 
 def analisar_mql_pfcc(ano, mes, hoje):
-    """'NOVOS MQL's PFCC': negócios (Sniper/Elite/Olympus, qualquer status) com:
-    utm_campaign não vazio + utm_source != 'org' + Cargo não vazio +
-    (utm_campaign contém 'pfcc' OU um dos IDs do Google) +
-    Data da última aplicação contendo o dia (hoje) ou o mês/ano (mês)."""
+    """'NOVOS MQL's PFCC' — skill 'filtros-mqls-pipedrive': negócio precisa ser um PFCC
+    válido (utm sem exclusões, sem placeholder) + utm_source != 'org' + Cargo contendo
+    uma palavra da lista MQL + Data da última aplicação no dia (hoje) ou mês/ano (mês)."""
     inicio_mes = dt.date(ano, mes, 1)
     fim_mes = dt.date(ano + 1, 1, 1) - dt.timedelta(days=1) if mes == 12 else dt.date(ano, mes + 1, 1) - dt.timedelta(days=1)
     desde_iso = f"{inicio_mes.isoformat()}T00:00:00Z"
@@ -887,8 +935,7 @@ def analisar_mql_pfcc(ano, mes, hoje):
                 continue
             vistos.add(did)
 
-            utm_campaign_raw = cf_valor(d, CF_UTM_CAMPAIGN)
-            if not (utm_campaign_raw and str(utm_campaign_raw).strip()):
+            if not _pfcc_valido(cf_valor(d, CF_UTM_CAMPAIGN)):
                 continue
             if norm(cf_valor(d, CF_UTM_SOURCE)) == "org":
                 continue
@@ -897,9 +944,6 @@ def analisar_mql_pfcc(ano, mes, hoje):
                 continue
             cargo_norm = norm(cargo)
             if not any(norm(palavra) in cargo_norm for palavra in PALAVRAS_MQL):
-                continue
-            campanha_norm = norm(utm_campaign_raw)
-            if not ("pfcc" in campanha_norm or any(gid in campanha_norm for gid in PFCC_IDS_GOOGLE)):
                 continue
 
             valor_data = str(cf_valor(d, CF_DATA_ULTIMA_APLICACAO) or "")
