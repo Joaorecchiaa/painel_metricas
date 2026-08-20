@@ -345,7 +345,7 @@
 
   .bloco-ba { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
   .bloco-ba .papel-titulo {
-    background: #0b0b0f;
+    background: rgba(11, 11, 15, 0.72);
     color: #fff;
     margin: 0;
     padding: 8px 14px;
@@ -954,7 +954,11 @@ function renderizarMetasBA(m) {
 
   document.getElementById("geralLeadsPorProduto").innerHTML =
     `<div class="papel-titulo">Leads por produto</div>` +
-    Object.keys(g.leads_por_produto).map(p => linhaMotivoSimplesBA(p, g.leads_por_produto[p], "Leads", g.receita_por_produto?.[p] ?? "-", "—")).join("");
+    Object.keys(g.leads_por_produto).map(p => `
+      <div class="ba-linha">
+        <span class="ba-nome">${p}</span>
+        <span class="ba-metrica">Leads: <strong>${g.leads_por_produto[p]}</strong></span>
+      </div>`).join("");
 
   document.getElementById("geralMqlPorProduto2").innerHTML =
     `<div class="papel-titulo">MQL / Ganhos / Receita por produto</div>` +
@@ -1271,4 +1275,3 @@ setInterval(atualizar, INTERVALO_MS);
 
 </body>
 </html>
-
