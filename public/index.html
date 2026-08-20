@@ -429,6 +429,7 @@
   <button class="aba-btn ativa" id="btnAbaMetricas" onclick="mostrarPagina('metricas')">Métricas</button>
   <button class="aba-btn" id="btnAbaProdutos" onclick="mostrarPagina('produtos')">Produtos</button>
   <button class="aba-btn" id="btnAbaPerdidos" onclick="mostrarPagina('perdidos')">Perdidos</button>
+  <button class="aba-btn" id="btnAbaMetasBA" onclick="mostrarPagina('metasba')">Metas BA</button>
 </nav>
 
 <div id="paginaMetricas">
@@ -495,6 +496,34 @@
     <div class="sub" style="color:var(--muted); margin-bottom:10px;">Motivos de perda fora do esperado pra etapa em que o negócio estava</div>
     <div id="auditoriaPerdidosGeral"></div>
     <div id="cardsAuditoriaFunil" class="perdidos-funis"></div>
+  </div>
+</div>
+
+<div id="paginaMetasBA" style="display:none;">
+  <div class="filtro-perdidos">
+    <span class="sub" style="color:var(--muted);">4 funis: Sniper + Elite + Olympus + Navigator</span>
+    <button id="btnAtualizarMetasBA" onclick="carregarMetasBA(true)">Atualizar</button>
+  </div>
+  <div id="metasBaCarregando" class="status-vazio" style="padding:20px 0;">Clique em "Metas BA" pra carregar (consulta pesada — só busca quando você abre a aba)</div>
+  <div id="metasBaConteudo" style="display:none;">
+
+    <h2 class="titulo-tabela">QUANTO ESTAMOS DA META</h2>
+    <div id="metaCardsPrincipais" class="perdidos-resumo"></div>
+    <div id="metaMqlPorProduto" class="motivos-lista" style="margin-top:12px;"></div>
+    <div id="metaGanhosPorProduto" class="motivos-lista" style="margin-top:12px;"></div>
+    <div id="metaTaxas" class="perdidos-resumo" style="margin-top:12px;"></div>
+    <div id="metaGargalo" class="perdidos-bloqueado" style="text-align:left; margin-top:12px;"></div>
+
+    <h2 class="titulo-tabela">NO MÊS, NO GERAL</h2>
+    <div id="geralCardsPrincipais" class="perdidos-resumo"></div>
+    <div id="geralLeadsPorProduto" class="motivos-lista" style="margin-top:12px;"></div>
+    <div id="geralMqlPorProduto2" class="motivos-lista" style="margin-top:12px;"></div>
+    <div id="geralTkmPorProduto" class="motivos-lista" style="margin-top:12px;"></div>
+
+    <h2 class="titulo-tabela">HISTÓRICO CONSOLIDADO (JAN–JUN/2026)</h2>
+    <div id="historicoResumo" class="perdidos-resumo"></div>
+    <div id="historicoMix" class="motivos-lista" style="margin-top:12px;"></div>
+
   </div>
 </div>
 
@@ -748,9 +777,204 @@ function mostrarPagina(pagina) {
   document.getElementById("paginaMetricas").style.display = pagina === "metricas" ? "" : "none";
   document.getElementById("paginaProdutos").style.display = pagina === "produtos" ? "" : "none";
   document.getElementById("paginaPerdidos").style.display = pagina === "perdidos" ? "" : "none";
+  document.getElementById("paginaMetasBA").style.display = pagina === "metasba" ? "" : "none";
   document.getElementById("btnAbaMetricas").classList.toggle("ativa", pagina === "metricas");
   document.getElementById("btnAbaProdutos").classList.toggle("ativa", pagina === "produtos");
   document.getElementById("btnAbaPerdidos").classList.toggle("ativa", pagina === "perdidos");
+  document.getElementById("btnAbaMetasBA").classList.toggle("ativa", pagina === "metasba");
+  if (pagina === "metasba" && !metasBaCarregada) {
+    carregarMetasBA(false);
+  }
+}
+
+let metasBaCarregada = false;
+
+function fmtMoedaBA(v) {
+  return (v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+}
+function fmtPctBA(v) {
+  return (v ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + "%";
+}
+function pillClasseBA(pct) {
+  if (pct >= 100) return "ok";
+  if (pct >= 70) return "warn";
+  return "bad";
+}
+function cardMetaBA(rotulo, realizado, meta, pct, formatador) {
+  return `
+    <div class="perdidos-resumo-card">
+      <div class="rotulo">${rotulo}</div>
+      <div class="valor" style="font-size:18px;">${formatador(realizado)} <span class="pill ${pillClasseBA(pct)}" style="font-size:10px;">${fmtPctBA(pct)}</span></div>
+      <div style="font-size:11px; color:var(--muted); margin-top:4px;">Meta: ${formatador(meta)}</div>
+    </div>`;
+}
+function linhaMotivoSimplesBA(nome, valor1, rotulo1, valor2, rotulo2) {
+  return `
+    <div class="motivo-linha" style="cursor:default;">
+      <span class="motivo-nome">${nome}</span>
+      <span class="motivo-qtd">${rotulo1}: <strong>${valor1}</strong></span>
+      <span class="motivo-pct">${rotulo2}: <strong>${valor2}</strong></span>
+    </div>`;
+}
+
+async function carregarMetasBA(forcarRecarregar) {
+  const btn = document.getElementById("btnAtualizarMetasBA");
+  const carregando = document.getElementById("metasBaCarregando");
+  const conteudo = document.getElementById("metasBaConteudo");
+  btn.disabled = true;
+  btn.textContent = "Carregando...";
+  carregando.style.display = "";
+  carregando.textContent = "Carregando (pode levar alguns segundos — 4 funis, todo o histórico do mês)...";
+  conteudo.style.display = "none";
+  try {
+    const mesSelecionado = document.getElementById("seletorMes").value;
+    const anoSelecionado = document.getElementById("seletorAno").value;
+    const params = new URLSearchParams({ route: "metas_ba", mes: mesSelecionado, ano: anoSelecionado });
+    const resp = await fetch(`${API_URL}?${params.toString()}`, { cache: "no-store", headers: authHeaders() });
+    const data = await resp.json();
+    if (data.erro) throw new Error(data.erro);
+    renderizarMetasBA(data.metas_board_academy);
+    metasBaCarregada = true;
+    carregando.style.display = "none";
+    conteudo.style.display = "";
+  } catch (e) {
+    carregando.textContent = "Erro ao carregar: " + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Atualizar";
+  }
+}
+
+function renderizarMetasBA(m) {
+  if (!m) return;
+  const q = m.quanto_estamos_da_meta;
+  const g = m.no_mes_geral;
+  const h = m.historico;
+
+  // ---- Seção 1: Quanto estamos da meta ----
+  document.getElementById("metaCardsPrincipais").innerHTML =
+    cardMetaBA("Leads", q.leads.realizado, q.leads.meta, q.leads.pct, v => v) +
+    cardMetaBA("MQL", q.mql.realizado, q.mql.meta, q.mql.pct, v => v) +
+    cardMetaBA("Ganhos", q.ganhos.realizado, q.ganhos.meta, q.ganhos.pct, v => v) +
+    cardMetaBA("Receita", q.receita.realizado, q.receita.meta, q.receita.pct, fmtMoedaBA);
+
+  document.getElementById("metaMqlPorProduto").innerHTML =
+    `<div class="papel-titulo" style="padding:8px 14px 0;">MQL por produto (meta)</div>` +
+    ["PFCC", "LEAN", "CES"].map(p => {
+      const d = q.mql.por_produto[p] || { realizado: 0, meta: 0 };
+      return linhaMotivoSimplesBA(p, d.realizado, "Realizado", d.meta, "Meta");
+    }).join("");
+
+  document.getElementById("metaGanhosPorProduto").innerHTML =
+    `<div class="papel-titulo" style="padding:8px 14px 0;">Ganhos por produto (meta)</div>` +
+    Object.keys(q.ganhos.por_produto).map(p => {
+      const d = q.ganhos.por_produto[p];
+      return linhaMotivoSimplesBA(p, d.realizado, "Realizado", d.meta, "Meta");
+    }).join("");
+
+  document.getElementById("metaTaxas").innerHTML = `
+    <div class="perdidos-resumo-card">
+      <div class="rotulo">Taxa Lead → MQL</div>
+      <div class="valor" style="font-size:18px;">${fmtPctBA(q.taxas.lead_para_mql_real_pct)}</div>
+      <div style="font-size:11px; color:var(--muted); margin-top:4px;">Assumida: ${fmtPctBA(q.taxas.lead_para_mql_assumida_pct)}</div>
+    </div>
+    <div class="perdidos-resumo-card">
+      <div class="rotulo">Taxa MQL → Ganho</div>
+      <div class="valor" style="font-size:18px;">${fmtPctBA(q.taxas.mql_para_ganho_real_pct)}</div>
+      <div style="font-size:11px; color:var(--muted); margin-top:4px;">Assumida: ${fmtPctBA(q.taxas.mql_para_ganho_assumida_pct)}</div>
+    </div>`;
+
+  // gargalo: identifica qual etapa está mais atrasada em relação à meta
+  const etapas = [
+    { nome: "Leads", pct: q.leads.pct },
+    { nome: "MQL", pct: q.mql.pct },
+    { nome: "Ganhos", pct: q.ganhos.pct },
+  ];
+  etapas.sort((a, b) => a.pct - b.pct);
+  const pior = etapas[0];
+  let textoGargalo = `A etapa mais atrasada em relação à meta é <strong>${pior.nome}</strong> (${fmtPctBA(pior.pct)} da meta do mês). `;
+  if (q.taxas.lead_para_mql_real_pct < q.taxas.lead_para_mql_assumida_pct) {
+    textoGargalo += `A conversão Lead→MQL real (${fmtPctBA(q.taxas.lead_para_mql_real_pct)}) está abaixo da assumida (${fmtPctBA(q.taxas.lead_para_mql_assumida_pct)}) — pode valer revisar qualificação. `;
+  }
+  if (q.taxas.mql_para_ganho_real_pct < q.taxas.mql_para_ganho_assumida_pct) {
+    textoGargalo += `A conversão MQL→Ganho real (${fmtPctBA(q.taxas.mql_para_ganho_real_pct)}) está abaixo da assumida (${fmtPctBA(q.taxas.mql_para_ganho_assumida_pct)}) — pode valer revisar o time comercial.`;
+  }
+  document.getElementById("metaGargalo").innerHTML = `<div>📍 ${textoGargalo}</div>`;
+
+  // ---- Seção 2: No mês, no geral ----
+  document.getElementById("geralCardsPrincipais").innerHTML = `
+    <div class="perdidos-resumo-card">
+      <div class="rotulo">Leads (Novos / Reaplicação)</div>
+      <div class="valor">${g.leads_total}</div>
+      <div style="font-size:11px; color:var(--muted); margin-top:4px;">${g.leads_novos} novos · ${g.leads_reaplicacao} reaplicação</div>
+    </div>
+    <div class="perdidos-resumo-card card-destaque-suave">
+      <div class="rotulo">Leads Hoje / Ontem</div>
+      <div class="valor">${g.leads_hoje} <span style="font-size:13px; color:var(--muted);">/ ${g.leads_ontem}</span></div>
+    </div>
+    <div class="perdidos-resumo-card">
+      <div class="rotulo">MQL Total</div>
+      <div class="valor">${g.mql_total}</div>
+    </div>
+    <div class="perdidos-resumo-card card-destaque-suave">
+      <div class="rotulo">MQL Hoje / Ontem</div>
+      <div class="valor">${g.mql_hoje} <span style="font-size:13px; color:var(--muted);">/ ${g.mql_ontem}</span></div>
+    </div>
+    <div class="perdidos-resumo-card">
+      <div class="rotulo">Ganhos</div>
+      <div class="valor">${g.ganhos_total}</div>
+    </div>
+    <div class="perdidos-resumo-card">
+      <div class="rotulo">Receita</div>
+      <div class="valor">${fmtMoedaBA(g.receita_total)}</div>
+    </div>`;
+
+  document.getElementById("geralLeadsPorProduto").innerHTML =
+    `<div class="papel-titulo" style="padding:8px 14px 0;">Leads por produto</div>` +
+    Object.keys(g.leads_por_produto).map(p => linhaMotivoSimplesBA(p, g.leads_por_produto[p], "Leads", g.receita_por_produto?.[p] ?? "-", "—")).join("");
+
+  document.getElementById("geralMqlPorProduto2").innerHTML =
+    `<div class="papel-titulo" style="padding:8px 14px 0;">MQL / Ganhos / Receita por produto</div>` +
+    Array.from(new Set([...Object.keys(g.mql_por_produto), ...Object.keys(g.ganhos_por_produto)])).map(p => `
+      <div class="motivo-linha" style="cursor:default;">
+        <span class="motivo-nome">${p}</span>
+        <span class="motivo-qtd">MQL: <strong>${g.mql_por_produto[p] ?? 0}</strong></span>
+        <span class="motivo-qtd">Ganhos: <strong>${g.ganhos_por_produto[p] ?? 0}</strong></span>
+        <span class="motivo-pct">${fmtMoedaBA(g.receita_por_produto[p] ?? 0)}</span>
+      </div>`).join("");
+
+  document.getElementById("geralTkmPorProduto").innerHTML =
+    `<div class="papel-titulo" style="padding:8px 14px 0;">Ticket Médio Realizado (TKM) — Blended: ${fmtMoedaBA(g.tkm_blended)}</div>` +
+    Object.keys(g.tkm_por_produto).map(p => `
+      <div class="motivo-linha" style="cursor:default;">
+        <span class="motivo-nome">${p}</span>
+        <span class="motivo-qtd">${fmtMoedaBA(g.tkm_por_produto[p])}</span>
+      </div>`).join("");
+
+  // ---- Seção 3: Histórico consolidado ----
+  document.getElementById("historicoResumo").innerHTML = `
+    <div class="perdidos-resumo-card">
+      <div class="rotulo">Negócios Criados (Jan–Jun/26)</div>
+      <div class="valor">${h.negocios_criados.toLocaleString("pt-BR")}</div>
+    </div>
+    <div class="perdidos-resumo-card">
+      <div class="rotulo">Negócios Ganhos</div>
+      <div class="valor">${h.negocios_ganhos}</div>
+    </div>
+    <div class="perdidos-resumo-card">
+      <div class="rotulo">Taxa de Conversão</div>
+      <div class="valor">${fmtPctBA(h.tx_conversao_pct)}</div>
+    </div>`;
+
+  document.getElementById("historicoMix").innerHTML =
+    `<div class="papel-titulo" style="padding:8px 14px 0;">Mix histórico de produto</div>` +
+    h.mix.map(item => `
+      <div class="motivo-linha" style="cursor:default;">
+        <span class="motivo-nome">${item.produto}</span>
+        <div class="motivo-barra-wrap"><div class="motivo-barra" style="width:${item.pct}%"></div></div>
+        <span class="motivo-qtd">${item.qtd} negócios</span>
+        <span class="motivo-pct">${item.pct}%</span>
+      </div>`).join("");
 }
 
 function fmtMoeda(v) {
