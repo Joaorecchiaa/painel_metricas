@@ -518,6 +518,7 @@
     <div id="geralCardsPrincipais" class="perdidos-resumo"></div>
     <div id="geralLeadsPorProduto" class="motivos-lista" style="margin-top:12px;"></div>
     <div id="geralMqlPorProduto2" class="motivos-lista" style="margin-top:12px;"></div>
+    <div id="geralMqlHojeOntemPorProduto" class="motivos-lista" style="margin-top:12px;"></div>
     <div id="geralTkmPorProduto" class="motivos-lista" style="margin-top:12px;"></div>
 
     <h2 class="titulo-tabela">HISTÓRICO CONSOLIDADO (JAN–JUN/2026)</h2>
@@ -941,6 +942,16 @@ function renderizarMetasBA(m) {
         <span class="motivo-qtd">MQL: <strong>${g.mql_por_produto[p] ?? 0}</strong></span>
         <span class="motivo-qtd">Ganhos: <strong>${g.ganhos_por_produto[p] ?? 0}</strong></span>
         <span class="motivo-pct">${fmtMoedaBA(g.receita_por_produto[p] ?? 0)}</span>
+      </div>`).join("");
+
+  const produtosMqlHojeOntem = ["PFCC", "LEAN", "CES"];
+  document.getElementById("geralMqlHojeOntemPorProduto").innerHTML =
+    `<div class="papel-titulo" style="padding:8px 14px 0;">MQL Hoje / Ontem por produto</div>` +
+    produtosMqlHojeOntem.map(p => `
+      <div class="motivo-linha" style="cursor:default;">
+        <span class="motivo-nome">${p}</span>
+        <span class="motivo-qtd">Hoje: <strong>${(g.mql_hoje_por_produto || {})[p] ?? 0}</strong></span>
+        <span class="motivo-pct">Ontem: <strong>${(g.mql_ontem_por_produto || {})[p] ?? 0}</strong></span>
       </div>`).join("");
 
   document.getElementById("geralTkmPorProduto").innerHTML =
