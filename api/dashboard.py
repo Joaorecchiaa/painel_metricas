@@ -671,10 +671,15 @@ def teste_activities_sem_filtro():
     return {"total_sem_filtro": len(itens), "chaves_exemplo": amostra}
 
 
+@functools.lru_cache(maxsize=4)
+def _todas_activities_cached():
+    return tuple(pd_v2_paginado("/activities", FILTER_ACTIVITIES))
+
+
 def buscar_activities(ano, mes):
     """v2, paginação por cursor — confirmado funcional (o filtro só precisava estar compartilhado/token com acesso)."""
     alvo = f"{ano:04d}-{mes:02d}"
-    todas = pd_v2_paginado("/activities", FILTER_ACTIVITIES)
+    todas = _todas_activities_cached()
     filtradas = [a for a in todas if (a.get("due_date") or "")[:7] == alvo]
     return filtradas, len(todas)
 
@@ -1743,7 +1748,10 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
     # ---- Comparativo "mesmo dia do mês passado" — só no mês atual.
     # Ex: hoje é 08/09 -> mostra quanto cada squad tinha faturado até 08/08. ----
     squads_mes_passado = {s: 0.0 for s in SQUADS_FINANCEIROS}
+    squads_mes_passado_bruto = {s: 0.0 for s in SQUADS_FINANCEIROS}
+    squads_mes_passado_atingimento = {s: 0.0 for s in SQUADS_FINANCEIROS}
     mes_passado_rotulo = None
+    colaboradores_mp, metas_mp, ano_passado, mes_passado, dia_alvo_mes_passado = None, None, None, None, None
     if e_mes_atual:
         ano_passado = ano - 1 if mes == 1 else ano
         mes_passado = 12 if mes == 1 else mes - 1
@@ -1751,14 +1759,29 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
         dia_alvo_mes_passado = min(hoje.day, ultimo_dia_mes_passado)
         data_corte_mes_passado = dt.date(ano_passado, mes_passado, dia_alvo_mes_passado)
         mes_passado_rotulo = data_corte_mes_passado.strftime("%d/%m")
+
+        # Time e meta de QUEM ESTAVA no squad naquele mês (pode ter mudado desde então)
+        colaboradores_mp = carregar_colaboradores(mes_passado, ano_passado)
+        metas_mp = carregar_metas(mes_passado, ano_passado)
+
+        def meta_squad_mp(squad_interno):
+            return sum(m["meta_fin"] for nome, m in metas_mp.items()
+                       if colaboradores_mp.get(nome, {}).get("subarea") == squad_interno
+                       and any(termo in colaboradores_mp.get(nome, {}).get("cargo", "") for termo in ("closer", "head", "gerente")))
+
         deals_ganhos_mes_passado = buscar_deals_ganhos(ano_passado, mes_passado, users_map)
         for deal in deals_ganhos_mes_passado:
             won_brt = to_brt(deal.get("won_time"))
             if not won_brt or won_brt.date() > data_corte_mes_passado:
                 continue
-            squad = squad_do_deal(deal, colaboradores, users_map)
+            squad = squad_do_deal(deal, colaboradores_mp, users_map)
             if squad in squads_mes_passado:
                 squads_mes_passado[squad] += float(cf_valor(deal, CF_MULTIPLICADOR) or 0)
+                squads_mes_passado_bruto[squad] += float(deal.get("value") or 0)
+
+        for s in SQUADS_FINANCEIROS:
+            meta_mp_s = meta_squad_mp(s)
+            squads_mes_passado_atingimento[s] = round(safe_div(squads_mes_passado[s], meta_mp_s) * 100, 2) if meta_mp_s else 0.0
 
     ritmo_100 = safe_div(du["passados"], du["total"])
 
@@ -1838,6 +1861,8 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
             "previsto_ontem_media": round(previsto_ontem.get(squad_interno, {}).get("media", 0.0), 2),
             "em_aberto_hoje": round(em_aberto_hoje.get(squad_interno, 0.0), 2),
             "mes_passado_mesmo_dia": round(squads_mes_passado.get(squad_interno, 0.0), 2),
+            "mes_passado_bruto": round(squads_mes_passado_bruto.get(squad_interno, 0.0), 2),
+            "mes_passado_atingimento": squads_mes_passado_atingimento.get(squad_interno, 0.0),
         }
 
     total_meta_mes = sum(resultado["squads"][SQUAD_DISPLAY[s]]["meta_mes"] for s in SQUADS_FINANCEIROS)
@@ -1849,7 +1874,7 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
     total_hoje_bruto = sum(resultado["squads"][SQUAD_DISPLAY[s]]["hoje_bruto"] for s in SQUADS_FINANCEIROS)
     campos_previsto = ["previsto_hoje_20", "previsto_hoje_50", "previsto_hoje_70", "previsto_hoje_media",
                         "previsto_ontem_20", "previsto_ontem_50", "previsto_ontem_70", "previsto_ontem_media",
-                        "em_aberto_hoje", "mes_passado_mesmo_dia"]
+                        "em_aberto_hoje", "mes_passado_mesmo_dia", "mes_passado_bruto"]
     totais_previsto = {
         campo: sum(resultado["squads"][SQUAD_DISPLAY[s]][campo] for s in SQUADS_FINANCEIROS)
         for campo in campos_previsto
@@ -1874,6 +1899,9 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
         "ontem_bruto": round(total_ontem_bruto, 2),
         "hoje_bruto": round(total_hoje_bruto, 2),
         **{k: round(v, 2) for k, v in totais_previsto.items()},
+        "mes_passado_atingimento": round(
+            safe_div(sum(squads_mes_passado.values()), sum(meta_squad_mp(s) for s in SQUADS_FINANCEIROS)) * 100, 2
+        ) if e_mes_atual else 0.0,
     }
     resultado["mes_passado_rotulo"] = mes_passado_rotulo
 
@@ -1935,6 +1963,27 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
     onde_100_reu = meta_reunioes * ritmo_100
     onde_40_reu = (PCT_GAP_INTERMEDIARIO * meta_reunioes) * ritmo_prazo
     gap_100_reu = max(0.0, meta_reunioes - validadas_total)
+
+    # ---- Sniper: mesmo comparativo "mesmo dia do mês passado", reaproveitando
+    # as atividades já buscadas (cache) — só filtra diferente, sem custo extra ----
+    validadas_mes_passado = 0
+    meta_reunioes_mes_passado = 0.0
+    if e_mes_atual and colaboradores_mp is not None:
+        activities_mp, _ = buscar_activities(ano_passado, mes_passado)
+        data_corte_mp_iso = dt.date(ano_passado, mes_passado, dia_alvo_mes_passado).isoformat()
+        for a in activities_mp:
+            if not reuniao_valida_sdr(a, deals_rv_owner_map):
+                continue
+            nome_resp_mp = norm(users_map.get(campo_owner_id(a), ""))
+            if not _conta_como_sniper(nome_resp_mp, colaboradores_mp):
+                continue
+            due = a.get("due_date")
+            if due and due <= data_corte_mp_iso:
+                validadas_mes_passado += 1
+        meta_reunioes_mes_passado = sum(m["meta_reu"] for nome, m in metas_mp.items()
+                                         if _conta_como_sniper(nome, colaboradores_mp))
+    atingimento_sniper_mes_passado = round(safe_div(validadas_mes_passado, meta_reunioes_mes_passado) * 100, 2) if meta_reunioes_mes_passado else 0.0
+
     gap_40_reu = max(0.0, (PCT_GAP_INTERMEDIARIO * meta_reunioes) - validadas_total)
     meta_dia_40_reu = safe_div(gap_40_reu, dias_restantes_p40)
     meta_dia_100_reu = safe_div(gap_100_reu, dias_restantes_p100)
@@ -1943,6 +1992,8 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
         "meta_mes_reunioes": meta_reunioes,
         "meta_dia_reunioes": round(meta_dia_reu, 2),
         "realizado_reunioes": validadas_total,
+        "mes_passado_reunioes": validadas_mes_passado,
+        "mes_passado_atingimento": atingimento_sniper_mes_passado,
         "onde_deveria_100": round(onde_100_reu, 2),
         "onde_deveria_40": round(onde_40_reu, 2),
         "atingimento": round(safe_div(validadas_total, meta_reunioes) * 100, 2),
