@@ -1258,6 +1258,53 @@ def montar_resposta_metas_ba(mes_param, ano_param):
     return {"metas_board_academy": montar_metas_board_academy(ano, mes, hoje, ontem)}
 
 
+def montar_atingimento_historico(ano, mes, dia_inicio, dia_fim):
+    """Só cálculo (não vai pro painel) — reconstrói o Atingimento (%) de cada dia,
+    olhando só os negócios que já estavam ganhos até aquela data (won_time <= dia).
+    Meta do mês é fixa (não muda dia a dia), só o Realizado acumulado muda."""
+    colaboradores = carregar_colaboradores(mes, ano)
+    users_map = pd_users()
+    ganhos_mes = buscar_deals_ganhos(ano, mes, users_map)
+
+    metas = carregar_metas(mes, ano)
+
+    def meta_squad(squad_interno):
+        return sum(m["meta_fin"] for nome, m in metas.items()
+                   if colaboradores.get(nome, {}).get("subarea") == squad_interno
+                   and any(termo in colaboradores.get(nome, {}).get("cargo", "") for termo in ("closer", "head", "gerente")))
+
+    metas_mes = {s: meta_squad(s) for s in SQUADS_FINANCEIROS}
+    metas_mes["total"] = sum(metas_mes.values())
+
+    por_dia = []
+    for dia in range(dia_inicio, dia_fim + 1):
+        data_corte = dt.date(ano, mes, dia)
+        realizado = {s: 0.0 for s in SQUADS_FINANCEIROS}
+        for d in ganhos_mes:
+            won_brt = to_brt(d.get("won_time"))
+            if not won_brt or won_brt.date() > data_corte:
+                continue
+            squad = squad_do_deal(d, colaboradores, users_map)
+            if squad in realizado:
+                realizado[squad] += float(cf_valor(d, CF_MULTIPLICADOR) or 0)
+        total_realizado = sum(realizado.values())
+        linha = {"dia": dia}
+        for s in SQUADS_FINANCEIROS:
+            linha[SQUAD_DISPLAY[s]] = {
+                "realizado": round(realizado[s], 2),
+                "meta_mes": round(metas_mes[s], 2),
+                "atingimento_pct": round(safe_div(realizado[s], metas_mes[s]) * 100, 2) if metas_mes[s] else None,
+            }
+        linha["Total"] = {
+            "realizado": round(total_realizado, 2),
+            "meta_mes": round(metas_mes["total"], 2),
+            "atingimento_pct": round(safe_div(total_realizado, metas_mes["total"]) * 100, 2) if metas_mes["total"] else None,
+        }
+        por_dia.append(linha)
+
+    return {"ano": ano, "mes": mes, "por_dia": por_dia}
+
+
 def montar_historico_mql_ganhos_real(ano):
     """Só cálculo (não vai pro painel) — soma MQL e Ganhos por produto mês a mês
     (Jan a Jun) e calcula a taxa real MQL->Ganho e quantos MQL's por venda."""
@@ -2060,6 +2107,18 @@ class handler(BaseHTTPRequestHandler):
 
             if rota == "historico_mql_ganhos":
                 payload = montar_historico_mql_ganhos_real(ano_param or 2026)
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            if rota == "atingimento_historico":
+                dia_inicio = int(query.get("dia_inicio", [1])[0])
+                dia_fim = int(query.get("dia_fim", [8])[0])
+                payload = montar_atingimento_historico(ano_param or 2026, mes_param or 8, dia_inicio, dia_fim)
                 body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
