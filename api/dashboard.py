@@ -1740,6 +1740,26 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
                    if colaboradores.get(nome, {}).get("subarea") == squad_interno
                    and any(termo in colaboradores.get(nome, {}).get("cargo", "") for termo in ("closer", "head", "gerente")))
 
+    # ---- Comparativo "mesmo dia do mês passado" — só no mês atual.
+    # Ex: hoje é 08/09 -> mostra quanto cada squad tinha faturado até 08/08. ----
+    squads_mes_passado = {s: 0.0 for s in SQUADS_FINANCEIROS}
+    mes_passado_rotulo = None
+    if e_mes_atual:
+        ano_passado = ano - 1 if mes == 1 else ano
+        mes_passado = 12 if mes == 1 else mes - 1
+        ultimo_dia_mes_passado = calendar.monthrange(ano_passado, mes_passado)[1]
+        dia_alvo_mes_passado = min(hoje.day, ultimo_dia_mes_passado)
+        data_corte_mes_passado = dt.date(ano_passado, mes_passado, dia_alvo_mes_passado)
+        mes_passado_rotulo = data_corte_mes_passado.strftime("%d/%m")
+        deals_ganhos_mes_passado = buscar_deals_ganhos(ano_passado, mes_passado, users_map)
+        for deal in deals_ganhos_mes_passado:
+            won_brt = to_brt(deal.get("won_time"))
+            if not won_brt or won_brt.date() > data_corte_mes_passado:
+                continue
+            squad = squad_do_deal(deal, colaboradores, users_map)
+            if squad in squads_mes_passado:
+                squads_mes_passado[squad] += float(cf_valor(deal, CF_MULTIPLICADOR) or 0)
+
     ritmo_100 = safe_div(du["passados"], du["total"])
 
     # Prazo do gap intermediário (40%) = sempre a metade do mês selecionado,
@@ -1817,6 +1837,7 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
             "previsto_ontem_70": round(previsto_ontem.get(squad_interno, {}).get("p70", 0.0), 2),
             "previsto_ontem_media": round(previsto_ontem.get(squad_interno, {}).get("media", 0.0), 2),
             "em_aberto_hoje": round(em_aberto_hoje.get(squad_interno, 0.0), 2),
+            "mes_passado_mesmo_dia": round(squads_mes_passado.get(squad_interno, 0.0), 2),
         }
 
     total_meta_mes = sum(resultado["squads"][SQUAD_DISPLAY[s]]["meta_mes"] for s in SQUADS_FINANCEIROS)
@@ -1828,7 +1849,7 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
     total_hoje_bruto = sum(resultado["squads"][SQUAD_DISPLAY[s]]["hoje_bruto"] for s in SQUADS_FINANCEIROS)
     campos_previsto = ["previsto_hoje_20", "previsto_hoje_50", "previsto_hoje_70", "previsto_hoje_media",
                         "previsto_ontem_20", "previsto_ontem_50", "previsto_ontem_70", "previsto_ontem_media",
-                        "em_aberto_hoje"]
+                        "em_aberto_hoje", "mes_passado_mesmo_dia"]
     totais_previsto = {
         campo: sum(resultado["squads"][SQUAD_DISPLAY[s]][campo] for s in SQUADS_FINANCEIROS)
         for campo in campos_previsto
@@ -1854,6 +1875,7 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
         "hoje_bruto": round(total_hoje_bruto, 2),
         **{k: round(v, 2) for k, v in totais_previsto.items()},
     }
+    resultado["mes_passado_rotulo"] = mes_passado_rotulo
 
     # ---- Sniper: reuniões ----
     activities, total_bruto_activities = buscar_activities(ano, mes)
