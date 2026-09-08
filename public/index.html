@@ -160,6 +160,12 @@
   #tabelaFinanceiro td:nth-child(3), #tabela-financeiro th:nth-child(3) { background: #fff7ed; }
   th.col-olympus, td.col-olympus { background: #eef2ff; }
   th.col-elite, td.col-elite { background: #ecfdf5; }
+  .valor-mes-passado {
+    display: block;
+    color: var(--muted);
+    font-size: 10px;
+    margin-top: 2px;
+  }
   .pill {
     display: inline-block;
     font-size: 10px;
@@ -1044,6 +1050,18 @@ let premissasAtual = {};
 function fmtMoedaComPct(pctKey) {
   return (v) => `${fmtMoeda(v)} <span style="color:var(--muted);font-size:11px;">(${fmtNum(premissasAtual[pctKey] ?? 0)}%)</span>`;
 }
+function fmtMoedaComMesPassado(chaveMesPassado) {
+  return (v, linha) => `${fmtMoeda(v)} <span class="valor-mes-passado">Mês passado (${mesPassadoRotuloAtual || "—"}): ${fmtMoeda((linha || {})[chaveMesPassado] ?? 0)}</span>`;
+}
+function fmtNumComMesPassado(chaveMesPassado) {
+  return (v, linha) => `${fmtNum(v)} <span class="valor-mes-passado">Mês passado (${mesPassadoRotuloAtual || "—"}): ${fmtNum((linha || {})[chaveMesPassado] ?? 0)}</span>`;
+}
+function pillComMesPassado(chaveMesPassado) {
+  return (v, linha) => `${pill(v)} <span class="valor-mes-passado">Mês passado (${mesPassadoRotuloAtual || "—"}): ${fmtNum((linha || {})[chaveMesPassado] ?? 0)}%</span>`;
+}
+function rawComMesPassado(chaveMesPassado) {
+  return (v, linha) => `${v ?? 0} <span class="valor-mes-passado">Mês passado (${mesPassadoRotuloAtual || "—"}): ${(linha || {})[chaveMesPassado] ?? 0}</span>`;
+}
 function fmtNumComPct(pctKey) {
   return (v) => `${fmtNum(v)} <span style="color:var(--muted);font-size:11px;">(${fmtNum(premissasAtual[pctKey] ?? 0)}%)</span>`;
 }
@@ -1051,12 +1069,11 @@ function fmtNumComPct(pctKey) {
 const METRICAS_FINANCEIRO = [
   { label: "Meta Mês",                   key: "meta_mes",                fmt: fmtMoeda },
   { label: "Meta Dia",                   key: "meta_dia",                 fmt: fmtMoeda },
-  { label: "Realizado Bruto",            key: "realizado_bruto",          fmt: fmtMoeda },
-  { label: "Realizado Multiplicador",    key: "realizado_multiplicador",  fmt: fmtMoeda },
-  { label: () => `Acumulado Mês Passado (até dia ${mesPassadoRotuloAtual || "—"})`, key: "mes_passado_mesmo_dia", fmt: fmtMoeda, grupo: "hoje" },
+  { label: "Realizado Bruto",            key: "realizado_bruto",          fmt: fmtMoedaComMesPassado("mes_passado_bruto") },
+  { label: "Realizado Multiplicador",    key: "realizado_multiplicador",  fmt: fmtMoedaComMesPassado("mes_passado_mesmo_dia") },
   { label: "Deveria (100%) - MTD",       key: "onde_deveria_100",         fmt: fmtMoedaComPct("ritmo_100_pct") },
   { label: "Deveria (40%) - MTD",        key: "onde_deveria_40",          fmt: fmtMoedaComPct("ritmo_40_pct") },
-  { label: "Atingimento",                key: "atingimento",              fmt: pill },
+  { label: "Atingimento",                key: "atingimento",              fmt: pillComMesPassado("mes_passado_atingimento") },
   { label: "Gap 100%",                   key: "gap_100",                  fmt: fmtMoeda },
   { label: "Gap 40%",                    key: "gap_40",                   fmt: fmtMoeda },
   { label: "Meta/Dia 40%",               key: "meta_dia_40",              fmt: fmtMoeda },
@@ -1074,10 +1091,10 @@ const METRICAS_FINANCEIRO = [
 const METRICAS_SNIPER = [
   { label: "Meta Mês",             key: "meta_mes_reunioes",    fmt: v => v },
   { label: "Meta Dia",             key: "meta_dia_reunioes",    fmt: fmtNum },
-  { label: "Realizado",            key: "realizado_reunioes",   fmt: v => v },
+  { label: "Realizado",            key: "realizado_reunioes",   fmt: rawComMesPassado("mes_passado_reunioes") },
   { label: "Deveria (100%) - MTD", key: "onde_deveria_100",     fmt: fmtNumComPct("ritmo_100_pct") },
   { label: "Deveria (40%) - MTD",  key: "onde_deveria_40",      fmt: fmtNumComPct("ritmo_40_pct") },
-  { label: "Atingimento",          key: "atingimento",          fmt: pill },
+  { label: "Atingimento",          key: "atingimento",          fmt: pillComMesPassado("mes_passado_atingimento") },
   { label: "Gap 100%",             key: "gap_100",              fmt: fmtNum },
   { label: "Gap 40%",              key: "gap_40",               fmt: fmtNum },
   { label: "Meta/Dia 40%",         key: "meta_dia_40",          fmt: fmtNum },
@@ -1106,7 +1123,7 @@ function tabelaTransposta(metricas, colunas) {
   return linhas.map(m => `
     <tr>
       <td class="${classesGrupo(m.grupo)}">${typeof m.label === "function" ? m.label() : m.label}</td>
-      ${colunas.map(c => `<td class="${c.isTotal ? 'total ' : ''}${classesGrupo(m.grupo)}">${m.fmt(c.dados[m.key])}</td>`).join("")}
+      ${colunas.map(c => `<td class="${c.isTotal ? 'total ' : ''}${classesGrupo(m.grupo)}">${m.fmt(c.dados[m.key], c.dados)}</td>`).join("")}
     </tr>`).join("");
 }
 
