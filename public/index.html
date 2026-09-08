@@ -1053,6 +1053,7 @@ const METRICAS_FINANCEIRO = [
   { label: "Meta Dia",                   key: "meta_dia",                 fmt: fmtMoeda },
   { label: "Realizado Bruto",            key: "realizado_bruto",          fmt: fmtMoeda },
   { label: "Realizado Multiplicador",    key: "realizado_multiplicador",  fmt: fmtMoeda },
+  { label: () => `Acumulado Mês Passado (até dia ${mesPassadoRotuloAtual || "—"})`, key: "mes_passado_mesmo_dia", fmt: fmtMoeda, grupo: "hoje" },
   { label: "Deveria (100%) - MTD",       key: "onde_deveria_100",         fmt: fmtMoedaComPct("ritmo_100_pct") },
   { label: "Deveria (40%) - MTD",        key: "onde_deveria_40",          fmt: fmtMoedaComPct("ritmo_40_pct") },
   { label: "Atingimento",                key: "atingimento",              fmt: pill },
@@ -1097,13 +1098,14 @@ function classesGrupo(grupo) {
 }
 
 let mesAtualSelecionado = true;
+let mesPassadoRotuloAtual = "";
 
 function tabelaTransposta(metricas, colunas) {
   // colunas: [{label, dados, isTotal}]
   const linhas = mesAtualSelecionado ? metricas : metricas.filter(m => !m.grupo);
   return linhas.map(m => `
     <tr>
-      <td class="${classesGrupo(m.grupo)}">${m.label}</td>
+      <td class="${classesGrupo(m.grupo)}">${typeof m.label === "function" ? m.label() : m.label}</td>
       ${colunas.map(c => `<td class="${c.isTotal ? 'total ' : ''}${classesGrupo(m.grupo)}">${m.fmt(c.dados[m.key])}</td>`).join("")}
     </tr>`).join("");
 }
@@ -1153,6 +1155,7 @@ async function atualizar() {
     document.getElementById("badgeDiasUteis").innerHTML =
       `${nomeMes} ${data.ano} · <span class="destaque">${premissasAtual.dias_uteis_passados ?? "—"}/${premissasAtual.dias_uteis_total ?? "—"}</span> dias úteis · <span class="destaque">${premissasAtual.dias_uteis_restantes ?? "—"}</span> restantes`;
     mesAtualSelecionado = !!data.e_mes_atual;
+    mesPassadoRotuloAtual = data.mes_passado_rotulo || "";
     document.getElementById("secaoProdutos").style.display = mesAtualSelecionado ? "" : "none";
 
     document.getElementById("tabelaFinanceiro").innerHTML = tabelaTransposta(METRICAS_FINANCEIRO, [
@@ -1286,4 +1289,3 @@ setInterval(atualizar, INTERVALO_MS);
 
 </body>
 </html>
-
