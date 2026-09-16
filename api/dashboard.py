@@ -2077,6 +2077,7 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
     resultado["papel_usuario"] = papel
 
     debug_previsto_hoje_deals = {s: [] for s in SQUADS_FINANCEIROS}
+    previsto_hoje_por_bucket = {s: {"20": [], "50": [], "70": []} for s in SQUADS_FINANCEIROS}
     if e_mes_atual:
         alvo_iso = hoje.isoformat()
         vistos_dbg = set()
@@ -2100,9 +2101,37 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
                 "probability": prob,
                 "valor": float(d.get("value") or 0),
             })
+            if squad in previsto_hoje_por_bucket and prob in (20, 50, 70):
+                previsto_hoje_por_bucket[squad][str(prob)].append({
+                    "id": did,
+                    "titulo": d.get("title") or f"Negócio {did}",
+                    "url": f"https://{PD_DOMAIN}/deal/{did}",
+                    "valor": float(d.get("value") or 0),
+                })
     resultado["debug_previsto_hoje_deals"] = {
         SQUAD_DISPLAY.get(s, s): v[:30] for s, v in debug_previsto_hoje_deals.items() if s in SQUADS_FINANCEIROS
     }
+
+    def _monta_bucket(lista):
+        return {
+            "quantidade": len(lista),
+            "valor_total": round(sum(n["valor"] for n in lista), 2),
+            "negocios": sorted(lista, key=lambda n: n["valor"], reverse=True)[:MAX_NEGOCIOS_POR_COLABORADOR],
+        }
+
+    resultado["previsto_hoje_detalhes"] = {
+        SQUAD_DISPLAY[s]: {
+            "20": _monta_bucket(previsto_hoje_por_bucket[s]["20"]),
+            "50": _monta_bucket(previsto_hoje_por_bucket[s]["50"]),
+            "70": _monta_bucket(previsto_hoje_por_bucket[s]["70"]),
+        }
+        for s in SQUADS_FINANCEIROS
+    }
+    resultado["previsto_hoje_detalhes"]["Total"] = {
+        bucket: _monta_bucket([n for s in SQUADS_FINANCEIROS for n in previsto_hoje_por_bucket[s][bucket]])
+        for bucket in ("20", "50", "70")
+    }
+
 
     nome_teste = norm("Denise Mussolin")
     colab_teste = colaboradores.get(nome_teste)
