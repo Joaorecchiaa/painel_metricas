@@ -1062,6 +1062,27 @@ function pillComMesPassado(chaveMesPassado) {
 function rawComMesPassado(chaveMesPassado) {
   return (v, linha) => `${v ?? 0} <span class="valor-mes-passado">Mês passado (${mesPassadoRotuloAtual || "—"}): ${(linha || {})[chaveMesPassado] ?? 0}</span>`;
 }
+function fmtPrevistoHojeComBuckets(v, linha) {
+  const buckets = (linha || {})._previsto_hoje_buckets;
+  if (!buckets) return fmtMoeda(v);
+  const linhaBucket = (rotulo, chave) => {
+    const b = buckets[chave] || { quantidade: 0, valor_total: 0, negocios: [] };
+    return `
+      <details class="colaborador-dropdown">
+        <summary><span class="colaborador-nome">${rotulo} (${b.quantidade})</span> <span class="colaborador-qtd">${fmtMoeda(b.valor_total)}</span></summary>
+        <div class="colaborador-negocios">${listaNegociosSimples(b.negocios)}</div>
+      </details>`;
+  };
+  return `
+    <details class="motivo-dropdown">
+      <summary class="motivo-linha"><span class="motivo-nome">${fmtMoeda(v)}</span></summary>
+      <div class="motivo-colaboradores">
+        ${linhaBucket("20%", "20")}
+        ${linhaBucket("50%", "50")}
+        ${linhaBucket("70%", "70")}
+      </div>
+    </details>`;
+}
 function fmtNumComPct(pctKey) {
   return (v) => `${fmtNum(v)} <span style="color:var(--muted);font-size:11px;">(${fmtNum(premissasAtual[pctKey] ?? 0)}%)</span>`;
 }
@@ -1082,7 +1103,7 @@ const METRICAS_FINANCEIRO = [
   { label: "Previsto Ontem",             key: "previsto_ontem_media",     fmt: fmtMoeda, grupo: "ontem" },
   { label: "Entrou Ontem (Multiplicador)", key: "ontem",                  fmt: fmtMoeda, grupo: "ontem" },
   { label: "Entrou Ontem (Bruto)",       key: "ontem_bruto",              fmt: fmtMoeda, grupo: "ontem" },
-  { label: "Previsto Hoje",              key: "previsto_hoje_media",      fmt: fmtMoeda, grupo: "hoje" },
+  { label: "Previsto Hoje",              key: "previsto_hoje_media",      fmt: fmtPrevistoHojeComBuckets, grupo: "hoje" },
   { label: "Em Aberto Hoje",             key: "em_aberto_hoje",           fmt: fmtMoeda, grupo: "hoje" },
   { label: "Entrou Hoje (Multiplicador)", key: "hoje",                    fmt: fmtMoeda, grupo: "hoje" },
   { label: "Entrou Hoje (Bruto)",        key: "hoje_bruto",               fmt: fmtMoeda, grupo: "hoje" },
@@ -1174,6 +1195,11 @@ async function atualizar() {
     mesAtualSelecionado = !!data.e_mes_atual;
     mesPassadoRotuloAtual = data.mes_passado_rotulo || "";
     document.getElementById("secaoProdutos").style.display = mesAtualSelecionado ? "" : "none";
+
+    const previstoHojeDet = data.previsto_hoje_detalhes || {};
+    ["Olympus", "Elite", "Total"].forEach(s => {
+      if (data.squads[s]) data.squads[s]._previsto_hoje_buckets = previstoHojeDet[s] || null;
+    });
 
     document.getElementById("tabelaFinanceiro").innerHTML = tabelaTransposta(METRICAS_FINANCEIRO, [
       { dados: data.squads.Olympus },
