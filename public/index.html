@@ -166,24 +166,38 @@
     font-size: 10px;
     margin-top: 2px;
   }
-  .previsto-dropdown summary {
+  .previsto-toggle-label {
     cursor: pointer;
-    list-style: none;
+    text-decoration: underline dotted;
+    text-underline-offset: 2px;
   }
-  .previsto-dropdown summary::-webkit-details-marker { display: none; }
   .previsto-buckets {
+    display: none;
     margin-top: 4px;
     padding-top: 4px;
     border-top: 1px solid #f0f0f0;
   }
+  #tabelaFinanceiro.previsto-aberto .previsto-buckets { display: block; }
+  .previsto-bucket-item summary {
+    cursor: pointer;
+    list-style: none;
+  }
+  .previsto-bucket-item summary::-webkit-details-marker { display: none; }
   .previsto-bucket-linha {
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
+    display: grid;
+    grid-template-columns: 28px 42px 1fr;
+    gap: 6px;
     font-size: 10px;
     font-weight: 400;
     color: var(--muted);
     padding: 1px 0;
+  }
+  .previsto-bucket-linha span:last-child { text-align: right; }
+  .previsto-bucket-negocios {
+    padding: 2px 0 4px 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
   }
   .pill {
     display: inline-block;
@@ -1081,22 +1095,32 @@ function pillComMesPassado(chaveMesPassado) {
 function rawComMesPassado(chaveMesPassado) {
   return (v, linha) => `${v ?? 0} <span class="valor-mes-passado">Mês passado (${mesPassadoRotuloAtual || "—"}): ${(linha || {})[chaveMesPassado] ?? 0}</span>`;
 }
+let previstoHojeAberto = false;
+function togglePrevistoHoje() {
+  previstoHojeAberto = !previstoHojeAberto;
+  document.getElementById("tabelaFinanceiro").classList.toggle("previsto-aberto", previstoHojeAberto);
+}
+
 function fmtPrevistoHojeComBuckets(v, linha) {
   const buckets = (linha || {})._previsto_hoje_buckets;
   if (!buckets) return fmtMoeda(v);
   const linhaBucket = (rotulo, chave) => {
-    const b = buckets[chave] || { quantidade: 0, valor_total: 0 };
-    return `<div class="previsto-bucket-linha"><span>${rotulo}</span><span>${b.quantidade} neg.</span><span>${fmtMoeda(b.valor_total)}</span></div>`;
+    const b = buckets[chave] || { quantidade: 0, valor_total: 0, negocios: [] };
+    return `
+      <details class="previsto-bucket-item">
+        <summary class="previsto-bucket-linha">
+          <span>${rotulo}</span><span>${b.quantidade} neg.</span><span>${fmtMoeda(b.valor_total)}</span>
+        </summary>
+        <div class="previsto-bucket-negocios">${listaNegociosSimples(b.negocios)}</div>
+      </details>`;
   };
   return `
-    <details class="previsto-dropdown">
-      <summary>${fmtMoeda(v)}</summary>
-      <div class="previsto-buckets">
-        ${linhaBucket("20%", "20")}
-        ${linhaBucket("50%", "50")}
-        ${linhaBucket("70%", "70")}
-      </div>
-    </details>`;
+    ${fmtMoeda(v)}
+    <div class="previsto-buckets">
+      ${linhaBucket("20%", "20")}
+      ${linhaBucket("50%", "50")}
+      ${linhaBucket("70%", "70")}
+    </div>`;
 }
 function fmtNumComPct(pctKey) {
   return (v) => `${fmtNum(v)} <span style="color:var(--muted);font-size:11px;">(${fmtNum(premissasAtual[pctKey] ?? 0)}%)</span>`;
@@ -1118,7 +1142,7 @@ const METRICAS_FINANCEIRO = [
   { label: "Previsto Ontem",             key: "previsto_ontem_media",     fmt: fmtMoeda, grupo: "ontem" },
   { label: "Entrou Ontem (Multiplicador)", key: "ontem",                  fmt: fmtMoeda, grupo: "ontem" },
   { label: "Entrou Ontem (Bruto)",       key: "ontem_bruto",              fmt: fmtMoeda, grupo: "ontem" },
-  { label: "Previsto Hoje",              key: "previsto_hoje_media",      fmt: fmtPrevistoHojeComBuckets, grupo: "hoje" },
+  { label: () => `<span class="previsto-toggle-label" onclick="togglePrevistoHoje()">Previsto Hoje</span>`, key: "previsto_hoje_media", fmt: fmtPrevistoHojeComBuckets, grupo: "hoje" },
   { label: "Em Aberto Hoje",             key: "em_aberto_hoje",           fmt: fmtMoeda, grupo: "hoje" },
   { label: "Entrou Hoje (Multiplicador)", key: "hoje",                    fmt: fmtMoeda, grupo: "hoje" },
   { label: "Entrou Hoje (Bruto)",        key: "hoje_bruto",               fmt: fmtMoeda, grupo: "hoje" },
@@ -1221,6 +1245,7 @@ async function atualizar() {
       { dados: data.squads.Elite },
       { dados: data.squads.Total, isTotal: true },
     ]);
+    document.getElementById("tabelaFinanceiro").classList.toggle("previsto-aberto", previstoHojeAberto);
 
     document.getElementById("tabelaSniper").innerHTML = tabelaTransposta(METRICAS_SNIPER, [
       { dados: data.squads.Sniper },
