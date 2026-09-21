@@ -1132,9 +1132,10 @@ const METRICAS_FINANCEIRO = [
   { label: "Realizado Bruto",            key: "realizado_bruto",          fmt: fmtMoedaComMesPassado("mes_passado_bruto") },
   { label: "Realizado Multiplicador",    key: "realizado_multiplicador",  fmt: fmtMoedaComMesPassado("mes_passado_mesmo_dia") },
   { label: "Deveria (100%) - MTD",       key: "onde_deveria_100",         fmt: fmtMoedaComPct("ritmo_100_pct") },
+  { label: "Gap - Deveria (100%) MTD",   key: "onde_deveria_100",         fmt: (v, linha) => fmtMoeda(Math.max(0, v - ((linha || {}).realizado_multiplicador ?? 0))) },
   { label: "Atingimento - Meta",         key: "atingimento",              fmt: pillComMesPassado("mes_passado_atingimento") },
-  { label: "Atingimento (Bruto) - MTD",  key: "realizado_bruto",          fmt: (v, linha) => pill((linha || {}).meta_mes ? (v / linha.meta_mes) * 100 : 0) },
-  { label: "Atingimento (Multiplicador) - MTD", key: "atingimento",       fmt: pillComMesPassado("mes_passado_atingimento") },
+  { label: "Atingimento (Bruto) - MTD",  key: "realizado_bruto",          fmt: (v, linha) => pill((linha || {}).onde_deveria_100 ? (v / linha.onde_deveria_100) * 100 : 0) },
+  { label: "Atingimento (Multiplicador) - MTD", key: "realizado_multiplicador", fmt: (v, linha) => pill((linha || {}).onde_deveria_100 ? (v / linha.onde_deveria_100) * 100 : 0) },
   // ocultas a pedido (14/09) — descomenta pra voltar com elas:
   // { label: "Deveria (40%) - MTD",        key: "onde_deveria_40",          fmt: fmtMoedaComPct("ritmo_40_pct") },
   // { label: "Gap 40%",                    key: "gap_40",                   fmt: fmtMoeda },
