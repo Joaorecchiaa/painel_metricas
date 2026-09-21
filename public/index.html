@@ -1134,6 +1134,7 @@ const METRICAS_FINANCEIRO = [
   { label: "Deveria (100%) - MTD",       key: "onde_deveria_100",         fmt: fmtMoedaComPct("ritmo_100_pct") },
   { label: "Deveria (40%) - MTD",        key: "onde_deveria_40",          fmt: fmtMoedaComPct("ritmo_40_pct") },
   { label: "Atingimento",                key: "atingimento",              fmt: pillComMesPassado("mes_passado_atingimento") },
+  { label: "Atingimento (Bruto)",        key: "realizado_bruto",          fmt: (v, linha) => pill((linha || {}).meta_mes ? (v / linha.meta_mes) * 100 : 0) },
   { label: "Gap 100%",                   key: "gap_100",                  fmt: fmtMoeda },
   { label: "Gap 40%",                    key: "gap_40",                   fmt: fmtMoeda },
   { label: "Meta/Dia 40%",               key: "meta_dia_40",              fmt: fmtMoeda },
