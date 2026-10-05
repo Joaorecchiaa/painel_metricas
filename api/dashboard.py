@@ -1703,13 +1703,16 @@ def montar_resposta_perdidos_periodo(mes_param, ano_param, perdidos_inicio, perd
 
 def _bloco_financeiro(meta_mes, bruto, multi, ontem, hoje, ontem_bruto, hoje_bruto,
                        du_total, dias_restantes_p100, ritmo_100,
-                       mes_passado_multi=0.0, mes_passado_bruto=0.0):
+                       mes_passado_multi=0.0, mes_passado_bruto=0.0, meta_mp=None):
     """Mesma fórmula do bloco financeiro por squad (ver loop principal de montar_painel),
-    fatorada pra reaproveitar no breakdown Elite x Atlantis sem duplicar a conta."""
+    fatorada pra reaproveitar no breakdown Elite x Atlantis sem duplicar a conta.
+    meta_mp = meta do MÊS PASSADO (equipe/meta de então) pro cálculo de mes_passado_atingimento —
+    NUNCA a meta do mês atual, senão o % fica inflado/deflacionado por mudança de meta mês a mês."""
     onde_100 = meta_mes * ritmo_100
     gap_100 = max(0.0, meta_mes - multi)
     gap_100_bruto = max(0.0, meta_mes - bruto)
-    mp_atingimento = round(safe_div(mes_passado_multi, meta_mes) * 100, 2) if meta_mes else 0.0
+    meta_mp_calc = meta_mp if meta_mp is not None else meta_mes
+    mp_atingimento = round(safe_div(mes_passado_multi, meta_mp_calc) * 100, 2) if meta_mp_calc else 0.0
     return {
         "meta_mes": round(meta_mes, 2),
         "meta_dia": round(safe_div(meta_mes, du_total), 2),
@@ -1852,6 +1855,14 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
             meta_mp_s = meta_squad_mp(s)
             squads_mes_passado_atingimento[s] = round(safe_div(squads_mes_passado[s], meta_mp_s) * 100, 2) if meta_mp_s else 0.0
 
+        # Meta do MÊS PASSADO específica de Elite (só) e Atlantis (só), pro breakdown —
+        # sem isso, o % "Mês passado" do detalhe ficava comparando com a meta do mês ATUAL (errado).
+        meta_mp_elite_sub = meta_squad_mp("elite")
+        meta_mp_atlantis_sub = meta_squad_mp(SUBAREA_ATLANTIS)
+    else:
+        meta_mp_elite_sub = 0.0
+        meta_mp_atlantis_sub = 0.0
+
     ritmo_100 = safe_div(du["passados"], du["total"])
 
     # Prazo do gap intermediário (40%) = sempre a metade do mês selecionado,
@@ -1950,6 +1961,7 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
                     squads_fin_sub["elite"]["ontem_bruto"], squads_fin_sub["elite"]["hoje_bruto"],
                     du["total"], dias_restantes_p100, ritmo_100,
                     squads_mes_passado_sub["elite"], squads_mes_passado_bruto_sub["elite"],
+                    meta_mp_elite_sub,
                 ),
                 "Atlantis": _bloco_financeiro(
                     meta_squad(SUBAREA_ATLANTIS),
@@ -1958,6 +1970,7 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
                     squads_fin_sub["atlantis"]["ontem_bruto"], squads_fin_sub["atlantis"]["hoje_bruto"],
                     du["total"], dias_restantes_p100, ritmo_100,
                     squads_mes_passado_sub["atlantis"], squads_mes_passado_bruto_sub["atlantis"],
+                    meta_mp_atlantis_sub,
                 ),
             }
 
