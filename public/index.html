@@ -199,6 +199,28 @@
     flex-wrap: wrap;
     gap: 4px;
   }
+  .cel-detalhe summary {
+    cursor: pointer;
+    list-style: none;
+  }
+  .cel-detalhe summary::-webkit-details-marker { display: none; }
+  .cel-detalhe summary::after {
+    content: " ▾";
+    color: var(--muted);
+    font-size: 9px;
+  }
+  .cel-detalhe-sub {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 10px;
+    font-weight: 400;
+    color: var(--muted);
+    padding: 1px 0;
+    border-top: 1px dashed #eee;
+    margin-top: 2px;
+  }
+  .cel-detalhe-sub span:first-child { font-weight: 600; }
   .pill {
     display: inline-block;
     font-size: 10px;
@@ -505,14 +527,14 @@
 </nav>
 
 <div id="paginaMetricas">
-  <h2 class="titulo-tabela">OLYMPUS &amp; ELITE</h2>
+  <h2 class="titulo-tabela">OLYMPUS &amp; ELITE + ATLANTIS</h2>
   <div class="tabela-wrap">
     <table id="tabela-financeiro">
       <thead>
         <tr>
           <th>Métrica</th>
           <th>Olympus</th>
-          <th>Elite</th>
+          <th>Elite + Atlantis</th>
           <th>Total Consolidado</th>
         </tr>
       </thead>
@@ -1182,13 +1204,29 @@ function classesGrupo(grupo) {
 let mesAtualSelecionado = true;
 let mesPassadoRotuloAtual = "";
 
+function celulaComDetalheOpcional(m, dados) {
+  const det = dados && dados.detalhe;
+  if (det && det.Elite && det.Atlantis && m.key in det.Elite) {
+    const principal = m.fmt(dados[m.key], dados);
+    const eliteSub = m.fmt(det.Elite[m.key], det.Elite);
+    const atlSub = m.fmt(det.Atlantis[m.key], det.Atlantis);
+    return `
+      <details class="cel-detalhe">
+        <summary>${principal}</summary>
+        <div class="cel-detalhe-sub"><span>Elite</span><span>${eliteSub}</span></div>
+        <div class="cel-detalhe-sub"><span>Atlantis</span><span>${atlSub}</span></div>
+      </details>`;
+  }
+  return m.fmt(dados[m.key], dados);
+}
+
 function tabelaTransposta(metricas, colunas) {
   // colunas: [{label, dados, isTotal}]
   const linhas = mesAtualSelecionado ? metricas : metricas.filter(m => !m.grupo);
   return linhas.map(m => `
     <tr>
       <td class="${classesGrupo(m.grupo)}">${typeof m.label === "function" ? m.label() : m.label}</td>
-      ${colunas.map(c => `<td class="${c.isTotal ? 'total ' : ''}${classesGrupo(m.grupo)}">${m.fmt(c.dados[m.key], c.dados)}</td>`).join("")}
+      ${colunas.map(c => `<td class="${c.isTotal ? 'total ' : ''}${classesGrupo(m.grupo)}">${celulaComDetalheOpcional(m, c.dados)}</td>`).join("")}
     </tr>`).join("");
 }
 
@@ -1241,13 +1279,16 @@ async function atualizar() {
     document.getElementById("secaoProdutos").style.display = mesAtualSelecionado ? "" : "none";
 
     const previstoHojeDet = data.previsto_hoje_detalhes || {};
+    // "Elite" aqui é o rótulo que o backend usa pro bloco combinado "Elite + Atlantis"
+    // dentro de previsto_hoje_detalhes (não mudou) — só a chave em data.squads mudou.
     ["Olympus", "Elite", "Total"].forEach(s => {
-      if (data.squads[s]) data.squads[s]._previsto_hoje_buckets = previstoHojeDet[s] || null;
+      const chaveSquad = s === "Elite" ? "Elite + Atlantis" : s;
+      if (data.squads[chaveSquad]) data.squads[chaveSquad]._previsto_hoje_buckets = previstoHojeDet[s] || null;
     });
 
     document.getElementById("tabelaFinanceiro").innerHTML = tabelaTransposta(METRICAS_FINANCEIRO, [
       { dados: data.squads.Olympus },
-      { dados: data.squads.Elite },
+      { dados: data.squads["Elite + Atlantis"] },
       { dados: data.squads.Total, isTotal: true },
     ]);
     document.getElementById("tabelaFinanceiro").classList.toggle("previsto-aberto", previstoHojeAberto);
