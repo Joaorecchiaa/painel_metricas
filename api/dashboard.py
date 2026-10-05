@@ -89,7 +89,13 @@ SHEET_FERIADOS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbk
 SQUAD_DISPLAY = {"mgm": "Olympus", "elite": "Elite", "sniper": "Sniper", "navigator": "Navigator"}
 SQUADS_FINANCEIROS = ["mgm", "elite"]     # closers (valor em R$)
 SQUAD_SDR = "sniper"                       # reuniões
+CARGOS_FINANCEIROS = ("closer", "head", "gerente", "legionario")  # cargos (COLAB) que contam pro financeiro
 NOMES_EXTRAS_SNIPER_CRU = {"Denise Mussolin"}  # contam nas reuniões do Sniper mesmo não sendo do squad
+
+# ATLANTIS (Amanda Leal) — subarea própria na COLAB, mas soma com Elite no bloco financeiro
+# do painel ("Elite + Atlantis"), com breakdown clicável por subarea. Meta vem da planilha
+# METAS, igual todo mundo (meta_squad("atlantis")) — não é fixa no código.
+SUBAREA_ATLANTIS = "atlantis"
 
 # Pessoas que nunca devem contar, mesmo que apareçam em alguma base (divergência de cadastro etc.)
 EXCLUSOES_FIXAS = {"priscila ribeiro"}
@@ -102,6 +108,7 @@ FUNIL_PARA_SQUAD = {
     "olympus": "mgm",
     "mgm": "mgm",
     "navigator": "mgm",
+    "atlantis": "elite",
 }
 
 # ⚠️ Parâmetros que NÃO vêm de nenhuma das 3 abas do Sheets (COLAB/METAS/FERIADOS):
@@ -645,7 +652,9 @@ def _conta_como_sniper(nome_norm, colaboradores):
 
 def squad_do_deal(deal, colaboradores, users_map):
     """Retorna squad interno (mgm/elite/sniper/...) via dono normalizado, com exceção da GM.
-    Pros squads financeiros (Olympus/Elite), exige Closer, Head ou Gerente no cargo."""
+    Pros squads financeiros (Olympus/Elite), exige Closer, Head ou Gerente no cargo.
+    Atlantis (subarea própria na COLAB) é tratado como 'elite' pra todo efeito de bucket/meta
+    combinada — o detalhe Elite x Atlantis é recuperado separadamente via _subarea_raw_do_deal."""
     nome_dono = norm(owner_nome(deal, users_map))
     if GM_NOME_NORMALIZADO and nome_dono == GM_NOME_NORMALIZADO:
         funil = norm((deal.get("pipeline_name") or deal.get("pipeline_id") or ""))
@@ -657,9 +666,18 @@ def squad_do_deal(deal, colaboradores, users_map):
     if subarea.startswith("lic"):
         return None
     cargo = colaborador.get("cargo", "")
-    if subarea in SQUADS_FINANCEIROS and not any(termo in cargo for termo in ("closer", "head", "gerente")):
+    subarea_bucket = "elite" if subarea == SUBAREA_ATLANTIS else subarea
+    if subarea_bucket in SQUADS_FINANCEIROS and not any(termo in cargo for termo in CARGOS_FINANCEIROS):
         return None
-    return subarea
+    return subarea_bucket
+
+
+def _e_deal_atlantis(deal, colaboradores, users_map):
+    """True se o dono do negócio é cadastrado na COLAB com subarea 'atlantis' — usado só
+    pra separar o breakdown Elite x Atlantis dentro do squad financeiro 'elite' combinado."""
+    nome_dono = norm(owner_nome(deal, users_map))
+    colaborador = colaboradores.get(nome_dono)
+    return bool(colaborador) and colaborador.get("subarea") == SUBAREA_ATLANTIS
 
 
 def teste_activities_sem_filtro():
@@ -1276,7 +1294,7 @@ def montar_atingimento_historico(ano, mes, dia_inicio, dia_fim):
     def meta_squad(squad_interno):
         return sum(m["meta_fin"] for nome, m in metas.items()
                    if colaboradores.get(nome, {}).get("subarea") == squad_interno
-                   and any(termo in colaboradores.get(nome, {}).get("cargo", "") for termo in ("closer", "head", "gerente")))
+                   and any(termo in colaboradores.get(nome, {}).get("cargo", "") for termo in CARGOS_FINANCEIROS))
 
     metas_mes = {s: meta_squad(s) for s in SQUADS_FINANCEIROS}
     metas_mes["total"] = sum(metas_mes.values())
@@ -1683,6 +1701,36 @@ def montar_resposta_perdidos_periodo(mes_param, ano_param, perdidos_inicio, perd
     }
 
 
+def _bloco_financeiro(meta_mes, bruto, multi, ontem, hoje, ontem_bruto, hoje_bruto,
+                       du_total, dias_restantes_p100, ritmo_100,
+                       mes_passado_multi=0.0, mes_passado_bruto=0.0):
+    """Mesma fórmula do bloco financeiro por squad (ver loop principal de montar_painel),
+    fatorada pra reaproveitar no breakdown Elite x Atlantis sem duplicar a conta."""
+    onde_100 = meta_mes * ritmo_100
+    gap_100 = max(0.0, meta_mes - multi)
+    gap_100_bruto = max(0.0, meta_mes - bruto)
+    mp_atingimento = round(safe_div(mes_passado_multi, meta_mes) * 100, 2) if meta_mes else 0.0
+    return {
+        "meta_mes": round(meta_mes, 2),
+        "meta_dia": round(safe_div(meta_mes, du_total), 2),
+        "realizado_bruto": round(bruto, 2),
+        "realizado_multiplicador": round(multi, 2),
+        "onde_deveria_100": round(onde_100, 2),
+        "atingimento": round(safe_div(multi, meta_mes) * 100, 2),
+        "gap_100": round(gap_100, 2),
+        "meta_dia_100": round(safe_div(gap_100, dias_restantes_p100), 2),
+        "gap_100_bruto": round(gap_100_bruto, 2),
+        "meta_dia_100_bruto": round(safe_div(gap_100_bruto, dias_restantes_p100), 2),
+        "ontem": round(ontem, 2),
+        "hoje": round(hoje, 2),
+        "ontem_bruto": round(ontem_bruto, 2),
+        "hoje_bruto": round(hoje_bruto, 2),
+        "mes_passado_mesmo_dia": round(mes_passado_multi, 2),
+        "mes_passado_bruto": round(mes_passado_bruto, 2),
+        "mes_passado_atingimento": mp_atingimento,
+    }
+
+
 def montar_painel(ano_param=None, mes_param=None, papel=None):
     hoje = hoje_brt()
     ano, mes = ano_param or hoje.year, mes_param or hoje.month
@@ -1707,8 +1755,11 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
     ontem = dia_util_anterior(hoje, feriados)
     prox_dia_util = proximo_dia_util(hoje, feriados)
 
-    # ---- Financeiro: Olympus (mgm) e Elite ----
+    # ---- Financeiro: Olympus (mgm) e Elite (+ Atlantis, somado dentro de "elite") ----
     squads_fin = {s: {"bruto": 0.0, "multi": 0.0, "ontem": 0.0, "hoje": 0.0, "ontem_bruto": 0.0, "hoje_bruto": 0.0} for s in SQUADS_FINANCEIROS}
+    # Breakdown Elite x Atlantis — mesmas chaves, só pra sub-dividir o squad "elite" no painel.
+    _ZERO_SUB = {"bruto": 0.0, "multi": 0.0, "ontem": 0.0, "hoje": 0.0, "ontem_bruto": 0.0, "hoje_bruto": 0.0}
+    squads_fin_sub = {"elite": dict(_ZERO_SUB), "atlantis": dict(_ZERO_SUB)}
     for deal in deals_ganhos:
         squad = squad_do_deal(deal, colaboradores, users_map)
         if squad not in squads_fin:
@@ -1724,6 +1775,16 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
         if won_brt and won_brt.date() == hoje:
             squads_fin[squad]["hoje"] += multi
             squads_fin[squad]["hoje_bruto"] += bruto
+        if squad == "elite":
+            sub = squads_fin_sub["atlantis"] if _e_deal_atlantis(deal, colaboradores, users_map) else squads_fin_sub["elite"]
+            sub["bruto"] += bruto
+            sub["multi"] += multi
+            if won_brt and won_brt.date() == ontem:
+                sub["ontem"] += multi
+                sub["ontem_bruto"] += bruto
+            if won_brt and won_brt.date() == hoje:
+                sub["hoje"] += multi
+                sub["hoje_bruto"] += bruto
 
     # ---- Previsto (forecast) hoje/ontem — só faz sentido no mês atual ----
     # Só negócios em aberto (revertido: não inclui mais ganhos/perdidos).
@@ -1743,13 +1804,15 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
     def meta_squad(squad_interno):
         return sum(m["meta_fin"] for nome, m in metas.items()
                    if colaboradores.get(nome, {}).get("subarea") == squad_interno
-                   and any(termo in colaboradores.get(nome, {}).get("cargo", "") for termo in ("closer", "head", "gerente")))
+                   and any(termo in colaboradores.get(nome, {}).get("cargo", "") for termo in CARGOS_FINANCEIROS))
 
     # ---- Comparativo "mesmo dia do mês passado" — só no mês atual.
     # Ex: hoje é 08/09 -> mostra quanto cada squad tinha faturado até 08/08. ----
     squads_mes_passado = {s: 0.0 for s in SQUADS_FINANCEIROS}
     squads_mes_passado_bruto = {s: 0.0 for s in SQUADS_FINANCEIROS}
     squads_mes_passado_atingimento = {s: 0.0 for s in SQUADS_FINANCEIROS}
+    squads_mes_passado_sub = {"elite": 0.0, "atlantis": 0.0}
+    squads_mes_passado_bruto_sub = {"elite": 0.0, "atlantis": 0.0}
     mes_passado_rotulo = None
     colaboradores_mp, metas_mp, ano_passado, mes_passado, dia_alvo_mes_passado = None, None, None, None, None
     if e_mes_atual:
@@ -1767,7 +1830,7 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
         def meta_squad_mp(squad_interno):
             return sum(m["meta_fin"] for nome, m in metas_mp.items()
                        if colaboradores_mp.get(nome, {}).get("subarea") == squad_interno
-                       and any(termo in colaboradores_mp.get(nome, {}).get("cargo", "") for termo in ("closer", "head", "gerente")))
+                       and any(termo in colaboradores_mp.get(nome, {}).get("cargo", "") for termo in CARGOS_FINANCEIROS))
 
         deals_ganhos_mes_passado = buscar_deals_ganhos(ano_passado, mes_passado, users_map)
         for deal in deals_ganhos_mes_passado:
@@ -1776,8 +1839,14 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
                 continue
             squad = squad_do_deal(deal, colaboradores_mp, users_map)
             if squad in squads_mes_passado:
-                squads_mes_passado[squad] += float(cf_valor(deal, CF_MULTIPLICADOR) or 0)
-                squads_mes_passado_bruto[squad] += float(deal.get("value") or 0)
+                multi_mp = float(cf_valor(deal, CF_MULTIPLICADOR) or 0)
+                bruto_mp = float(deal.get("value") or 0)
+                squads_mes_passado[squad] += multi_mp
+                squads_mes_passado_bruto[squad] += bruto_mp
+                if squad == "elite":
+                    chave_sub = "atlantis" if _e_deal_atlantis(deal, colaboradores_mp, users_map) else "elite"
+                    squads_mes_passado_sub[chave_sub] += multi_mp
+                    squads_mes_passado_bruto_sub[chave_sub] += bruto_mp
 
         for s in SQUADS_FINANCEIROS:
             meta_mp_s = meta_squad_mp(s)
@@ -1819,8 +1888,14 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
         "mes": mes, "ano": ano, "e_mes_atual": e_mes_atual,
     }
 
+    # Rótulo só pro bloco financeiro (não afeta Produtos/Perdidos, que usam SQUAD_DISPLAY original).
+    rotulo_financeiro = dict(SQUAD_DISPLAY)
+    rotulo_financeiro["elite"] = "Elite + Atlantis"
+
     for squad_interno in SQUADS_FINANCEIROS:
         meta_mes = meta_squad(squad_interno)
+        if squad_interno == "elite":
+            meta_mes += meta_squad(SUBAREA_ATLANTIS)
         meta_dia = safe_div(meta_mes, du["total"])
         bruto = squads_fin[squad_interno]["bruto"]
         multi = squads_fin[squad_interno]["multi"]
@@ -1833,7 +1908,7 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
         gap_100_bruto = max(0.0, meta_mes - bruto)
         meta_dia_100_bruto = safe_div(gap_100_bruto, dias_restantes_p100)
 
-        resultado["squads"][SQUAD_DISPLAY[squad_interno]] = {
+        resultado["squads"][rotulo_financeiro[squad_interno]] = {
             "meta_mes": round(meta_mes, 2),
             "meta_dia": round(meta_dia, 2),
             "realizado_bruto": round(bruto, 2),
@@ -1865,18 +1940,39 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
             "mes_passado_atingimento": squads_mes_passado_atingimento.get(squad_interno, 0.0),
         }
 
-    total_meta_mes = sum(resultado["squads"][SQUAD_DISPLAY[s]]["meta_mes"] for s in SQUADS_FINANCEIROS)
-    total_bruto = sum(resultado["squads"][SQUAD_DISPLAY[s]]["realizado_bruto"] for s in SQUADS_FINANCEIROS)
-    total_multi = sum(resultado["squads"][SQUAD_DISPLAY[s]]["realizado_multiplicador"] for s in SQUADS_FINANCEIROS)
-    total_ontem = sum(resultado["squads"][SQUAD_DISPLAY[s]]["ontem"] for s in SQUADS_FINANCEIROS)
-    total_hoje = sum(resultado["squads"][SQUAD_DISPLAY[s]]["hoje"] for s in SQUADS_FINANCEIROS)
-    total_ontem_bruto = sum(resultado["squads"][SQUAD_DISPLAY[s]]["ontem_bruto"] for s in SQUADS_FINANCEIROS)
-    total_hoje_bruto = sum(resultado["squads"][SQUAD_DISPLAY[s]]["hoje_bruto"] for s in SQUADS_FINANCEIROS)
+        # Breakdown clicável Elite x Atlantis (só pro squad "elite" — meta_mes já combinada acima).
+        if squad_interno == "elite":
+            resultado["squads"][rotulo_financeiro[squad_interno]]["detalhe"] = {
+                "Elite": _bloco_financeiro(
+                    meta_squad("elite"),
+                    squads_fin_sub["elite"]["bruto"], squads_fin_sub["elite"]["multi"],
+                    squads_fin_sub["elite"]["ontem"], squads_fin_sub["elite"]["hoje"],
+                    squads_fin_sub["elite"]["ontem_bruto"], squads_fin_sub["elite"]["hoje_bruto"],
+                    du["total"], dias_restantes_p100, ritmo_100,
+                    squads_mes_passado_sub["elite"], squads_mes_passado_bruto_sub["elite"],
+                ),
+                "Atlantis": _bloco_financeiro(
+                    meta_squad(SUBAREA_ATLANTIS),
+                    squads_fin_sub["atlantis"]["bruto"], squads_fin_sub["atlantis"]["multi"],
+                    squads_fin_sub["atlantis"]["ontem"], squads_fin_sub["atlantis"]["hoje"],
+                    squads_fin_sub["atlantis"]["ontem_bruto"], squads_fin_sub["atlantis"]["hoje_bruto"],
+                    du["total"], dias_restantes_p100, ritmo_100,
+                    squads_mes_passado_sub["atlantis"], squads_mes_passado_bruto_sub["atlantis"],
+                ),
+            }
+
+    total_meta_mes = sum(resultado["squads"][rotulo_financeiro[s]]["meta_mes"] for s in SQUADS_FINANCEIROS)
+    total_bruto = sum(resultado["squads"][rotulo_financeiro[s]]["realizado_bruto"] for s in SQUADS_FINANCEIROS)
+    total_multi = sum(resultado["squads"][rotulo_financeiro[s]]["realizado_multiplicador"] for s in SQUADS_FINANCEIROS)
+    total_ontem = sum(resultado["squads"][rotulo_financeiro[s]]["ontem"] for s in SQUADS_FINANCEIROS)
+    total_hoje = sum(resultado["squads"][rotulo_financeiro[s]]["hoje"] for s in SQUADS_FINANCEIROS)
+    total_ontem_bruto = sum(resultado["squads"][rotulo_financeiro[s]]["ontem_bruto"] for s in SQUADS_FINANCEIROS)
+    total_hoje_bruto = sum(resultado["squads"][rotulo_financeiro[s]]["hoje_bruto"] for s in SQUADS_FINANCEIROS)
     campos_previsto = ["previsto_hoje_20", "previsto_hoje_50", "previsto_hoje_70", "previsto_hoje_media",
                         "previsto_ontem_20", "previsto_ontem_50", "previsto_ontem_70", "previsto_ontem_media",
                         "em_aberto_hoje", "mes_passado_mesmo_dia", "mes_passado_bruto"]
     totais_previsto = {
-        campo: sum(resultado["squads"][SQUAD_DISPLAY[s]][campo] for s in SQUADS_FINANCEIROS)
+        campo: sum(resultado["squads"][rotulo_financeiro[s]][campo] for s in SQUADS_FINANCEIROS)
         for campo in campos_previsto
     }
     total_gap_40 = max(0.0, (PCT_GAP_INTERMEDIARIO * total_meta_mes) - total_multi)
@@ -2156,7 +2252,7 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
             }
             for nome in colaboradores
             if colaboradores[nome]["subarea"] == s
-            and any(termo in colaboradores[nome].get("cargo", "") for termo in ("closer", "head", "gerente"))
+            and any(termo in colaboradores[nome].get("cargo", "") for termo in CARGOS_FINANCEIROS)
         ], key=lambda x: x["nome"])
         for s in SQUADS_FINANCEIROS
     }
