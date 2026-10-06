@@ -89,7 +89,7 @@ SHEET_FERIADOS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbk
 SQUAD_DISPLAY = {"mgm": "Olympus", "elite": "Elite", "sniper": "Sniper", "navigator": "Navigator"}
 SQUADS_FINANCEIROS = ["mgm", "elite"]     # closers (valor em R$)
 SQUAD_SDR = "sniper"                       # reuniões
-CARGOS_FINANCEIROS = ("closer", "head", "gerente", "legionario")  # cargos (COLAB) que contam pro financeiro
+CARGOS_FINANCEIROS = ("closer", "head", "gerente", "legionari")  # "legionari" pega Legionário e Legionária  # cargos (COLAB) que contam pro financeiro
 NOMES_EXTRAS_SNIPER_CRU = set()  # (Denise Mussolin removida: a referência não conta as reuniões dela no Sniper)
 
 # ATLANTIS (Amanda Leal) — subarea própria na COLAB, mas soma com Elite no bloco financeiro
@@ -761,6 +761,65 @@ def reuniao_valida_sdr(atividade, deals_rv_owner_map):
         if dono_deal == responsavel:
             return False
     return True
+
+
+PIPELINE_ID_ATLANTIS = 66  # funil Atlantis — adicionado à whitelist de reuniões (o filtro FILTER_DEALS_RV não o cobre)
+
+
+@functools.lru_cache(maxsize=1)
+def _deals_funil_atlantis():
+    """Todos os deals do funil Atlantis (v2 /deals?pipeline_id=66), pra somar à whitelist de RV."""
+    itens, cursor = [], None
+    while True:
+        params = {"pipeline_id": PIPELINE_ID_ATLANTIS, "limit": 500}
+        if cursor:
+            params["cursor"] = cursor
+        data = http_get_json(f"{V2_BASE}/deals?{urlencode(params)}", headers={"x-api-token": PD_TOKEN})
+        itens.extend(data.get("data") or [])
+        cursor = (data.get("additional_data") or {}).get("next_cursor")
+        if not cursor:
+            break
+    return tuple(itens)
+
+
+@functools.lru_cache(maxsize=512)
+def _dono_do_deal_por_id(deal_id):
+    """Dono atual de um deal via /v1/deals/{id} (None se falhar). Memoizado."""
+    try:
+        data = http_get_json(f"{V1_BASE}/deals/{deal_id}?{urlencode({'api_token': PD_TOKEN})}")
+        return campo_owner_id(data.get("data") or {})
+    except Exception:
+        return None
+
+
+def complementar_map_atlantis(activities, deals_rv_owner_map, colaboradores, users_map, limite=80):
+    """A whitelist FILTER_DEALS_RV não cobre o funil do Atlantis: reuniões que um SDR do Sniper
+    agendou pra Amanda (deal dela, fora da whitelist) eram descartadas. Aqui, pra atividades
+    concluídas de SDR do Sniper cujo deal não está no mapa, busca o dono do deal e, se ele for
+    da subarea Atlantis, inclui no mapa (valida normalmente: dono do deal != quem agendou).
+    Retorna quantos deals foram incluídos."""
+    incluidos = 0
+    consultados = 0
+    for a in activities:
+        deal_id = a.get("deal_id")
+        if not deal_id or deal_id in deals_rv_owner_map:
+            continue
+        if not (a.get("done") is True or a.get("status") == "done"):
+            continue
+        nome_resp = norm(users_map.get(campo_owner_id(a), ""))
+        if not _conta_como_sniper(nome_resp, colaboradores):
+            continue
+        if consultados >= limite:
+            break
+        consultados += 1
+        dono = _dono_do_deal_por_id(deal_id)
+        if not dono:
+            continue
+        nome_dono = norm(users_map.get(dono, ""))
+        if colaboradores.get(nome_dono, {}).get("subarea") == SUBAREA_ATLANTIS:
+            deals_rv_owner_map[deal_id] = dono
+            incluidos += 1
+    return incluidos
 
 
 # ---------------------------------------------------------------------------
@@ -2046,6 +2105,28 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
     activities, total_bruto_activities = buscar_activities(ano, mes)
     deals_rv = pd_v1_paginado("/deals", FILTER_DEALS_RV, extra_params={"status": "all_not_deleted"})
     deals_rv_owner_map = montar_deals_rv_owner_map(deals_rv)
+    # Funil Atlantis entra na whitelist de reuniões válidas (o filtro do Pipedrive não o cobre)
+    n_antes = len(deals_rv_owner_map)
+    try:
+        for d in _deals_funil_atlantis():
+            if d.get("id") not in deals_rv_owner_map:
+                deals_rv_owner_map[d.get("id")] = extrair_owner_id(d)
+    except Exception as e:
+        resultado["debug_reunioes_atlantis_erro"] = str(e)[:300]
+    n_funil = len(deals_rv_owner_map) - n_antes
+    # Rede de segurança: deals de dono Atlantis em outros funis
+    dbg_deals_atlantis_incluidos = complementar_map_atlantis(
+        activities, deals_rv_owner_map, colaboradores, users_map)
+    resultado["debug_reunioes_atlantis"] = {"deals_funil_atlantis_adicionados": n_funil,
+                                            "deals_atlantis_via_fallback": dbg_deals_atlantis_incluidos}
+    resultado["debug_atlantis"] = {
+        "pessoas_na_colab": {n: {"cargo": c.get("cargo"), "subarea": c.get("subarea")}
+                             for n, c in colaboradores.items() if c.get("subarea") == SUBAREA_ATLANTIS},
+        "metas_na_aba_metas": {n: m for n, m in metas.items()
+                               if colaboradores.get(n, {}).get("subarea") == SUBAREA_ATLANTIS},
+        "ganhos_do_mes_com_dono_atlantis": sum(1 for d in deals_ganhos
+                                               if _e_deal_atlantis(d, colaboradores, users_map)),
+    }
 
     validadas_total = 0
     validadas_hoje = 0
@@ -2108,6 +2189,7 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
     if e_mes_atual and colaboradores_mp is not None:
         activities_mp, _ = buscar_activities(ano_passado, mes_passado)
         data_corte_mp_iso = dt.date(ano_passado, mes_passado, dia_alvo_mes_passado).isoformat()
+        complementar_map_atlantis(activities_mp, deals_rv_owner_map, colaboradores_mp, users_map)
         for a in activities_mp:
             if not reuniao_valida_sdr(a, deals_rv_owner_map):
                 continue
