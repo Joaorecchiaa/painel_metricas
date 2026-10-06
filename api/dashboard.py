@@ -2128,13 +2128,27 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
     # ---- Sniper: Atingimento Financeiro (valor COM multiplicador) ----
     # Meta = meta_fin da planilha (aba Metas) dos SDRs do Sniper. Realizado = soma do Multiplicador
     # dos ganhos do mês cujo campo 'Qualificador' é um SDR do Sniper (crédito do SDR na venda).
-    meta_fin_sniper = sum(m["meta_fin"] for nome, m in metas.items()
-                          if _conta_como_sniper(nome, colaboradores))
+    # Meta financeira = só SDRs (papel "sdr" = tem meta de reuniões). Sem esse filtro entravam
+    # também as metas dos Closers/Gerentes que têm subarea Sniper na COLAB (metas bem maiores).
+    meta_fin_por_pessoa = {nome: m["meta_fin"] for nome, m in metas.items()
+                           if _conta_como_sniper(nome, colaboradores) and m.get("papel") == "sdr"}
+    meta_fin_sniper = sum(meta_fin_por_pessoa.values())
+    realizado_fin_por_qualificador = {}
     realizado_fin_sniper = 0.0
     for deal in deals_ganhos:
         q = qualificador_norm(deal)
         if q and _conta_como_sniper(q, colaboradores):
-            realizado_fin_sniper += float(cf_valor(deal, CF_MULTIPLICADOR) or 0)
+            v_multi = float(cf_valor(deal, CF_MULTIPLICADOR) or 0)
+            realizado_fin_sniper += v_multi
+            realizado_fin_por_qualificador[q] = realizado_fin_por_qualificador.get(q, 0.0) + v_multi
+    resultado["debug_sniper_financeiro"] = {
+        "meta_por_pessoa": meta_fin_por_pessoa,
+        "realizado_multi_por_qualificador": {k: round(v, 2) for k, v in realizado_fin_por_qualificador.items()},
+        "metas_sniper_fora_do_calculo_(nao_sdr)": {
+            nome: m["meta_fin"] for nome, m in metas.items()
+            if _conta_como_sniper(nome, colaboradores) and m.get("papel") != "sdr"
+        },
+    }
     atingimento_reunioes = safe_div(validadas_total, meta_reunioes) * 100
     atingimento_financeiro = safe_div(realizado_fin_sniper, meta_fin_sniper) * 100
     # Final = 30% financeiro + 70% reuniões (sem teto: passou de 100% em um, soma normal)
