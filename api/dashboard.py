@@ -90,7 +90,7 @@ SQUAD_DISPLAY = {"mgm": "Olympus", "elite": "Elite", "sniper": "Sniper", "naviga
 SQUADS_FINANCEIROS = ["mgm", "elite"]     # closers (valor em R$)
 SQUAD_SDR = "sniper"                       # reuniões
 CARGOS_FINANCEIROS = ("closer", "head", "gerente", "legionario")  # cargos (COLAB) que contam pro financeiro
-NOMES_EXTRAS_SNIPER_CRU = {"Denise Mussolin"}  # contam nas reuniões do Sniper mesmo não sendo do squad
+NOMES_EXTRAS_SNIPER_CRU = set()  # (Denise Mussolin removida: a referência não conta as reuniões dela no Sniper)
 
 # ATLANTIS (Amanda Leal) — subarea própria na COLAB, mas soma com Elite no bloco financeiro
 # do painel ("Elite + Atlantis"), com breakdown clicável por subarea. Meta vem da planilha
