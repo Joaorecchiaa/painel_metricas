@@ -594,6 +594,34 @@ def buscar_deals_por_pipeline(pipeline_id, status, desde_iso=None, ate_iso=None)
     return list(_buscar_deals_por_pipeline_cached(pipeline_id, status, desde_iso, ate_iso))
 
 
+@functools.lru_cache(maxsize=1)
+def _mapa_opcoes_qualificador():
+    """id da opção -> nome, do campo 'Qualificador' (lista de SDRs). A API v1 devolve só o id."""
+    data = http_get_json(f"{V1_BASE}/dealFields?{urlencode({'api_token': PD_TOKEN, 'limit': 500})}")
+    for f in (data.get("data") or []):
+        if f.get("key") == CF_QUALIFICADOR:
+            return {o.get("id"): o.get("label", "") for o in (f.get("options") or [])}
+    return {}
+
+
+def qualificador_norm(deal):
+    """Nome normalizado do SDR no campo Qualificador do negócio ('' se vazio)."""
+    v = deal.get(CF_QUALIFICADOR)
+    if v is None:
+        v = (deal.get("custom_fields") or {}).get(CF_QUALIFICADOR)  # formato v2
+    if isinstance(v, dict):
+        if v.get("label"):
+            return norm(v["label"])
+        v = v.get("id", v.get("value"))
+    if v in (None, ""):
+        return ""
+    try:
+        v = int(v)
+    except (TypeError, ValueError):
+        return norm(v)  # já veio o texto
+    return norm(_mapa_opcoes_qualificador().get(v, ""))
+
+
 def cf_valor(deal, hash_):
     v = deal.get(hash_)
     if v is None:
@@ -2097,7 +2125,26 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
     meta_dia_40_reu = safe_div(gap_40_reu, dias_restantes_p40)
     meta_dia_100_reu = safe_div(gap_100_reu, dias_restantes_p100)
 
+    # ---- Sniper: Atingimento Financeiro (valor COM multiplicador) ----
+    # Meta = meta_fin da planilha (aba Metas) dos SDRs do Sniper. Realizado = soma do Multiplicador
+    # dos ganhos do mês cujo campo 'Qualificador' é um SDR do Sniper (crédito do SDR na venda).
+    meta_fin_sniper = sum(m["meta_fin"] for nome, m in metas.items()
+                          if _conta_como_sniper(nome, colaboradores))
+    realizado_fin_sniper = 0.0
+    for deal in deals_ganhos:
+        q = qualificador_norm(deal)
+        if q and _conta_como_sniper(q, colaboradores):
+            realizado_fin_sniper += float(cf_valor(deal, CF_MULTIPLICADOR) or 0)
+    atingimento_reunioes = safe_div(validadas_total, meta_reunioes) * 100
+    atingimento_financeiro = safe_div(realizado_fin_sniper, meta_fin_sniper) * 100
+    # Final = 30% financeiro + 70% reuniões (sem teto: passou de 100% em um, soma normal)
+    atingimento_final = atingimento_financeiro * 0.30 + atingimento_reunioes * 0.70
+
     resultado["squads"]["Sniper"] = {
+        "meta_financeira": round(meta_fin_sniper, 2),
+        "realizado_financeiro": round(realizado_fin_sniper, 2),
+        "atingimento_financeiro": round(atingimento_financeiro, 2),
+        "atingimento_final": round(atingimento_final, 2),
         "meta_mes_reunioes": meta_reunioes,
         "meta_dia_reunioes": round(meta_dia_reu, 2),
         "realizado_reunioes": validadas_total,
