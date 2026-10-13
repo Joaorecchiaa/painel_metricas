@@ -465,7 +465,7 @@ def calcular_dias_uteis(ano, mes, feriados, hoje=None):
     total, ultimo_dia = dias_uteis_mes(ano, mes, feriados)
 
     if (ano, mes) < (hoje.year, hoje.month):
-        return {"total": total, "passados": total, "restantes": 0}
+        return {"total": total, "passados": total, "restantes": 0, "fechados": total}
 
     limite = min(hoje.day, ultimo_dia.day) if (ano, mes) == (hoje.year, hoje.month) else 0
     d, passados = dt.date(ano, mes, 1), 0
@@ -484,7 +484,14 @@ def calcular_dias_uteis(ano, mes, feriados, hoje=None):
             restantes += 1
         d += dt.timedelta(days=1)
 
-    return {"total": total, "passados": passados, "restantes": restantes}
+    # "fechados" = dias úteis JÁ ENCERRADOS (exclui hoje, que ainda está em andamento).
+    # É a base do ritmo/MTD: "deveria estar até ontem". "passados" (inclui hoje) segue
+    # disponível só como informativo.
+    fechados = passados
+    if (ano, mes) == (hoje.year, hoje.month) and eh_dia_util(hoje, feriados):
+        fechados = passados - 1
+
+    return {"total": total, "passados": passados, "restantes": restantes, "fechados": fechados}
 
 
 def proximo_dia_util(a_partir_de, feriados):
@@ -1950,7 +1957,8 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
         meta_mp_elite_sub = 0.0
         meta_mp_atlantis_sub = 0.0
 
-    ritmo_100 = safe_div(du["passados"], du["total"])
+    # MTD = proporção de dias úteis JÁ ENCERRADOS (até ontem) — hoje só entra quando fechar.
+    ritmo_100 = safe_div(du["fechados"], du["total"])
 
     # Prazo do gap intermediário (40%) = sempre a metade do mês selecionado,
     # arredondando pra cima (31 dias -> dia 16; 30 -> dia 15; 29 -> dia 15; 28 -> dia 14).
@@ -1979,7 +1987,9 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
         restantes_prazo = 0
         dias_restantes_p40 = dias_uteis_primeira_metade
 
-    ritmo_prazo = safe_div(du["passados"], du["passados"] + restantes_prazo)
+    # Denominador = total de dias úteis até o prazo (fechados + hoje, se ainda dentro do prazo + restantes).
+    hoje_dentro_prazo = 1 if (e_mes_atual and hoje <= prazo_gap_intermediario and eh_dia_util(hoje, feriados)) else 0
+    ritmo_prazo = safe_div(du["fechados"], du["fechados"] + hoje_dentro_prazo + restantes_prazo)
 
     resultado = {
         "squads": {}, "geradoEm": dt.datetime.now(dt.timezone.utc).isoformat(),
@@ -2244,6 +2254,8 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
         "meta_mes_reunioes": meta_reunioes,
         "meta_dia_reunioes": round(meta_dia_reu, 2),
         "realizado_reunioes": validadas_total,
+        # Realizado só dos dias já encerrados (exclui as reuniões de hoje) — par do MTD "até ontem"
+        "realizado_reunioes_ate_ontem": validadas_total - validadas_hoje,
         "mes_passado_reunioes": validadas_mes_passado,
         "mes_passado_atingimento": atingimento_sniper_mes_passado,
         "onde_deveria_100": round(onde_100_reu, 2),
