@@ -1192,6 +1192,7 @@ const METRICAS_SNIPER = [
   { label: "Realizado",            key: "realizado_reunioes",   fmt: rawComMesPassado("mes_passado_reunioes") },
   { label: "Deveria (100%) - MTD", key: "onde_deveria_100",     fmt: fmtNumComPct("ritmo_100_pct") },
   { label: "Deveria (40%) - MTD",  key: "onde_deveria_40",      fmt: fmtNumComPct("ritmo_40_pct") },
+  { label: "Atingimento% - MTD (Reuniões)", key: "realizado_reunioes_ate_ontem", dica: "Realizado até ontem contra o MTD (meta proporcional até ontem). Mostra se o time está no ritmo.", fmt: (v, linha) => pill((linha || {}).onde_deveria_100 ? ((v ?? 0) / linha.onde_deveria_100) * 100 : 0) },
   { label: "Atingimento% - Reuniões",   key: "atingimento",            fmt: pillComMesPassado("mes_passado_atingimento") },
   { label: "Atingimento% - Financeiro", key: "atingimento_financeiro", fmt: v => pill(v ?? 0) },
   { label: "Atingimento% - Final",      key: "atingimento_final",      fmt: v => pill(v ?? 0) },
