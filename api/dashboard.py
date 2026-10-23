@@ -2151,8 +2151,27 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
     dbg_passou_valida_sdr = 0
     dbg_subarea_sniper = 0
     nomes_sem_match = set()
+    # Diagnóstico por pessoa (quem fez a atividade): por que cada reunião contou ou não.
+    dbg_por_pessoa = {}
+
+    def _dbg_motivo(a, nome):
+        concluida = a.get("done") is True or a.get("status") == "done"
+        deal_id = a.get("deal_id")
+        if not concluida:
+            motivo = "nao_concluida"
+        elif deal_id and deal_id not in deals_rv_owner_map:
+            motivo = "deal_fora_da_whitelist"
+        elif deal_id and deals_rv_owner_map.get(deal_id) == campo_owner_id(a):
+            motivo = "dono_do_deal_e_o_proprio"
+        elif not _conta_como_sniper(nome, colaboradores):
+            motivo = "valida_mas_fora_da_subarea_sniper"
+        else:
+            motivo = "contada"
+        c = dbg_por_pessoa.setdefault(nome or "(sem nome)", {})
+        c[motivo] = c.get(motivo, 0) + 1
 
     for a in activities:
+        _dbg_motivo(a, norm(users_map.get(campo_owner_id(a), "")))
         if a.get("done") is True or a.get("status") == "done":
             dbg_concluidas += 1
         if a.get("deal_id"):
@@ -2439,6 +2458,9 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
         "passou_validacao_sdr": dbg_passou_valida_sdr,
         "com_subarea_sniper": dbg_subarea_sniper,
         "nomes_sem_match_no_colab": sorted(nomes_sem_match)[:15],
+        # por pessoa: quantas atividades do filtro em cada situação (contada = entrou no painel)
+        "reunioes_por_pessoa": {n: c for n, c in sorted(dbg_por_pessoa.items())
+                                if c.get("contada") or colaboradores.get(n, {}).get("subarea") == SQUAD_SDR},
     }
     return resultado
 
