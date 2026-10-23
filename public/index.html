@@ -562,6 +562,7 @@
       <tbody id="tabelaSniper"></tbody>
     </table>
   </div>
+  <div id="reunioesPorSdr"></div>
 </div>
 
 <div id="paginaProdutos" style="display:none;">
@@ -1310,6 +1311,24 @@ async function atualizar() {
     document.getElementById("tabelaSniper").innerHTML = tabelaTransposta(METRICAS_SNIPER, [
       { dados: data.squads.Sniper },
     ]);
+
+    // Reuniões por SDR (conferência): quantas contaram e por que as demais foram descartadas
+    const sdrsReu = (data.squads.Sniper || {}).reunioes_por_sdr || [];
+    const tdn = (v) => `<td style="text-align:right">${v ?? 0}</td>`;
+    document.getElementById("reunioesPorSdr").innerHTML = sdrsReu.length ? `
+      <details class="detalhe-sdr" style="margin-top:10px">
+        <summary style="cursor:pointer;font-weight:600">Reuniões por SDR (${sdrsReu.length}) — conferência</summary>
+        <div class="tabela-wrap" style="margin-top:8px"><table>
+          <thead><tr><th>SDR</th><th style="text-align:right">Meta</th><th style="text-align:right">Contadas</th>
+            <th style="text-align:right" title="Deal fora do filtro de reunião válida">Deal fora da lista</th>
+            <th style="text-align:right" title="O SDR é o dono do deal">Dono = SDR</th>
+            <th style="text-align:right">Não concluída</th></tr></thead>
+          <tbody>
+            ${sdrsReu.map(s => `<tr><td>${s.nome}</td>${tdn(s.meta)}${tdn(s.contadas)}${tdn(s.deal_fora_da_lista)}${tdn(s.dono_igual)}${tdn(s.nao_concluida)}</tr>`).join("")}
+            <tr style="font-weight:700"><td>Total</td>${tdn(sdrsReu.reduce((t, s) => t + (s.meta || 0), 0))}${tdn(sdrsReu.reduce((t, s) => t + s.contadas, 0))}${tdn(sdrsReu.reduce((t, s) => t + s.deal_fora_da_lista, 0))}${tdn(sdrsReu.reduce((t, s) => t + s.dono_igual, 0))}${tdn(sdrsReu.reduce((t, s) => t + s.nao_concluida, 0))}</tr>
+          </tbody>
+        </table></div>
+      </details>` : "";
 
     const numeros = data.produtos_em_aberto_detalhes || {};
     const linhasProdutos = ["PFCC", "CES", "LEAN", "ABP", "COAUTORIA", "Não classificado"];
