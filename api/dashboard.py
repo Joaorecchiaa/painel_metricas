@@ -2273,6 +2273,18 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
         "meta_mes_reunioes": meta_reunioes,
         "meta_dia_reunioes": round(meta_dia_reu, 2),
         "realizado_reunioes": validadas_total,
+        # Conferência por SDR: contadas e motivos de descarte (quem fez a atividade)
+        "reunioes_por_sdr": sorted(
+            [{
+                "nome": colaboradores.get(n, {}).get("nome_exibicao") or n.title(),
+                "meta": (metas.get(n) or {}).get("meta_reu", 0),
+                "contadas": c.get("contada", 0),
+                "deal_fora_da_lista": c.get("deal_fora_da_whitelist", 0),
+                "dono_igual": c.get("dono_do_deal_e_o_proprio", 0),
+                "nao_concluida": c.get("nao_concluida", 0),
+            } for n, c in dbg_por_pessoa.items()
+              if c.get("contada") or _conta_como_sniper(n, colaboradores)],
+            key=lambda x: -x["contadas"]),
         # Realizado só dos dias já encerrados (exclui as reuniões de hoje) — par do MTD "até ontem"
         "realizado_reunioes_ate_ontem": validadas_total - validadas_hoje,
         "mes_passado_reunioes": validadas_mes_passado,
