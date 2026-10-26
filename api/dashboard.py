@@ -60,19 +60,23 @@ def _carregar_crn():
     sys.path.insert(0, os.path.join(base, "pacote"))
     return os.path.basename(raiz).rsplit("-", 1)[-1][:7]   # commit que entrou
 
-_COMMIT_CRN = _carregar_crn()
+_ERRO_CRN = None   # se a CRN não carregar, o painel responde o motivo em JSON em vez de cair
+try:
+    _COMMIT_CRN = _carregar_crn()
 
-import crn
-from crn.base import fuso as _fuso, fontes as _fontes, pipedrive as _pd
-from crn.base.config import campo as _campo
-from crn.regras import (m1_ganho_closer as _m1, m2_faturamento_closer as _m2, m3_atingimento_closer as _m3,
-                        m4_ganho_sdr as _m4, m6_reunioes_sdr as _m6, m7_pct_final_sdr as _m7,
-                        t1_mtd_closer as _t1,
-                        f1_forecast_faixas as _f1, fr1_reunioes_previstas as _fr1,
-                        h1_hierarquia as _h1, f2_forecast_media as _f2,
-                        lc1_licenciado as _lc1)
-if _COMMIT_CRN:
-    crn.versao = lambda: _COMMIT_CRN                        # carimbo mostra o commit carregado
+    import crn
+    from crn.base import fuso as _fuso, fontes as _fontes, pipedrive as _pd
+    from crn.base.config import campo as _campo
+    from crn.regras import (m1_ganho_closer as _m1, m2_faturamento_closer as _m2, m3_atingimento_closer as _m3,
+                            m4_ganho_sdr as _m4, m6_reunioes_sdr as _m6, m7_pct_final_sdr as _m7,
+                            t1_mtd_closer as _t1,
+                            f1_forecast_faixas as _f1, fr1_reunioes_previstas as _fr1,
+                            h1_hierarquia as _h1, f2_forecast_media as _f2,
+                            lc1_licenciado as _lc1)
+    if _COMMIT_CRN:
+        crn.versao = lambda: _COMMIT_CRN                    # carimbo mostra o commit carregado
+except Exception as _e:   # noqa: BLE001
+    _ERRO_CRN = f"{type(_e).__name__}: {_e}"
 
 # Nomes de variável/URL que a CRN espera, mapeados a partir do que o painel já usa na Vercel
 # (nada muda nas Environment Variables atuais).
@@ -1994,6 +1998,9 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
+        if _ERRO_CRN:
+            self._responder_erro_crn()
+            return
         try:
             from urllib.parse import urlparse, parse_qs
             query = parse_qs(urlparse(self.path).query)
@@ -2080,6 +2087,9 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
+        if _ERRO_CRN:
+            self._responder_erro_crn()
+            return
         from urllib.parse import urlparse, parse_qs
         query = parse_qs(urlparse(self.path).query)
         rota = query.get("route", [None])[0]
@@ -2088,6 +2098,14 @@ class handler(BaseHTTPRequestHandler):
             return
         body = json.dumps({"erro": "rota não encontrada"}, ensure_ascii=False).encode("utf-8")
         self.send_response(404)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _responder_erro_crn(self):
+        body = json.dumps({"erro": "CRN não carregou: " + str(_ERRO_CRN)}, ensure_ascii=False).encode("utf-8")
+        self.send_response(500)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
