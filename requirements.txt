@@ -1,1 +1,3 @@
-# Só biblioteca padrão do Python é usada (urllib, csv, json, datetime) — sem dependências externas.
+# CRN é baixada do GitHub quando o painel liga (bloco no topo de api/dashboard.py) — sem linha da crn aqui.
+requests
+tzdata
