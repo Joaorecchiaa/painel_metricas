@@ -363,6 +363,10 @@ def read_csv(url):
     return list(csv.DictReader(io.StringIO(text)))
 
 
+# Pedido do João (26/10/2026): estas pessoas ficam fora de todas as análises deste painel.
+# É um recorte do painel, não muda regra da CRN.
+EXCLUIDOS_PAINEL = {"mylena oliveira", "raphaela moutinho"}
+
 SQUAD_CRN_PARA_INTERNO = {"olympus": "mgm", "sniper": "sniper", "elite": "elite", "navigator": "navigator"}
 
 
@@ -377,6 +381,8 @@ def carregar_colaboradores(mes, ano):
     colab = _fontes.carregar_colab(ano, mes)
     out = {}
     for p in colab:
+        if p["nome_norm"] in EXCLUIDOS_PAINEL:
+            continue
         equipe = _m1.squad_da_pessoa(p)  # H1/M1: gerente tem equipe fixa na config
         out[p["nome_norm"]] = {
             "nome_exibicao": p["nome"],
@@ -392,6 +398,8 @@ def carregar_metas(mes, ano):
     """Metas do mês pela CRN (R2: meta de reunião > 0 = SDR)."""
     out = {}
     for m in _fontes.carregar_metas(ano, mes):
+        if m["nome_norm"] in EXCLUIDOS_PAINEL:
+            continue
         if not m["meta_reunioes"] and not m["meta_financeira"]:
             continue
         out[m["nome_norm"]] = {"meta_reu": m["meta_reunioes"], "meta_fin": m["meta_financeira"],
@@ -1715,7 +1723,8 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
                      if p["nome_norm"] in uid_por_nome and _h1.nivel(p, colab_lista) in ("head", "team_leader", "gerente")}
     lider_agenda_ids = _m6.lideranca_que_agenda(colab_lista, uid_por_nome)
     sdr_sniper_nomes = {n for n in sdr_nomes if colaboradores.get(n, {}).get("subarea") == SQUAD_SDR}
-    ids_sniper = ({uid_por_nome[n] for n in sdr_sniper_nomes if n in uid_por_nome}) | set(lider_agenda_ids)
+    ids_excluidos = {uid_por_nome[n] for n in EXCLUIDOS_PAINEL if n in uid_por_nome}
+    ids_sniper = (({uid_por_nome[n] for n in sdr_sniper_nomes if n in uid_por_nome}) | set(lider_agenda_ids)) - ids_excluidos
     nome_por_id = {i: norm(n) for i, n in users_map.items()}
 
     ini_mes = dt.date(ano, mes, 1)
@@ -1765,7 +1774,7 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
                       if p["nome_norm"] in uid_por_nome and _h1.nivel(p, colab_mp) in ("head", "team_leader", "gerente")}
         lid_ag_mp = _m6.lideranca_que_agenda(colab_mp, uid_por_nome)
         sdr_sniper_mp = {n for n in sdr_nomes_mp if colaboradores_mp.get(n, {}).get("subarea") == SQUAD_SDR}
-        ids_sniper_mp = {uid_por_nome[n] for n in sdr_sniper_mp if n in uid_por_nome} | set(lid_ag_mp)
+        ids_sniper_mp = ({uid_por_nome[n] for n in sdr_sniper_mp if n in uid_por_nome} | set(lid_ag_mp)) - ids_excluidos
         dados_mp = _m6.carregar_periodo(ini_mp, corte_mp)
         por_resp_mp = _m6.reunioes_validadas(dados_mp["atividades"], ini_mp, corte_mp,
                                              deals_validados=dados_mp["deals_validados"],
