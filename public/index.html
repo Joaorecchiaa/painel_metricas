@@ -279,7 +279,7 @@
   }
   .produto-squads-3 { grid-template-columns: 1fr 1fr 1fr; }
   .produto-squads-3 .produto-squad:not(:last-child) { border-right: 1px solid var(--border); }
-  .produto-squads-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+  .produto-squads-4 { grid-template-columns: 1fr 1fr 1fr; }
   .produto-squads-4 .produto-squad:not(:last-child) { border-right: 1px solid var(--border); }
   .produto-squad { padding: 12px 16px; }
   .produto-squad:first-child { border-right: 1px solid var(--border); }
@@ -509,6 +509,7 @@
       </span>
     </div>
     <div class="meta-info" id="ultimaAtualizacao">—</div>
+    <div class="meta-info" id="carimboCrn" style="font-size:11px;opacity:.75"></div>
   </div>
 </header>
 
@@ -535,14 +536,13 @@
 </nav>
 
 <div id="paginaMetricas">
-  <h2 class="titulo-tabela">OLYMPUS &amp; ELITE + ATLANTIS</h2>
+  <h2 class="titulo-tabela">OLYMPUS</h2>
   <div class="tabela-wrap">
     <table id="tabela-financeiro">
       <thead>
         <tr>
           <th>Métrica</th>
           <th>Olympus</th>
-          <th>Elite + Atlantis</th>
           <th>Total Consolidado</th>
         </tr>
       </thead>
@@ -1294,16 +1294,12 @@ async function atualizar() {
     document.getElementById("secaoProdutos").style.display = mesAtualSelecionado ? "" : "none";
 
     const previstoHojeDet = data.previsto_hoje_detalhes || {};
-    // "Elite" aqui é o rótulo que o backend usa pro bloco combinado "Elite + Atlantis"
-    // dentro de previsto_hoje_detalhes (não mudou) — só a chave em data.squads mudou.
-    ["Olympus", "Elite", "Total"].forEach(s => {
-      const chaveSquad = s === "Elite" ? "Elite + Atlantis" : s;
-      if (data.squads[chaveSquad]) data.squads[chaveSquad]._previsto_hoje_buckets = previstoHojeDet[s] || null;
+    ["Olympus", "Total"].forEach(s => {
+      if (data.squads[s]) data.squads[s]._previsto_hoje_buckets = previstoHojeDet[s] || null;
     });
 
     document.getElementById("tabelaFinanceiro").innerHTML = tabelaTransposta(METRICAS_FINANCEIRO, [
       { dados: data.squads.Olympus },
-      { dados: data.squads["Elite + Atlantis"] },
       { dados: data.squads.Total, isTotal: true },
     ]);
     document.getElementById("tabelaFinanceiro").classList.toggle("previsto-aberto", previstoHojeAberto);
@@ -1320,12 +1316,10 @@ async function atualizar() {
         <summary style="cursor:pointer;font-weight:600">Reuniões por SDR (${sdrsReu.length}) — conferência</summary>
         <div class="tabela-wrap" style="margin-top:8px"><table>
           <thead><tr><th>SDR</th><th style="text-align:right">Meta</th><th style="text-align:right">Contadas</th>
-            <th style="text-align:right" title="Deal fora do filtro de reunião válida">Deal fora da lista</th>
-            <th style="text-align:right" title="O SDR é o dono do deal">Dono = SDR</th>
-            <th style="text-align:right">Não concluída</th></tr></thead>
+            <th style="text-align:right" title="Reuniões fora por 'Reunião Validada? = Não' no deal (M6)">Validada? = Não</th></tr></thead>
           <tbody>
-            ${sdrsReu.map(s => `<tr><td>${s.nome}</td>${tdn(s.meta)}${tdn(s.contadas)}${tdn(s.deal_fora_da_lista)}${tdn(s.dono_igual)}${tdn(s.nao_concluida)}</tr>`).join("")}
-            <tr style="font-weight:700"><td>Total</td>${tdn(sdrsReu.reduce((t, s) => t + (s.meta || 0), 0))}${tdn(sdrsReu.reduce((t, s) => t + s.contadas, 0))}${tdn(sdrsReu.reduce((t, s) => t + s.deal_fora_da_lista, 0))}${tdn(sdrsReu.reduce((t, s) => t + s.dono_igual, 0))}${tdn(sdrsReu.reduce((t, s) => t + s.nao_concluida, 0))}</tr>
+            ${sdrsReu.map(s => `<tr><td>${s.nome}</td>${tdn(s.meta)}${tdn(s.contadas)}${tdn(s.deal_fora_da_lista)}</tr>`).join("")}
+            <tr style="font-weight:700"><td>Total</td>${tdn(sdrsReu.reduce((t, s) => t + (s.meta || 0), 0))}${tdn(sdrsReu.reduce((t, s) => t + s.contadas, 0))}${tdn(sdrsReu.reduce((t, s) => t + s.deal_fora_da_lista, 0))}</tr>
           </tbody>
         </table></div>
       </details>` : "";
@@ -1387,7 +1381,7 @@ async function atualizar() {
     }
 
     function totalAbertosProduto(produto) {
-      return ["Olympus", "Elite", "Sniper", "Navigator"].reduce(
+      return ["Olympus", "Sniper", "Navigator"].reduce(
         (soma, squad) => soma + (((numeros[squad] || {})[produto] || {}).abertos ?? 0), 0
       );
     }
@@ -1425,7 +1419,6 @@ async function atualizar() {
         <summary>${p} <span class="produto-total-abertos">Total aberto: ${totalAbertosProduto(p)}</span></summary>
         <div class="produto-squads produto-squads-4">
           ${blocoSquad("Olympus", p)}
-          ${blocoSquad("Elite", p)}
           ${blocoSquad("Sniper", p)}
           ${blocoSquad("Navigator", p)}
         </div>
@@ -1435,6 +1428,10 @@ async function atualizar() {
 
     document.getElementById("ultimaAtualizacao").textContent =
       "Atualizado às " + new Date(data.geradoEm).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo" });
+    const c = data.carimbo || {};
+    document.getElementById("carimboCrn").textContent = c.crn_versao
+      ? `CRN ${c.crn_versao} · Eixo: ${c.eixo} · Valor: ${c.valor} · Recorte: ${c.recorte} · Squads: ${c.squads} · Atualizado: ${c.atualizado}`
+      : "";
   } catch (e) {
     erroBox.textContent = "Erro ao atualizar: " + e.message;
     erroBox.style.display = "block";
