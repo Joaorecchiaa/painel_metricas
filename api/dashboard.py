@@ -1,5 +1,5 @@
 """
-Acompanhamento de Meta — Julho/2026 (Olympus/MGM, Elite, Sniper)
+Acompanhamento de Meta (Olympus/MGM e Sniper) — regras da CRN
 Backend serverless (Vercel) — busca Pipedrive + Google Sheets e calcula
 tudo que a planilha "Acompanhamento_Meta_Julho2026_V1.xlsx" fazia via fórmula.
 
@@ -25,6 +25,59 @@ from http.server import BaseHTTPRequestHandler
 from urllib.request import Request, urlopen
 from urllib.parse import urlencode
 
+# ===========================================================================
+# CRN — Centralização de Regras de Negócio (bloco de modelos/vercel_carregar_crn.py)
+# ===========================================================================
+# ── CRN: baixada do GitHub quando o painel liga ───────────────
+# A Vercel não repassa o token para o instalador do build, então a CRN não entra pelo
+# requirements.txt. O painel baixa a versão atual da main (com o token, que em tempo de
+# execução funciona) e carrega. Cada vez que o painel liga, pega as regras mais recentes.
+# No computador, se a crn já estiver instalada (instalar.bat), usa a instalada.
+def _carregar_crn():
+    import importlib.util
+    import shutil
+    import sys
+    import tarfile
+    import tempfile
+    if importlib.util.find_spec("crn") is not None:
+        return None
+    import requests
+    token = (os.environ.get("CRN_GITHUB_TOKEN") or os.environ.get("GITHUB_TOKEN") or "").strip()
+    if not token:
+        raise RuntimeError("CRN_GITHUB_TOKEN não está nas Environment Variables da Vercel.")
+    r = requests.get("https://api.github.com/repos/negocios87-sketch/CRN/tarball/main",
+                     headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
+                     timeout=30)
+    if r.status_code != 200:
+        raise RuntimeError(f"Não consegui baixar a CRN do GitHub (HTTP {r.status_code}). Confira o CRN_GITHUB_TOKEN.")
+    base = tempfile.mkdtemp(prefix="crn_")
+    with tarfile.open(fileobj=io.BytesIO(r.content), mode="r:gz") as tar:
+        tar.extractall(base, filter="data")
+    raiz = os.path.join(base, os.listdir(base)[0])          # negocios87-sketch-CRN-<commit>
+    destino = os.path.join(base, "pacote", "crn")
+    shutil.copytree(os.path.join(raiz, "lib"), destino)     # mesmo mapa do pyproject da CRN
+    shutil.copytree(os.path.join(raiz, "config"), os.path.join(destino, "config"))
+    sys.path.insert(0, os.path.join(base, "pacote"))
+    return os.path.basename(raiz).rsplit("-", 1)[-1][:7]   # commit que entrou
+
+_COMMIT_CRN = _carregar_crn()
+
+import crn
+from crn.base import fuso as _fuso, fontes as _fontes, pipedrive as _pd
+from crn.base.config import campo as _campo
+from crn.regras import (m1_ganho_closer as _m1, m2_faturamento_closer as _m2, m3_atingimento_closer as _m3,
+                        m4_ganho_sdr as _m4, m6_reunioes_sdr as _m6, m7_pct_final_sdr as _m7,
+                        t1_mtd_closer as _t1,
+                        f1_forecast_faixas as _f1, fr1_reunioes_previstas as _fr1,
+                        h1_hierarquia as _h1, f2_forecast_media as _f2,
+                        lc1_licenciado as _lc1)
+if _COMMIT_CRN:
+    crn.versao = lambda: _COMMIT_CRN                        # carimbo mostra o commit carregado
+
+# Nomes de variável/URL que a CRN espera, mapeados a partir do que o painel já usa na Vercel
+# (nada muda nas Environment Variables atuais).
+os.environ.setdefault("PIPEDRIVE_TOKEN", os.environ.get("PIPEDRIVE_API_TOKEN", ""))
+
 # ---------------------------------------------------------------------------
 # CONFIG
 # ---------------------------------------------------------------------------
@@ -35,9 +88,6 @@ PD_TOKEN = os.environ.get("PIPEDRIVE_API_TOKEN", "")
 V1_BASE = f"https://{PD_DOMAIN}/api/v1"
 V2_BASE = f"https://{PD_DOMAIN}/api/v2"
 
-FILTER_DEALS = 74674          # vendas ganhas
-FILTER_DEALS_RV = 1466157     # deals com reunião válida (whitelist SDR) — confirmado funcional no dashboard de referência
-FILTER_ACTIVITIES = 1310451   # atividades / reuniões
 FILTER_FORECAST = 1490240     # pipeline aberto (forecast)
 FILTER_REFERIDOS = 1562285    # indicações (não usado neste painel por ora)
 
@@ -85,38 +135,20 @@ SHEET_COLAB = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR
 SHEET_METAS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=0&single=true&output=csv"
 SHEET_FERIADOS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=1010928978&single=true&output=csv"
 
+os.environ.setdefault("URL_COLAB", SHEET_COLAB)
+os.environ.setdefault("URL_METAS", SHEET_METAS)
+os.environ.setdefault("URL_FERIADOS", SHEET_FERIADOS)
+
 # Mapa interno -> exibição. Chave interna "mgm" (funis Olympus + Navigator) exibe como "Olympus".
-SQUAD_DISPLAY = {"mgm": "Olympus", "elite": "Elite", "sniper": "Sniper", "navigator": "Navigator"}
-SQUADS_FINANCEIROS = ["mgm", "elite"]     # closers (valor em R$)
+SQUAD_DISPLAY = {"mgm": "Olympus", "sniper": "Sniper", "navigator": "Navigator"}
+SQUADS_FINANCEIROS = ["mgm"]     # closers (valor em R$)
 SQUAD_SDR = "sniper"                       # reuniões
-CARGOS_FINANCEIROS = ("closer", "head", "gerente", "legionari")  # "legionari" pega Legionário e Legionária  # cargos (COLAB) que contam pro financeiro
-NOMES_EXTRAS_SNIPER_CRU = set()  # (Denise Mussolin removida: a referência não conta as reuniões dela no Sniper)
-
-# ATLANTIS (Amanda Leal) — subarea própria na COLAB, mas soma com Elite no bloco financeiro
-# do painel ("Elite + Atlantis"), com breakdown clicável por subarea. Meta vem da planilha
-# METAS, igual todo mundo (meta_squad("atlantis")) — não é fixa no código.
-SUBAREA_ATLANTIS = "atlantis"
-
-# Pessoas que nunca devem contar, mesmo que apareçam em alguma base (divergência de cadastro etc.)
-EXCLUSOES_FIXAS = {"priscila ribeiro"}
-
-# GM: vendas dela são redistribuídas por funil (pipeline) pro squad correspondente
-GM_NOME_NORMALIZADO = None  # preencher com norm("Nome da GM") — ver README
-FUNIL_PARA_SQUAD = {
-    "elite": "elite",
-    "sniper": "sniper",
-    "olympus": "mgm",
-    "mgm": "mgm",
-    "navigator": "mgm",
-    "atlantis": "elite",
-}
 
 # ⚠️ Parâmetros que NÃO vêm de nenhuma das 3 abas do Sheets (COLAB/METAS/FERIADOS):
 # percentual do "gap intermediário" e a data-prazo (ex.: 40% até 16/07/2026).
 # Por ora como constantes — mover pro Sheets se o time preferir editar sem deploy.
 PCT_GAP_INTERMEDIARIO = 0.40
 
-TZ_OFFSET_HORAS = 3  # Pipedrive retorna UTC; BRT = UTC - 3h (sem horário de verão)
 
 
 # ---------------------------------------------------------------------------
@@ -158,25 +190,14 @@ def safe_div(a, b):
 
 
 def to_brt(iso_ts):
-    """Pipedrive timestamp (UTC) -> datetime BRT (subtrai 3h fixas)."""
-    if not iso_ts:
-        return None
-    ts = iso_ts.replace("Z", "")
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
-        try:
-            d = dt.datetime.strptime(ts[:19], fmt)
-            return d - dt.timedelta(hours=TZ_OFFSET_HORAS)
-        except ValueError:
-            continue
-    return None
+    """R0 (CRN): Pipedrive UTC -> Brasília (America/Sao_Paulo), via crn.base.fuso. Devolve datetime sem tzinfo."""
+    d = _fuso.para_brasil(iso_ts)
+    return d.replace(tzinfo=None) if d else None
 
 
 def hoje_brt():
-    """'Hoje' correto pro fuso de Brasília — NÃO usar dt.date.today() sozinho,
-    que pega a data do servidor (UTC na Vercel). Entre ~21h e 23h59 BRT, o UTC já
-    virou o dia seguinte, e dt.date.today() erradamente aponta pra 'amanhã',
-    zerando tudo que compara com 'hoje' (Novos Leads Hoje, MQL Hoje, etc)."""
-    return (dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=TZ_OFFSET_HORAS)).date()
+    """R0 (CRN): 'hoje' em Brasília, nunca o relógio do servidor."""
+    return _fuso.hoje_brasil()
 
 
 from urllib.error import HTTPError, URLError
@@ -338,160 +359,56 @@ def read_csv(url):
     return list(csv.DictReader(io.StringIO(text)))
 
 
+SQUAD_CRN_PARA_INTERNO = {"olympus": "mgm", "sniper": "sniper", "elite": "elite", "navigator": "navigator"}
+
+
 def carregar_feriados():
-    rows = read_csv(SHEET_FERIADOS)
-    if not rows:
-        return set()
-    first_key = list(rows[0].keys())[0]
-    feriados = set()
-    for r in rows:
-        raw = (r.get(first_key) or "").strip()
-        if not raw:
-            continue
-        for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%m/%d/%Y"):
-            try:
-                feriados.add(dt.datetime.strptime(raw, fmt).date())
-                break
-            except ValueError:
-                continue
-    return feriados
+    """A2 (CRN): tabela de Feriados."""
+    return _fontes.carregar_feriados()
 
 
 def carregar_colaboradores(mes, ano):
-    rows = read_csv(SHEET_COLAB)
-    if not rows:
-        return {}
-    fields = rows[0].keys()
-    col_nome = find_col(fields, exact="nome")
-    col_subarea = find_col(fields, exact="subarea")
-    col_cargo = find_col(fields, exact="cargo")
-    col_status = find_col(fields, contains="status")
-    col_head = find_col(fields, contains="head")
-    col_lider = find_col(fields, contains_all=["lider", "team"])
-    col_mes_ref = find_col(fields, contains_all=["mes", "ref"])
-    col_ano_ref = find_col(fields, contains_all=["ano", "ref"])
-
-    def filtra_mes(data):
-        if not (col_mes_ref and col_ano_ref):
-            return data
-        out = [r for r in data if str(r.get(col_mes_ref, "")).strip() == str(mes)
-               and str(r.get(col_ano_ref, "")).strip() == str(ano)]
-        return out if out else data  # fallback silencioso (igual ao sistema grande)
-
-    filtrado = filtra_mes(rows)
-
-    dedup = {}
-    for r in filtrado:
-        nome = norm(r.get(col_nome, ""))
-        if nome and nome not in dedup:
-            dedup[nome] = r
-
-    colaboradores = {}
-    for nome, r in dedup.items():
-        if nome in EXCLUSOES_FIXAS:
-            continue
-        status = norm(r.get(col_status, ""))
-        if status != "ativo":
-            continue
-        colaboradores[nome] = {
-            "nome_exibicao": r.get(col_nome, ""),
-            "subarea": norm(r.get(col_subarea, "")),
-            "cargo": norm(r.get(col_cargo, "")) if col_cargo else "",
-            "head": norm(r.get(col_head, "")) if col_head else "",
-            "lider": norm(r.get(col_lider, "")) if col_lider else "",
+    """Colab do mês pela CRN (R1/H1). Devolve o mesmo formato que o painel já usava
+    (chave = nome normalizado), com a equipe em chave interna: Olympus -> 'mgm'."""
+    colab = _fontes.carregar_colab(ano, mes)
+    out = {}
+    for p in colab:
+        equipe = _m1.squad_da_pessoa(p)  # H1/M1: gerente tem equipe fixa na config
+        out[p["nome_norm"]] = {
+            "nome_exibicao": p["nome"],
+            "subarea": SQUAD_CRN_PARA_INTERNO.get(norm(equipe), norm(equipe)),
+            "cargo": norm(p.get("cargo", "")),
+            "head": p["head_norm"], "lider": p["lider_norm"],
+            "_pessoa": p, "_colab": colab,
         }
-    return colaboradores
+    return out
 
 
 def carregar_metas(mes, ano):
-    rows = read_csv(SHEET_METAS)
-    if not rows:
-        return {}
-    fields = rows[0].keys()
-    col_ano = find_col(fields, exact="ano")
-    col_mes = find_col(fields, exact="mes")
-    col_nome = find_col(fields, exact="nome")
-    col_reu = find_col(fields, contains_all=["reuni", "meta"])
-    col_fin = find_col(fields, contains="financ")
-    col_util = find_col(fields, contains="util")
-
-    metas = {}
-    for r in rows:
-        if str(r.get(col_ano, "")).strip() != str(ano):
+    """Metas do mês pela CRN (R2: meta de reunião > 0 = SDR)."""
+    out = {}
+    for m in _fontes.carregar_metas(ano, mes):
+        if not m["meta_reunioes"] and not m["meta_financeira"]:
             continue
-        if str(r.get(col_mes, "")).strip() != str(mes):
-            continue
-        nome = norm(r.get(col_nome, ""))
-        if not nome:
-            continue
-        meta_reu = parse_num_br(r.get(col_reu, 0))
-        meta_fin = parse_num_br(r.get(col_fin, 0))
-        if meta_fin == 0 and meta_reu == 0:
-            continue  # sem meta nenhuma no mês = pessoa some do cálculo
-        papel = "closer" if meta_reu == 0 else "sdr"
-        metas[nome] = {
-            "meta_reu": meta_reu,
-            "meta_fin": meta_fin,
-            "dias_uteis_override": parse_num_br(r.get(col_util, 0)) if col_util else 0,
-            "papel": papel,
-        }
-    return metas
+        out[m["nome_norm"]] = {"meta_reu": m["meta_reunioes"], "meta_fin": m["meta_financeira"],
+                               "papel": m["papel"]}
+    return out
 
 
 # ---------------------------------------------------------------------------
-# DIAS ÚTEIS
+# DIAS ÚTEIS (A2 — CRN)
 # ---------------------------------------------------------------------------
 
 def eh_dia_util(d, feriados):
     return d.weekday() < 5 and d not in feriados
 
 
-def dias_uteis_mes(ano, mes, feriados):
-    primeiro = dt.date(ano, mes, 1)
-    if mes == 12:
-        ultimo = dt.date(ano, 12, 31)
-    else:
-        ultimo = dt.date(ano, mes + 1, 1) - dt.timedelta(days=1)
-    d, total = primeiro, 0
-    while d <= ultimo:
-        if eh_dia_util(d, feriados):
-            total += 1
-        d += dt.timedelta(days=1)
-    return total, ultimo
-
-
 def calcular_dias_uteis(ano, mes, feriados, hoje=None):
-    hoje = hoje or hoje_brt()
-    total, ultimo_dia = dias_uteis_mes(ano, mes, feriados)
-
-    if (ano, mes) < (hoje.year, hoje.month):
-        return {"total": total, "passados": total, "restantes": 0, "fechados": total}
-
-    limite = min(hoje.day, ultimo_dia.day) if (ano, mes) == (hoje.year, hoje.month) else 0
-    d, passados = dt.date(ano, mes, 1), 0
-    while d.day <= limite:
-        if eh_dia_util(d, feriados):
-            passados += 1
-        if d == ultimo_dia:
-            break
-        d += dt.timedelta(days=1)
-    passados = max(passados, 1)  # piso de 1 (nunca zero)
-
-    restantes = 0
-    d = dt.date(ano, mes, limite + 1) if limite < ultimo_dia.day else None
-    while d and d <= ultimo_dia:
-        if eh_dia_util(d, feriados):
-            restantes += 1
-        d += dt.timedelta(days=1)
-
-    # "fechados" = dias úteis JÁ ENCERRADOS (exclui hoje, que ainda está em andamento).
-    # É a base do ritmo/MTD: "deveria estar até ontem". "passados" (inclui hoje) segue
-    # disponível só como informativo.
-    fechados = passados
-    if (ano, mes) == (hoje.year, hoje.month) and eh_dia_util(hoje, feriados):
-        fechados = passados - 1
-
-    return {"total": total, "passados": passados, "restantes": restantes, "fechados": fechados}
+    """A2 (CRN): total do mês, passados (1º dia até D-1) e restantes (hoje até o fim).
+    'fechados' = 'passados' (mesma coisa pela A2); mantido por compatibilidade do painel."""
+    du = _fontes.dias_uteis_periodo(ano, mes, feriados, hoje or hoje_brt())
+    return {"total": du["total"], "passados": du["passados"], "restantes": du["restantes"],
+            "fechados": du["passados"]}
 
 
 def proximo_dia_util(a_partir_de, feriados):
@@ -512,35 +429,8 @@ def dia_util_anterior(a_partir_de, feriados):
 # PIPEDRIVE
 # ---------------------------------------------------------------------------
 
-def pd_v1_paginado(path, filter_id, extra_params=None):
-    itens, start = [], 0
-    while True:
-        params = {"api_token": PD_TOKEN, "filter_id": filter_id, "limit": 500, "start": start}
-        params.update(extra_params or {})
-        data = http_get_json(f"{V1_BASE}{path}?{urlencode(params)}")
-        chunk = data.get("data") or []
-        itens.extend(chunk)
-        pag = (data.get("additional_data") or {}).get("pagination") or {}
-        if not pag.get("more_items_in_collection"):
-            break
-        start = pag.get("next_start", start + 500)
-    return itens
 
 
-def pd_v2_paginado(path, filter_id, extra_params=None):
-    itens, cursor = [], None
-    while True:
-        params = {"filter_id": filter_id, "limit": 500}
-        if cursor:
-            params["cursor"] = cursor
-        params.update(extra_params or {})
-        headers = {"x-api-token": PD_TOKEN}
-        data = http_get_json(f"{V2_BASE}{path}?{urlencode(params)}", headers=headers)
-        itens.extend(data.get("data") or [])
-        cursor = (data.get("additional_data") or {}).get("next_cursor")
-        if not cursor:
-            break
-    return itens
 
 
 def pd_users():
@@ -601,32 +491,8 @@ def buscar_deals_por_pipeline(pipeline_id, status, desde_iso=None, ate_iso=None)
     return list(_buscar_deals_por_pipeline_cached(pipeline_id, status, desde_iso, ate_iso))
 
 
-@functools.lru_cache(maxsize=1)
-def _mapa_opcoes_qualificador():
-    """id da opção -> nome, do campo 'Qualificador' (lista de SDRs). A API v1 devolve só o id."""
-    data = http_get_json(f"{V1_BASE}/dealFields?{urlencode({'api_token': PD_TOKEN, 'limit': 500})}")
-    for f in (data.get("data") or []):
-        if f.get("key") == CF_QUALIFICADOR:
-            return {o.get("id"): o.get("label", "") for o in (f.get("options") or [])}
-    return {}
 
 
-def qualificador_norm(deal):
-    """Nome normalizado do SDR no campo Qualificador do negócio ('' se vazio)."""
-    v = deal.get(CF_QUALIFICADOR)
-    if v is None:
-        v = (deal.get("custom_fields") or {}).get(CF_QUALIFICADOR)  # formato v2
-    if isinstance(v, dict):
-        if v.get("label"):
-            return norm(v["label"])
-        v = v.get("id", v.get("value"))
-    if v in (None, ""):
-        return ""
-    try:
-        v = int(v)
-    except (TypeError, ValueError):
-        return norm(v)  # já veio o texto
-    return norm(_mapa_opcoes_qualificador().get(v, ""))
 
 
 def cf_valor(deal, hash_):
@@ -647,186 +513,77 @@ def owner_nome(deal, users_map):
     return users_map.get(owner, "")
 
 
-def buscar_deals_ganhos(ano, mes, users_map):
-    """FILTER_DEALS, status=won, sort won_time desc — filtra por mês (BRT) com corte na paginação."""
-    itens = []
-    start = 0
-    alvo = f"{ano:04d}-{mes:02d}"
-    while True:
-        params = {
-            "api_token": PD_TOKEN, "filter_id": FILTER_DEALS, "status": "won",
-            "sort": "won_time DESC", "limit": 500, "start": start,
-        }
-        data = http_get_json(f"{V1_BASE}/deals?{urlencode(params)}")
-        chunk = data.get("data") or []
-        parou = False
-        for deal in chunk:
-            won_brt = to_brt(deal.get("won_time"))
-            if not won_brt:
-                continue
-            chave_mes = won_brt.strftime("%Y-%m")
-            if chave_mes < alvo:
-                parou = True
-                break
-            if chave_mes == alvo:
-                itens.append(deal)
-        if parou:
-            break
-        pag = (data.get("additional_data") or {}).get("pagination") or {}
-        if not pag.get("more_items_in_collection"):
-            break
-        start = pag.get("next_start", start + 500)
-    return itens
-
-
-def _conta_como_sniper(nome_norm, colaboradores):
-    if nome_norm in {norm(n) for n in NOMES_EXTRAS_SNIPER_CRU}:
-        return True
-    return colaboradores.get(nome_norm, {}).get("subarea") == SQUAD_SDR
-
-
-def squad_do_deal(deal, colaboradores, users_map):
-    """Retorna squad interno (mgm/elite/sniper/...) via dono normalizado, com exceção da GM.
-    Pros squads financeiros (Olympus/Elite), exige Closer, Head ou Gerente no cargo.
-    Atlantis (subarea própria na COLAB) é tratado como 'elite' pra todo efeito de bucket/meta
-    combinada — o detalhe Elite x Atlantis é recuperado separadamente via _subarea_raw_do_deal."""
-    nome_dono = norm(owner_nome(deal, users_map))
-    if GM_NOME_NORMALIZADO and nome_dono == GM_NOME_NORMALIZADO:
-        funil = norm((deal.get("pipeline_name") or deal.get("pipeline_id") or ""))
-        return FUNIL_PARA_SQUAD.get(funil)
-    colaborador = colaboradores.get(nome_dono)
-    if not colaborador:
-        return None
-    subarea = colaborador["subarea"]
-    if subarea.startswith("lic"):
-        return None
-    cargo = colaborador.get("cargo", "")
-    subarea_bucket = "elite" if subarea == SUBAREA_ATLANTIS else subarea
-    if subarea_bucket in SQUADS_FINANCEIROS and not any(termo in cargo for termo in CARGOS_FINANCEIROS):
-        return None
-    return subarea_bucket
-
-
-def _e_deal_atlantis(deal, colaboradores, users_map):
-    """True se o dono do negócio é cadastrado na COLAB com subarea 'atlantis' — usado só
-    pra separar o breakdown Elite x Atlantis dentro do squad financeiro 'elite' combinado."""
-    nome_dono = norm(owner_nome(deal, users_map))
-    colaborador = colaboradores.get(nome_dono)
-    return bool(colaborador) and colaborador.get("subarea") == SUBAREA_ATLANTIS
-
-
-def teste_activities_sem_filtro():
-    """Chama /v1/activities sem filter_id nenhum, só pra confirmar se o endpoint/token funciona."""
-    params = {"api_token": PD_TOKEN, "limit": 5, "start": 0}
-    data = http_get_json(f"{V1_BASE}/activities?{urlencode(params)}")
-    itens = data.get("data") or []
-    amostra = list(itens[0].keys()) if itens else []
-    return {"total_sem_filtro": len(itens), "chaves_exemplo": amostra}
-
-
-@functools.lru_cache(maxsize=4)
-def _todas_activities_cached():
-    return tuple(pd_v2_paginado("/activities", FILTER_ACTIVITIES))
-
-
-def buscar_activities(ano, mes):
-    """v2, paginação por cursor — confirmado funcional (o filtro só precisava estar compartilhado/token com acesso)."""
-    alvo = f"{ano:04d}-{mes:02d}"
-    todas = _todas_activities_cached()
-    filtradas = [a for a in todas if (a.get("due_date") or "")[:7] == alvo]
-    return filtradas, len(todas)
-
-
-def campo_owner_id(obj):
-    """Extrai o id do dono, cobrindo o formato v1 (user_id, às vezes dict) e v2 (owner_id, int)."""
-    v = obj.get("user_id", obj.get("owner_id"))
-    if isinstance(v, dict):
-        return v.get("value") or v.get("id")
-    return v
-
-
-def extrair_owner_id(deal):
-    return campo_owner_id(deal)
-
-
-def montar_deals_rv_owner_map(deals_rv):
-    """Mapa deal_id -> owner_id, só dos deals que estão na whitelist FILTER_DEALS_RV."""
-    return {d.get("id"): extrair_owner_id(d) for d in deals_rv}
-
-
-def reuniao_valida_sdr(atividade, deals_rv_owner_map):
-    concluida = atividade.get("done") is True or atividade.get("status") == "done"
-    if not concluida:
-        return False
-    responsavel = campo_owner_id(atividade)
-    deal_id = atividade.get("deal_id")
-    if deal_id:
-        # deal precisa estar na whitelist (senão não dá pra saber o dono, e a regra exige RV)
-        if deal_id not in deals_rv_owner_map:
-            return False
-        dono_deal = deals_rv_owner_map[deal_id]
-        if dono_deal == responsavel:
-            return False
-    return True
-
-
-PIPELINE_ID_ATLANTIS = 66  # funil Atlantis — adicionado à whitelist de reuniões (o filtro FILTER_DEALS_RV não o cobre)
+def buscar_deals_ganhos(ano, mes, users_map, com_exclusoes=False):
+    """M1 (CRN): ganhos do mês pelo won_time em Brasília, busca só pelo período (sem filtro salvo).
+    Devolve só os válidos: saem cortesia (R4), outra moeda (R3) e ganho automático (G1).
+    com_exclusoes=True devolve o dict completo {'validos','cortesias','outra_moeda','automaticos'}."""
+    ini = dt.date(ano, mes, 1)
+    fim = dt.date(ano, mes, calendar.monthrange(ano, mes)[1])
+    deals = _pd.ganhos_do_periodo(ini, fim)
+    sep = _m1.separar_ganhos(deals, ano, mes, users_map)
+    return sep if com_exclusoes else sep["validos"]
 
 
 @functools.lru_cache(maxsize=1)
-def _deals_funil_atlantis():
-    """Todos os deals do funil Atlantis (v2 /deals?pipeline_id=66), pra somar à whitelist de RV."""
-    itens, cursor = [], None
-    while True:
-        params = {"pipeline_id": PIPELINE_ID_ATLANTIS, "limit": 500}
-        if cursor:
-            params["cursor"] = cursor
-        data = http_get_json(f"{V2_BASE}/deals?{urlencode(params)}", headers={"x-api-token": PD_TOKEN})
-        itens.extend(data.get("data") or [])
-        cursor = (data.get("additional_data") or {}).get("next_cursor")
-        if not cursor:
-            break
-    return tuple(itens)
+def _funis_cached():
+    return _pd.funis()
 
 
-@functools.lru_cache(maxsize=512)
-def _dono_do_deal_por_id(deal_id):
-    """Dono atual de um deal via /v1/deals/{id} (None se falhar). Memoizado."""
-    try:
-        data = http_get_json(f"{V1_BASE}/deals/{deal_id}?{urlencode({'api_token': PD_TOKEN})}")
-        return campo_owner_id(data.get("data") or {})
-    except Exception:
+def _ganhos_por_squad(deals, colaboradores, users_map):
+    """M1 (CRN): ganhos válidos agrupados pelo squad da venda (chave interna; 'mgm' = Olympus)."""
+    colab_lista = next(iter(colaboradores.values()))["_colab"] if colaboradores else []
+    por = _m1.ganhos_por_closer(deals, colab_lista, _funis_cached(), users_map)
+    out = {}
+    for r in por.values():
+        for d in r["deals"]:
+            sq = r["squad_por_deal"][d.get("id")]
+            out.setdefault(SQUAD_CRN_PARA_INTERNO.get(norm(sq), norm(sq)), []).append(d)
+    return out
+
+
+def _meta_financeira_squad(squad_interno, colaboradores, metas):
+    """A1: meta do squad = soma das metas financeiras de quem é Closer/IS (R2) naquele squad."""
+    return sum(m["meta_fin"] for nome, m in metas.items()
+               if m.get("papel") == "closer" and colaboradores.get(nome, {}).get("subarea") == squad_interno)
+
+
+
+
+def squad_do_deal(deal, colaboradores, users_map):
+    """M1/H1 (CRN): squad da venda pelo dono na Colab do mês (gerente = equipe fixa; head = squad do funil;
+    licenciado fora). Devolve a chave interna do painel ('mgm' = Olympus) ou None."""
+    c = colaboradores.get(norm(owner_nome(deal, users_map)))
+    if not c:
         return None
+    funis = _funis_cached()
+    if _lc1.eh_licenciado(deal, funis):
+        return None
+    sq = _m1.squad_da_venda(deal, c["_pessoa"], c["_colab"], funis)
+    return SQUAD_CRN_PARA_INTERNO.get(norm(sq), norm(sq))
 
 
-def complementar_map_atlantis(activities, deals_rv_owner_map, colaboradores, users_map, limite=80):
-    """A whitelist FILTER_DEALS_RV não cobre o funil do Atlantis: reuniões que um SDR do Sniper
-    agendou pra Amanda (deal dela, fora da whitelist) eram descartadas. Aqui, pra atividades
-    concluídas de SDR do Sniper cujo deal não está no mapa, busca o dono do deal e, se ele for
-    da subarea Atlantis, inclui no mapa (valida normalmente: dono do deal != quem agendou).
-    Retorna quantos deals foram incluídos."""
-    incluidos = 0
-    consultados = 0
-    for a in activities:
-        deal_id = a.get("deal_id")
-        if not deal_id or deal_id in deals_rv_owner_map:
-            continue
-        if not (a.get("done") is True or a.get("status") == "done"):
-            continue
-        nome_resp = norm(users_map.get(campo_owner_id(a), ""))
-        if not _conta_como_sniper(nome_resp, colaboradores):
-            continue
-        if consultados >= limite:
-            break
-        consultados += 1
-        dono = _dono_do_deal_por_id(deal_id)
-        if not dono:
-            continue
-        nome_dono = norm(users_map.get(dono, ""))
-        if colaboradores.get(nome_dono, {}).get("subarea") == SUBAREA_ATLANTIS:
-            deals_rv_owner_map[deal_id] = dono
-            incluidos += 1
-    return incluidos
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -834,97 +591,39 @@ def complementar_map_atlantis(activities, deals_rv_owner_map, colaboradores, use
 # ---------------------------------------------------------------------------
 
 def buscar_forecast_deals():
-    """Pipeline aberto (FILTER_FORECAST) — v1. Pede status=open explicitamente:
-    sem isso, a API retorna TODOS os status que batem com o filtro (won/lost inclusive)."""
-    return pd_v1_paginado("/deals", FILTER_FORECAST, extra_params={"status": "open"})
+    """F1 (CRN): deals abertos do filtro de forecast (1490240, de crn.base.config)."""
+    return _pd.deals_do_filtro(crn.base.config.filtro("forecast"), "open")
 
 
-def buscar_probabilidade_por_stage():
-    """Mapa stage_id -> deal_probability da etapa (probabilidade "original" configurada
-    no funil). Usado pra negócios ganhos/perdidos, cujo campo probability o próprio
-    Pipedrive costuma sobrescrever (geralmente pra 100% ou 0%) na hora do fechamento."""
-    data = http_get_json(f"{V1_BASE}/stages?{urlencode({'api_token': PD_TOKEN})}")
-    mapa = {}
-    for s in (data.get("data") or []):
-        prob = s.get("deal_probability")
-        if prob is not None:
-            mapa[s.get("id")] = prob
-    return mapa
+
+
+def _deals_por_squad_forecast(pool, colaboradores, users_map):
+    por_squad = {s: [] for s in SQUADS_FINANCEIROS}
+    vistos = set()
+    for d in pool:
+        did = d.get("id")
+        if did in vistos or d.get("status") != "open":
+            continue
+        vistos.add(did)
+        sq = squad_do_deal(d, colaboradores, users_map)
+        if sq in por_squad:
+            por_squad[sq].append(d)
+    return por_squad
 
 
 def valor_previsto_por_squad(pool, colaboradores, users_map, data_alvo):
-    """Por squad financeiro: soma bruta separada por bucket de probabilidade
-    (20/50/70, comparação exata) + a média ponderada (bruto x probabilidade).
-    Só considera negócios com status=open — a API do Pipedrive não filtra isso
-    sozinha (retorna todos os status do filtro por padrão)."""
-    buckets = {s: {20: 0.0, 50: 0.0, 70: 0.0} for s in SQUADS_FINANCEIROS}
-    vistos = set()
-    alvo_iso = data_alvo.isoformat()
-    for d in pool:
-        did = d.get("id")
-        if did in vistos:
-            continue
-        vistos.add(did)
-        if d.get("status") != "open":
-            continue
-        if (d.get("expected_close_date") or "")[:10] != alvo_iso:
-            continue
-        try:
-            prob = int(float(d.get("probability")))
-        except (TypeError, ValueError):
-            continue
-        if prob not in (20, 50, 70):
-            continue
-        squad = squad_do_deal(d, colaboradores, users_map)
-        if squad in buckets:
-            buckets[squad][prob] += float(d.get("value") or 0)
-
-    resultado = {}
-    for squad, b in buckets.items():
-        media = b[20] * 0.20 + b[50] * 0.50 + b[70] * 0.70
-        resultado[squad] = {"p20": b[20], "p50": b[50], "p70": b[70], "media": media}
-    return resultado
+    """F1 + F2 (CRN): faixas 20/50/70 por squad na data prevista e média ponderada."""
+    out = {}
+    for sq, lista in _deals_por_squad_forecast(pool, colaboradores, users_map).items():
+        f = _f1.faixas(lista, data_alvo, data_alvo)
+        out[sq] = {"p20": f[20], "p50": f[50], "p70": f[70], "media": _f2.media_ponderada(f),
+                   "em_aberto": f["em_aberto"]}
+    return out
 
 
 def valor_abertos_por_squad(pool, colaboradores, users_map, data_alvo):
-    """Soma o valor bruto dos negócios ainda em aberto (status=open) com expected_close_date == data_alvo, por squad."""
-    soma = {s: 0.0 for s in SQUADS_FINANCEIROS}
-    vistos = set()
-    alvo_iso = data_alvo.isoformat()
-    for d in pool:
-        did = d.get("id")
-        if did in vistos:
-            continue
-        vistos.add(did)
-        if d.get("status") != "open":
-            continue
-        if (d.get("expected_close_date") or "")[:10] != alvo_iso:
-            continue
-        squad = squad_do_deal(d, colaboradores, users_map)
-        if squad in soma:
-            soma[squad] += float(d.get("value") or 0)
-    return soma
-
-
-def valor_abertos_por_squad(pool, colaboradores, users_map, data_alvo):
-    """Soma o valor bruto dos negócios ainda em aberto (status=open) com
-    expected_close_date == data_alvo, por squad."""
-    soma = {s: 0.0 for s in SQUADS_FINANCEIROS}
-    vistos = set()
-    alvo_iso = data_alvo.isoformat()
-    for d in pool:
-        did = d.get("id")
-        if did in vistos:
-            continue
-        vistos.add(did)
-        if d.get("status") != "open":
-            continue
-        if (d.get("expected_close_date") or "")[:10] != alvo_iso:
-            continue
-        squad = squad_do_deal(d, colaboradores, users_map)
-        if squad in soma:
-            soma[squad] += float(d.get("value") or 0)
-    return soma
+    """F1 (CRN): em aberto = soma das três faixas na data prevista."""
+    return {sq: v["em_aberto"] for sq, v in valor_previsto_por_squad(pool, colaboradores, users_map, data_alvo).items()}
 
 
 def _match_produto_no_texto(texto):
@@ -1008,10 +707,10 @@ def classificar_produto_ganho(deal):
 PRODUTOS_TODOS = PRODUTOS + ["Não classificado"]
 
 
-SQUAD_NOME_PIPELINE = {"mgm": "olympus", "elite": "elite"}  # nome do funil no Pipedrive
+SQUAD_NOME_PIPELINE = {"mgm": "olympus"}  # nome do funil no Pipedrive
 PIPELINE_ID_SNIPER = 88  # ID direto, sem precisar buscar por nome
 PIPELINE_ID_NAVIGATOR = 51  # ID direto — só aparece na aba Produtos, não em Perdidos
-SQUADS_PRODUTOS = ["mgm", "elite", "sniper"]  # squads usados em Perdidos (Olympus/Elite/Sniper)
+SQUADS_PRODUTOS = ["mgm", "sniper"]  # squads usados em Perdidos (Olympus/Sniper)
 SQUADS_PRODUTOS_ABA = SQUADS_PRODUTOS + ["navigator"]  # squads que aparecem na aba Produtos - Detalhamento
 
 
@@ -1385,12 +1084,7 @@ def montar_atingimento_historico(ano, mes, dia_inicio, dia_fim):
 
     metas = carregar_metas(mes, ano)
 
-    def meta_squad(squad_interno):
-        return sum(m["meta_fin"] for nome, m in metas.items()
-                   if colaboradores.get(nome, {}).get("subarea") == squad_interno
-                   and any(termo in colaboradores.get(nome, {}).get("cargo", "") for termo in CARGOS_FINANCEIROS))
-
-    metas_mes = {s: meta_squad(s) for s in SQUADS_FINANCEIROS}
+    metas_mes = {s: _meta_financeira_squad(s, colaboradores, metas) for s in SQUADS_FINANCEIROS}
     metas_mes["total"] = sum(metas_mes.values())
 
     por_dia = []
@@ -1795,37 +1489,6 @@ def montar_resposta_perdidos_periodo(mes_param, ano_param, perdidos_inicio, perd
     }
 
 
-def _bloco_financeiro(meta_mes, bruto, multi, ontem, hoje, ontem_bruto, hoje_bruto,
-                       du_total, dias_restantes_p100, ritmo_100,
-                       mes_passado_multi=0.0, mes_passado_bruto=0.0, meta_mp=None):
-    """Mesma fórmula do bloco financeiro por squad (ver loop principal de montar_painel),
-    fatorada pra reaproveitar no breakdown Elite x Atlantis sem duplicar a conta.
-    meta_mp = meta do MÊS PASSADO (equipe/meta de então) pro cálculo de mes_passado_atingimento —
-    NUNCA a meta do mês atual, senão o % fica inflado/deflacionado por mudança de meta mês a mês."""
-    onde_100 = meta_mes * ritmo_100
-    gap_100 = max(0.0, meta_mes - multi)
-    gap_100_bruto = max(0.0, meta_mes - bruto)
-    meta_mp_calc = meta_mp if meta_mp is not None else meta_mes
-    mp_atingimento = round(safe_div(mes_passado_multi, meta_mp_calc) * 100, 2) if meta_mp_calc else 0.0
-    return {
-        "meta_mes": round(meta_mes, 2),
-        "meta_dia": round(safe_div(meta_mes, du_total), 2),
-        "realizado_bruto": round(bruto, 2),
-        "realizado_multiplicador": round(multi, 2),
-        "onde_deveria_100": round(onde_100, 2),
-        "atingimento": round(safe_div(multi, meta_mes) * 100, 2),
-        "gap_100": round(gap_100, 2),
-        "meta_dia_100": round(safe_div(gap_100, dias_restantes_p100), 2),
-        "gap_100_bruto": round(gap_100_bruto, 2),
-        "meta_dia_100_bruto": round(safe_div(gap_100_bruto, dias_restantes_p100), 2),
-        "ontem": round(ontem, 2),
-        "hoje": round(hoje, 2),
-        "ontem_bruto": round(ontem_bruto, 2),
-        "hoje_bruto": round(hoje_bruto, 2),
-        "mes_passado_mesmo_dia": round(mes_passado_multi, 2),
-        "mes_passado_bruto": round(mes_passado_bruto, 2),
-        "mes_passado_atingimento": mp_atingimento,
-    }
 
 
 def montar_painel(ano_param=None, mes_param=None, papel=None):
@@ -1852,39 +1515,20 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
     ontem = dia_util_anterior(hoje, feriados)
     prox_dia_util = proximo_dia_util(hoje, feriados)
 
-    # ---- Financeiro: Olympus (mgm) e Elite (+ Atlantis, somado dentro de "elite") ----
+    # ---- Financeiro: Olympus (mgm) — M1/M2 (CRN) ----
     squads_fin = {s: {"bruto": 0.0, "multi": 0.0, "ontem": 0.0, "hoje": 0.0, "ontem_bruto": 0.0, "hoje_bruto": 0.0} for s in SQUADS_FINANCEIROS}
-    # Breakdown Elite x Atlantis — mesmas chaves, só pra sub-dividir o squad "elite" no painel.
-    _ZERO_SUB = {"bruto": 0.0, "multi": 0.0, "ontem": 0.0, "hoje": 0.0, "ontem_bruto": 0.0, "hoje_bruto": 0.0}
-    squads_fin_sub = {"elite": dict(_ZERO_SUB), "atlantis": dict(_ZERO_SUB)}
-    for deal in deals_ganhos:
-        squad = squad_do_deal(deal, colaboradores, users_map)
+    ganhos_por_sq = _ganhos_por_squad(deals_ganhos, colaboradores, users_map)
+    for squad, lista in ganhos_por_sq.items():
         if squad not in squads_fin:
             continue
-        bruto = float(deal.get("value") or 0)
-        multi = float(cf_valor(deal, CF_MULTIPLICADOR) or 0)
-        squads_fin[squad]["bruto"] += bruto
-        squads_fin[squad]["multi"] += multi
-        won_brt = to_brt(deal.get("won_time"))
-        if won_brt and won_brt.date() == ontem:
-            squads_fin[squad]["ontem"] += multi
-            squads_fin[squad]["ontem_bruto"] += bruto
-        if won_brt and won_brt.date() == hoje:
-            squads_fin[squad]["hoje"] += multi
-            squads_fin[squad]["hoje_bruto"] += bruto
-        if squad == "elite":
-            sub = squads_fin_sub["atlantis"] if _e_deal_atlantis(deal, colaboradores, users_map) else squads_fin_sub["elite"]
-            sub["bruto"] += bruto
-            sub["multi"] += multi
-            if won_brt and won_brt.date() == ontem:
-                sub["ontem"] += multi
-                sub["ontem_bruto"] += bruto
-            if won_brt and won_brt.date() == hoje:
-                sub["hoje"] += multi
-                sub["hoje_bruto"] += bruto
+        squads_fin[squad]["bruto"] = _m2.bruto(lista)
+        squads_fin[squad]["multi"] = _m2.multiplicador(lista)
+        for chave, dia in (("ontem", ontem), ("hoje", hoje)):
+            do_dia = [d for d in lista if _fuso.data_brasil(d.get("won_time")) == dia]
+            squads_fin[squad][chave] = _m2.multiplicador(do_dia)
+            squads_fin[squad][chave + "_bruto"] = _m2.bruto(do_dia)
 
-    # ---- Previsto (forecast) hoje/ontem — só faz sentido no mês atual ----
-    # Só negócios em aberto (revertido: não inclui mais ganhos/perdidos).
+    # ---- Previsto (forecast) hoje/ontem — F1/F2 (CRN), só faz sentido no mês atual ----
     if e_mes_atual:
         forecast_abertos = buscar_forecast_deals()
         pool_previsto = forecast_abertos
@@ -1899,17 +1543,12 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
         em_aberto_hoje = {s: 0.0 for s in SQUADS_FINANCEIROS}
 
     def meta_squad(squad_interno):
-        return sum(m["meta_fin"] for nome, m in metas.items()
-                   if colaboradores.get(nome, {}).get("subarea") == squad_interno
-                   and any(termo in colaboradores.get(nome, {}).get("cargo", "") for termo in CARGOS_FINANCEIROS))
+        return _meta_financeira_squad(squad_interno, colaboradores, metas)
 
-    # ---- Comparativo "mesmo dia do mês passado" — só no mês atual.
-    # Ex: hoje é 08/09 -> mostra quanto cada squad tinha faturado até 08/08. ----
+    # ---- Comparativo "mesmo dia do mês passado" — só no mês atual ----
     squads_mes_passado = {s: 0.0 for s in SQUADS_FINANCEIROS}
     squads_mes_passado_bruto = {s: 0.0 for s in SQUADS_FINANCEIROS}
     squads_mes_passado_atingimento = {s: 0.0 for s in SQUADS_FINANCEIROS}
-    squads_mes_passado_sub = {"elite": 0.0, "atlantis": 0.0}
-    squads_mes_passado_bruto_sub = {"elite": 0.0, "atlantis": 0.0}
     mes_passado_rotulo = None
     colaboradores_mp, metas_mp, ano_passado, mes_passado, dia_alvo_mes_passado = None, None, None, None, None
     if e_mes_atual:
@@ -1920,53 +1559,33 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
         data_corte_mes_passado = dt.date(ano_passado, mes_passado, dia_alvo_mes_passado)
         mes_passado_rotulo = data_corte_mes_passado.strftime("%d/%m")
 
-        # Time e meta de QUEM ESTAVA no squad naquele mês (pode ter mudado desde então)
+        # Time e meta de QUEM ESTAVA no squad naquele mês (Colab/Metas do mês, R1/R2)
         colaboradores_mp = carregar_colaboradores(mes_passado, ano_passado)
         metas_mp = carregar_metas(mes_passado, ano_passado)
 
         def meta_squad_mp(squad_interno):
-            return sum(m["meta_fin"] for nome, m in metas_mp.items()
-                       if colaboradores_mp.get(nome, {}).get("subarea") == squad_interno
-                       and any(termo in colaboradores_mp.get(nome, {}).get("cargo", "") for termo in CARGOS_FINANCEIROS))
+            return _meta_financeira_squad(squad_interno, colaboradores_mp, metas_mp)
 
-        deals_ganhos_mes_passado = buscar_deals_ganhos(ano_passado, mes_passado, users_map)
-        for deal in deals_ganhos_mes_passado:
-            won_brt = to_brt(deal.get("won_time"))
-            if not won_brt or won_brt.date() > data_corte_mes_passado:
-                continue
-            squad = squad_do_deal(deal, colaboradores_mp, users_map)
+        deals_ganhos_mes_passado = [
+            d for d in buscar_deals_ganhos(ano_passado, mes_passado, users_map)
+            if (_fuso.data_brasil(d.get("won_time")) or data_corte_mes_passado) <= data_corte_mes_passado
+        ]
+        for squad, lista in _ganhos_por_squad(deals_ganhos_mes_passado, colaboradores_mp, users_map).items():
             if squad in squads_mes_passado:
-                multi_mp = float(cf_valor(deal, CF_MULTIPLICADOR) or 0)
-                bruto_mp = float(deal.get("value") or 0)
-                squads_mes_passado[squad] += multi_mp
-                squads_mes_passado_bruto[squad] += bruto_mp
-                if squad == "elite":
-                    chave_sub = "atlantis" if _e_deal_atlantis(deal, colaboradores_mp, users_map) else "elite"
-                    squads_mes_passado_sub[chave_sub] += multi_mp
-                    squads_mes_passado_bruto_sub[chave_sub] += bruto_mp
-
+                squads_mes_passado[squad] = _m2.multiplicador(lista)
+                squads_mes_passado_bruto[squad] = _m2.bruto(lista)
         for s in SQUADS_FINANCEIROS:
             meta_mp_s = meta_squad_mp(s)
             squads_mes_passado_atingimento[s] = round(safe_div(squads_mes_passado[s], meta_mp_s) * 100, 2) if meta_mp_s else 0.0
 
-        # Meta do MÊS PASSADO específica de Elite (só) e Atlantis (só), pro breakdown —
-        # sem isso, o % "Mês passado" do detalhe ficava comparando com a meta do mês ATUAL (errado).
-        meta_mp_elite_sub = meta_squad_mp("elite")
-        meta_mp_atlantis_sub = meta_squad_mp(SUBAREA_ATLANTIS)
-    else:
-        meta_mp_elite_sub = 0.0
-        meta_mp_atlantis_sub = 0.0
+    # MTD (T1): meta até D-1 (dias úteis passados = A2), realizado até agora.
+    ritmo_100 = safe_div(du["passados"], du["total"])
 
-    # MTD = proporção de dias úteis JÁ ENCERRADOS (até ontem) — hoje só entra quando fechar.
-    ritmo_100 = safe_div(du["fechados"], du["total"])
-
-    # Prazo do gap intermediário (40%) = sempre a metade do mês selecionado,
-    # arredondando pra cima (31 dias -> dia 16; 30 -> dia 15; 29 -> dia 15; 28 -> dia 14).
+    # Prazo do gap intermediário (40%) — parâmetro do painel (não é regra da CRN)
     dias_no_mes_calendario = calendar.monthrange(ano, mes)[1]
     dia_metade = math.ceil(dias_no_mes_calendario / 2)
     prazo_gap_intermediario = dt.date(ano, mes, dia_metade)
 
-    # Dias úteis da 1ª metade do mês (usado como base pro Meta/Dia 40% em mês fechado)
     dias_uteis_primeira_metade = 0
     d = dt.date(ano, mes, 1)
     while d <= prazo_gap_intermediario:
@@ -1983,36 +1602,31 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
             d += dt.timedelta(days=1)
         dias_restantes_p40 = restantes_prazo if restantes_prazo > 0 else (1 if eh_dia_util(hoje, feriados) else 0)
     else:
-        # mês fechado: não existe "dias restantes até o prazo" — usa a 1ª metade do mês inteira
         restantes_prazo = 0
         dias_restantes_p40 = dias_uteis_primeira_metade
 
-    # Denominador = total de dias úteis até o prazo (fechados + hoje, se ainda dentro do prazo + restantes).
     hoje_dentro_prazo = 1 if (e_mes_atual and hoje <= prazo_gap_intermediario and eh_dia_util(hoje, feriados)) else 0
-    ritmo_prazo = safe_div(du["fechados"], du["fechados"] + hoje_dentro_prazo + restantes_prazo)
+    ritmo_prazo = safe_div(du["passados"], du["passados"] + hoje_dentro_prazo + restantes_prazo)
 
     resultado = {
         "squads": {}, "geradoEm": dt.datetime.now(dt.timezone.utc).isoformat(),
         "mes": mes, "ano": ano, "e_mes_atual": e_mes_atual,
+        "crn_versao": crn.versao(),
     }
 
-    # Rótulo só pro bloco financeiro (não afeta Produtos/Perdidos, que usam SQUAD_DISPLAY original).
     rotulo_financeiro = dict(SQUAD_DISPLAY)
-    rotulo_financeiro["elite"] = "Elite + Atlantis"
 
     for squad_interno in SQUADS_FINANCEIROS:
         meta_mes = meta_squad(squad_interno)
-        if squad_interno == "elite":
-            meta_mes += meta_squad(SUBAREA_ATLANTIS)
         meta_dia = safe_div(meta_mes, du["total"])
         bruto = squads_fin[squad_interno]["bruto"]
         multi = squads_fin[squad_interno]["multi"]
-        onde_100 = meta_mes * ritmo_100
+        onde_100 = _t1.mtd(multi, meta_mes, du["total"], du["passados"])["meta_mtd"]
         onde_40 = (PCT_GAP_INTERMEDIARIO * meta_mes) * ritmo_prazo
         gap_100 = max(0.0, meta_mes - multi)
         gap_40 = max(0.0, (PCT_GAP_INTERMEDIARIO * meta_mes) - multi)
         meta_dia_40 = safe_div(gap_40, dias_restantes_p40)
-        meta_dia_100 = safe_div(gap_100, dias_restantes_p100)  # gap / dias úteis restantes até o fim do mês (hoje conta se for o último)
+        meta_dia_100 = safe_div(gap_100, dias_restantes_p100)
         gap_100_bruto = max(0.0, meta_mes - bruto)
         meta_dia_100_bruto = safe_div(gap_100_bruto, dias_restantes_p100)
 
@@ -2048,29 +1662,6 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
             "mes_passado_atingimento": squads_mes_passado_atingimento.get(squad_interno, 0.0),
         }
 
-        # Breakdown clicável Elite x Atlantis (só pro squad "elite" — meta_mes já combinada acima).
-        if squad_interno == "elite":
-            resultado["squads"][rotulo_financeiro[squad_interno]]["detalhe"] = {
-                "Elite": _bloco_financeiro(
-                    meta_squad("elite"),
-                    squads_fin_sub["elite"]["bruto"], squads_fin_sub["elite"]["multi"],
-                    squads_fin_sub["elite"]["ontem"], squads_fin_sub["elite"]["hoje"],
-                    squads_fin_sub["elite"]["ontem_bruto"], squads_fin_sub["elite"]["hoje_bruto"],
-                    du["total"], dias_restantes_p100, ritmo_100,
-                    squads_mes_passado_sub["elite"], squads_mes_passado_bruto_sub["elite"],
-                    meta_mp_elite_sub,
-                ),
-                "Atlantis": _bloco_financeiro(
-                    meta_squad(SUBAREA_ATLANTIS),
-                    squads_fin_sub["atlantis"]["bruto"], squads_fin_sub["atlantis"]["multi"],
-                    squads_fin_sub["atlantis"]["ontem"], squads_fin_sub["atlantis"]["hoje"],
-                    squads_fin_sub["atlantis"]["ontem_bruto"], squads_fin_sub["atlantis"]["hoje_bruto"],
-                    du["total"], dias_restantes_p100, ritmo_100,
-                    squads_mes_passado_sub["atlantis"], squads_mes_passado_bruto_sub["atlantis"],
-                    meta_mp_atlantis_sub,
-                ),
-            }
-
     total_meta_mes = sum(resultado["squads"][rotulo_financeiro[s]]["meta_mes"] for s in SQUADS_FINANCEIROS)
     total_bruto = sum(resultado["squads"][rotulo_financeiro[s]]["realizado_bruto"] for s in SQUADS_FINANCEIROS)
     total_multi = sum(resultado["squads"][rotulo_financeiro[s]]["realizado_multiplicador"] for s in SQUADS_FINANCEIROS)
@@ -2091,7 +1682,7 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
         "meta_dia": round(safe_div(total_meta_mes, du["total"]), 2),
         "realizado_bruto": round(total_bruto, 2),
         "realizado_multiplicador": round(total_multi, 2),
-        "onde_deveria_100": round(total_meta_mes * ritmo_100, 2),
+        "onde_deveria_100": round(_t1.mtd(total_multi, total_meta_mes, du["total"], du["passados"])["meta_mtd"], 2),
         "onde_deveria_40": round((PCT_GAP_INTERMEDIARIO * total_meta_mes) * ritmo_prazo, 2),
         "atingimento": round(safe_div(total_multi, total_meta_mes) * 100, 2),
         "gap_100": round(max(0.0, total_meta_mes - total_multi), 2),
@@ -2111,159 +1702,94 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
     }
     resultado["mes_passado_rotulo"] = mes_passado_rotulo
 
-    # ---- Sniper: reuniões ----
-    activities, total_bruto_activities = buscar_activities(ano, mes)
-    deals_rv = pd_v1_paginado("/deals", FILTER_DEALS_RV, extra_params={"status": "all_not_deleted"})
-    deals_rv_owner_map = montar_deals_rv_owner_map(deals_rv)
-    # Funil Atlantis entra na whitelist de reuniões válidas (o filtro do Pipedrive não o cobre)
-    n_antes = len(deals_rv_owner_map)
-    try:
-        for d in _deals_funil_atlantis():
-            if d.get("id") not in deals_rv_owner_map:
-                deals_rv_owner_map[d.get("id")] = extrair_owner_id(d)
-    except Exception as e:
-        resultado["debug_reunioes_atlantis_erro"] = str(e)[:300]
-    n_funil = len(deals_rv_owner_map) - n_antes
-    # Rede de segurança: deals de dono Atlantis em outros funis
-    dbg_deals_atlantis_incluidos = complementar_map_atlantis(
-        activities, deals_rv_owner_map, colaboradores, users_map)
-    resultado["debug_reunioes_atlantis"] = {"deals_funil_atlantis_adicionados": n_funil,
-                                            "deals_atlantis_via_fallback": dbg_deals_atlantis_incluidos}
-    resultado["debug_atlantis"] = {
-        "pessoas_na_colab": {n: {"cargo": c.get("cargo"), "subarea": c.get("subarea")}
-                             for n, c in colaboradores.items() if c.get("subarea") == SUBAREA_ATLANTIS},
-        "metas_na_aba_metas": {n: m for n, m in metas.items()
-                               if colaboradores.get(n, {}).get("subarea") == SUBAREA_ATLANTIS},
-        "ganhos_do_mes_com_dono_atlantis": sum(1 for d in deals_ganhos
-                                               if _e_deal_atlantis(d, colaboradores, users_map)),
-    }
+    # ---- Sniper: reuniões — M6 (CRN) ----
+    colab_lista = next(iter(colaboradores.values()))["_colab"] if colaboradores else []
+    uid_por_nome = {norm(n): i for i, n in users_map.items()}
+    sdr_nomes = {n for n, m in metas.items() if m.get("papel") == "sdr"}
+    sdr_ids = {uid_por_nome[n] for n in sdr_nomes if n in uid_por_nome}
+    lideranca_ids = {uid_por_nome[p["nome_norm"]] for p in colab_lista
+                     if p["nome_norm"] in uid_por_nome and _h1.nivel(p, colab_lista) in ("head", "team_leader", "gerente")}
+    lider_agenda_ids = _m6.lideranca_que_agenda(colab_lista, uid_por_nome)
+    sdr_sniper_nomes = {n for n in sdr_nomes if colaboradores.get(n, {}).get("subarea") == SQUAD_SDR}
+    ids_sniper = ({uid_por_nome[n] for n in sdr_sniper_nomes if n in uid_por_nome}) | set(lider_agenda_ids)
+    nome_por_id = {i: norm(n) for i, n in users_map.items()}
 
-    validadas_total = 0
-    validadas_hoje = 0
-    validadas_ontem = 0
-    validadas_dia_anterior_util = 0
-    previsto_hoje_reu = 0
-    previsto_ontem_reu = 0
-    d_ontem_util = dia_util_anterior(hoje, feriados)
+    ini_mes = dt.date(ano, mes, 1)
+    fim_mes = dt.date(ano, mes, calendar.monthrange(ano, mes)[1])
+    dados_m6 = _m6.carregar_periodo(ini_mes, fim_mes)
+    kw_m6 = dict(dono_do_deal=dados_m6["dono_do_deal"], sdr_ids=sdr_ids, lideranca_ids=lideranca_ids,
+                 lideranca_que_agenda_ids=lider_agenda_ids)
+    por_resp = _m6.reunioes_validadas(dados_m6["atividades"], ini_mes, fim_mes,
+                                      deals_validados=dados_m6["deals_validados"], **kw_m6)
+    validadas_sniper = {r: v for r, v in por_resp.items() if r in ids_sniper}
+    validadas_total = sum(len(v) for v in validadas_sniper.values())
+    d_ontem_util = ontem
+    validadas_hoje = sum(1 for v in validadas_sniper.values() for a in v if _fuso.atividade_dia(a) == hoje)
+    validadas_dia_anterior_util = sum(1 for v in validadas_sniper.values() for a in v if _fuso.atividade_dia(a) == d_ontem_util)
 
-    dbg_concluidas = 0
-    dbg_com_deal = 0
-    dbg_passou_valida_sdr = 0
-    dbg_subarea_sniper = 0
-    nomes_sem_match = set()
-    # Diagnóstico por pessoa (quem fez a atividade): por que cada reunião contou ou não.
-    dbg_por_pessoa = {}
+    # Previsto (FR1): agendadas para o dia, feitas ou não, do SDR
+    previsto_hoje_reu = previsto_ontem_reu = 0
+    if e_mes_atual:
+        ativ_prev = _pd.atividades_do_periodo(min(d_ontem_util, hoje), hoje, tipos=[crn.base.config.tipo_atividade("reuniao")])
+        previsto_hoje_reu = sum(len(v) for r, v in _fr1.previstas(ativ_prev, hoje, ids_sniper).items())
+        previsto_ontem_reu = sum(len(v) for r, v in _fr1.previstas(ativ_prev, d_ontem_util, ids_sniper).items())
 
-    def _dbg_motivo(a, nome):
-        concluida = a.get("done") is True or a.get("status") == "done"
-        deal_id = a.get("deal_id")
-        if not concluida:
-            motivo = "nao_concluida"
-        elif deal_id and deal_id not in deals_rv_owner_map:
-            motivo = "deal_fora_da_whitelist"
-        elif deal_id and deals_rv_owner_map.get(deal_id) == campo_owner_id(a):
-            motivo = "dono_do_deal_e_o_proprio"
-        elif not _conta_como_sniper(nome, colaboradores):
-            motivo = "valida_mas_fora_da_subarea_sniper"
-        else:
-            motivo = "contada"
-        c = dbg_por_pessoa.setdefault(nome or "(sem nome)", {})
-        c[motivo] = c.get(motivo, 0) + 1
+    # Conferência por SDR (universo da M6 antes da validação)
+    universo = _m6.reunioes_com_status(dados_m6["atividades"], ini_mes, fim_mes,
+                                       status_do_deal=dados_m6["status_do_deal"], **kw_m6)
+    nao_validadas_por_resp = {}
+    for item in universo:
+        if not item["validada"]:
+            nao_validadas_por_resp[item["responsavel"]] = nao_validadas_por_resp.get(item["responsavel"], 0) + 1
 
-    for a in activities:
-        _dbg_motivo(a, norm(users_map.get(campo_owner_id(a), "")))
-        if a.get("done") is True or a.get("status") == "done":
-            dbg_concluidas += 1
-        if a.get("deal_id"):
-            dbg_com_deal += 1
-
-        # "Previsto" = agendada pra aquele dia (qualquer status), independente de validação —
-        # olha só o dono da atividade e a subarea dele, sem exigir Reunião Válida.
-        nome_resp_previsto = norm(users_map.get(campo_owner_id(a), ""))
-        if _conta_como_sniper(nome_resp_previsto, colaboradores):
-            due_previsto = a.get("due_date")
-            if due_previsto == hoje.isoformat():
-                previsto_hoje_reu += 1
-            if due_previsto == d_ontem_util.isoformat():
-                previsto_ontem_reu += 1
-
-        if not reuniao_valida_sdr(a, deals_rv_owner_map):
-            continue
-        dbg_passou_valida_sdr += 1
-        # escopo só sniper: precisaria mapear owner->squad; aqui assume-se filtro já traz o universo certo
-        nome_resp = norm(users_map.get(campo_owner_id(a), ""))
-        if not _conta_como_sniper(nome_resp, colaboradores):
-            if nome_resp:
-                nomes_sem_match.add(nome_resp)
-            continue
-        dbg_subarea_sniper += 1
-        validadas_total += 1
-        due = a.get("due_date")
-        if due == hoje.isoformat():
-            validadas_hoje += 1
-        if due == d_ontem_util.isoformat():
-            validadas_dia_anterior_util += 1
-
-    meta_reunioes = sum(m["meta_reu"] for nome, m in metas.items()
-                         if _conta_como_sniper(nome, colaboradores))
+    meta_reunioes = sum(metas[n]["meta_reu"] for n in sdr_sniper_nomes)
     meta_dia_reu = safe_div(meta_reunioes, du["total"])
-    onde_100_reu = meta_reunioes * ritmo_100
+    onde_100_reu = _t1.mtd(validadas_total, meta_reunioes, du["total"], du["passados"])["meta_mtd"]
     onde_40_reu = (PCT_GAP_INTERMEDIARIO * meta_reunioes) * ritmo_prazo
     gap_100_reu = max(0.0, meta_reunioes - validadas_total)
 
-    # ---- Sniper: mesmo comparativo "mesmo dia do mês passado", reaproveitando
-    # as atividades já buscadas (cache) — só filtra diferente, sem custo extra ----
+    # ---- Sniper: mesmo comparativo do mês passado (M6 com Colab/Metas daquele mês) ----
     validadas_mes_passado = 0
     meta_reunioes_mes_passado = 0.0
     if e_mes_atual and colaboradores_mp is not None:
-        activities_mp, _ = buscar_activities(ano_passado, mes_passado)
-        data_corte_mp_iso = dt.date(ano_passado, mes_passado, dia_alvo_mes_passado).isoformat()
-        complementar_map_atlantis(activities_mp, deals_rv_owner_map, colaboradores_mp, users_map)
-        for a in activities_mp:
-            if not reuniao_valida_sdr(a, deals_rv_owner_map):
-                continue
-            nome_resp_mp = norm(users_map.get(campo_owner_id(a), ""))
-            if not _conta_como_sniper(nome_resp_mp, colaboradores_mp):
-                continue
-            due = a.get("due_date")
-            if due and due <= data_corte_mp_iso:
-                validadas_mes_passado += 1
-        meta_reunioes_mes_passado = sum(m["meta_reu"] for nome, m in metas_mp.items()
-                                         if _conta_como_sniper(nome, colaboradores_mp))
+        colab_mp = next(iter(colaboradores_mp.values()))["_colab"] if colaboradores_mp else []
+        ini_mp = dt.date(ano_passado, mes_passado, 1)
+        corte_mp = dt.date(ano_passado, mes_passado, dia_alvo_mes_passado)
+        sdr_nomes_mp = {n for n, m in metas_mp.items() if m.get("papel") == "sdr"}
+        sdr_ids_mp = {uid_por_nome[n] for n in sdr_nomes_mp if n in uid_por_nome}
+        lid_ids_mp = {uid_por_nome[p["nome_norm"]] for p in colab_mp
+                      if p["nome_norm"] in uid_por_nome and _h1.nivel(p, colab_mp) in ("head", "team_leader", "gerente")}
+        lid_ag_mp = _m6.lideranca_que_agenda(colab_mp, uid_por_nome)
+        sdr_sniper_mp = {n for n in sdr_nomes_mp if colaboradores_mp.get(n, {}).get("subarea") == SQUAD_SDR}
+        ids_sniper_mp = {uid_por_nome[n] for n in sdr_sniper_mp if n in uid_por_nome} | set(lid_ag_mp)
+        dados_mp = _m6.carregar_periodo(ini_mp, corte_mp)
+        por_resp_mp = _m6.reunioes_validadas(dados_mp["atividades"], ini_mp, corte_mp,
+                                             deals_validados=dados_mp["deals_validados"],
+                                             dono_do_deal=dados_mp["dono_do_deal"], sdr_ids=sdr_ids_mp,
+                                             lideranca_ids=lid_ids_mp, lideranca_que_agenda_ids=lid_ag_mp)
+        validadas_mes_passado = sum(len(v) for r, v in por_resp_mp.items() if r in ids_sniper_mp)
+        meta_reunioes_mes_passado = sum(metas_mp[n]["meta_reu"] for n in sdr_sniper_mp)
     atingimento_sniper_mes_passado = round(safe_div(validadas_mes_passado, meta_reunioes_mes_passado) * 100, 2) if meta_reunioes_mes_passado else 0.0
 
     gap_40_reu = max(0.0, (PCT_GAP_INTERMEDIARIO * meta_reunioes) - validadas_total)
     meta_dia_40_reu = safe_div(gap_40_reu, dias_restantes_p40)
     meta_dia_100_reu = safe_div(gap_100_reu, dias_restantes_p100)
 
-    # ---- Sniper: Atingimento Financeiro (valor COM multiplicador) ----
-    # Meta = meta_fin da planilha (aba Metas) dos SDRs do Sniper. Realizado = soma do Multiplicador
-    # dos ganhos do mês cujo campo 'Qualificador' é um SDR do Sniper (crédito do SDR na venda).
-    # Meta financeira = só SDRs (papel "sdr" = tem meta de reuniões). Sem esse filtro entravam
-    # também as metas dos Closers/Gerentes que têm subarea Sniper na COLAB (metas bem maiores).
-    meta_fin_por_pessoa = {nome: m["meta_fin"] for nome, m in metas.items()
-                           if _conta_como_sniper(nome, colaboradores) and m.get("papel") == "sdr"}
+    # ---- Sniper: financeiro — M4/M5 (CRN): ganhos do campo Qualificador (G7), meta só dos SDRs (R2) ----
+    opcoes_q = _pd.opcoes_campo(_campo("qualificador"))
+    ganhos_sdr = _m4.ganhos_por_sdr(deals_ganhos, opcoes_q)
+    meta_fin_por_pessoa = {n: metas[n]["meta_fin"] for n in sdr_sniper_nomes}
     meta_fin_sniper = sum(meta_fin_por_pessoa.values())
-    realizado_fin_por_qualificador = {}
-    realizado_fin_sniper = 0.0
-    for deal in deals_ganhos:
-        q = qualificador_norm(deal)
-        if q and _conta_como_sniper(q, colaboradores):
-            v_multi = float(cf_valor(deal, CF_MULTIPLICADOR) or 0)
-            realizado_fin_sniper += v_multi
-            realizado_fin_por_qualificador[q] = realizado_fin_por_qualificador.get(q, 0.0) + v_multi
+    realizado_fin_por_qualificador = {q: _m2.multiplicador(lista) for q, lista in ganhos_sdr.items() if q in sdr_sniper_nomes}
+    realizado_fin_sniper = sum(realizado_fin_por_qualificador.values())
     resultado["debug_sniper_financeiro"] = {
         "meta_por_pessoa": meta_fin_por_pessoa,
         "realizado_multi_por_qualificador": {k: round(v, 2) for k, v in realizado_fin_por_qualificador.items()},
-        "metas_sniper_fora_do_calculo_(nao_sdr)": {
-            nome: m["meta_fin"] for nome, m in metas.items()
-            if _conta_como_sniper(nome, colaboradores) and m.get("papel") != "sdr"
-        },
     }
-    atingimento_reunioes = safe_div(validadas_total, meta_reunioes) * 100
-    atingimento_financeiro = safe_div(realizado_fin_sniper, meta_fin_sniper) * 100
-    # Final = 30% financeiro + 70% reuniões (sem teto: passou de 100% em um, soma normal)
-    atingimento_final = atingimento_financeiro * 0.30 + atingimento_reunioes * 0.70
+    pct_reu = _m6.pct_reunioes(validadas_total, meta_reunioes)
+    pct_fin = _m3.atingimento(realizado_fin_sniper, meta_fin_sniper)
+    atingimento_financeiro = pct_fin or 0.0
+    atingimento_final = _m7.pct_final(pct_reu, pct_fin, ini_mes) or 0.0
 
     resultado["squads"]["Sniper"] = {
         "meta_financeira": round(meta_fin_sniper, 2),
@@ -2273,19 +1799,17 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
         "meta_mes_reunioes": meta_reunioes,
         "meta_dia_reunioes": round(meta_dia_reu, 2),
         "realizado_reunioes": validadas_total,
-        # Conferência por SDR: contadas e motivos de descarte (quem fez a atividade)
+        # Conferência por SDR (M6): contadas e reuniões fora por "Reunião Validada? = Não"
         "reunioes_por_sdr": sorted(
             [{
-                "nome": colaboradores.get(n, {}).get("nome_exibicao") or n.title(),
-                "meta": (metas.get(n) or {}).get("meta_reu", 0),
-                "contadas": c.get("contada", 0),
-                "deal_fora_da_lista": c.get("deal_fora_da_whitelist", 0),
-                "dono_igual": c.get("dono_do_deal_e_o_proprio", 0),
-                "nao_concluida": c.get("nao_concluida", 0),
-            } for n, c in dbg_por_pessoa.items()
-              if c.get("contada") or _conta_como_sniper(n, colaboradores)],
+                "nome": (colaboradores.get(nome_por_id.get(r, ""), {}).get("nome_exibicao") or nome_por_id.get(r, str(r)).title()),
+                "meta": (metas.get(nome_por_id.get(r, "")) or {}).get("meta_reu", 0),
+                "contadas": len(validadas_sniper.get(r, [])),
+                "deal_fora_da_lista": nao_validadas_por_resp.get(r, 0),
+                "dono_igual": 0,
+                "nao_concluida": 0,
+            } for r in ids_sniper],
             key=lambda x: -x["contadas"]),
-        # Realizado só dos dias já encerrados (exclui as reuniões de hoje) — par do MTD "até ontem"
         "realizado_reunioes_ate_ontem": validadas_total - validadas_hoje,
         "mes_passado_reunioes": validadas_mes_passado,
         "mes_passado_atingimento": atingimento_sniper_mes_passado,
@@ -2428,20 +1952,6 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
     }
 
 
-    nome_teste = norm("Denise Mussolin")
-    colab_teste = colaboradores.get(nome_teste)
-    deals_dela = [
-        {"id": d.get("id"), "titulo": d.get("title"), "valor": d.get("value"),
-         "dono_no_deal": owner_nome(d, users_map), "squad_atribuido": squad_do_deal(d, colaboradores, users_map)}
-        for d in deals_ganhos if norm(owner_nome(d, users_map)) == nome_teste
-    ]
-    resultado["debug_denise"] = {
-        "esta_na_colab": colab_teste is not None,
-        "dados_colab": colab_teste,
-        "qtd_deals_ganhos_dela_no_mes": len(deals_dela),
-        "deals_dela": deals_dela[:10],
-    }
-
     resultado["debug_closers"] = {
         SQUAD_DISPLAY[s]: sorted([
             {
@@ -2451,7 +1961,7 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
             }
             for nome in colaboradores
             if colaboradores[nome]["subarea"] == s
-            and any(termo in colaboradores[nome].get("cargo", "") for termo in CARGOS_FINANCEIROS)
+            and (metas.get(nome) or {}).get("papel") == "closer"
         ], key=lambda x: x["nome"])
         for s in SQUADS_FINANCEIROS
     }
@@ -2461,18 +1971,19 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
         "total_forecast_abertos_todos_status": len(forecast_abertos),
     }
     resultado["debug_sniper"] = {
-        "teste_sem_filtro": teste_activities_sem_filtro(),
-        "total_activities_bruto_sem_filtro_mes": total_bruto_activities,
-        "total_activities_no_mes": len(activities),
-        "concluidas": dbg_concluidas,
-        "com_deal_id": dbg_com_deal,
-        "deals_rv_total": len(deals_rv),
-        "passou_validacao_sdr": dbg_passou_valida_sdr,
-        "com_subarea_sniper": dbg_subarea_sniper,
-        "nomes_sem_match_no_colab": sorted(nomes_sem_match)[:15],
-        # por pessoa: quantas atividades do filtro em cada situação (contada = entrou no painel)
-        "reunioes_por_pessoa": {n: c for n, c in sorted(dbg_por_pessoa.items())
-                                if c.get("contada") or colaboradores.get(n, {}).get("subarea") == SQUAD_SDR},
+        "atividades_m6_no_periodo": len(dados_m6["atividades"]),
+        "deals_das_reunioes": len(dados_m6["deals"]),
+        "responsaveis_sniper_contados": {nome_por_id.get(r, str(r)): len(v) for r, v in sorted(validadas_sniper.items(), key=lambda kv: -len(kv[1]))},
+        "reunioes_fora_por_validada_nao": {nome_por_id.get(r, str(r)): n for r, n in nao_validadas_por_resp.items() if r in ids_sniper},
+    }
+    # Carimbo de parâmetros (CLAUDE.md da CRN, seção 5)
+    resultado["carimbo"] = {
+        "crn_versao": crn.versao(),
+        "eixo": "ganho: data de ganho (BRT) · reuniões: data da reunião (BRT)",
+        "valor": "c/ multiplicador (principal) e bruto",
+        "recorte": "com meta (Metas do mês)",
+        "squads": "Olympus e Sniper",
+        "atualizado": dt.datetime.now(_fuso.TZ_BR).strftime("%d/%m/%Y %H:%M") if hasattr(_fuso, "TZ_BR") else _fuso.agora_brasil().strftime("%d/%m/%Y %H:%M"),
     }
     return resultado
 
@@ -2490,6 +2001,16 @@ class handler(BaseHTTPRequestHandler):
 
             if rota == "me":
                 self._responder_me()
+                return
+
+            if rota == "crn_versao":
+                # CRN: GET /crn-versao, público, só a versão das regras (nenhum dado)
+                body = json.dumps({"versao": crn.versao()}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(body)
                 return
 
             mes_param = int(query["mes"][0]) if "mes" in query else None
