@@ -5,8 +5,21 @@
     }
   },
   "rewrites": [
-    { "source": "/api/login", "destination": "/api/dashboard?route=login" },
-    { "source": "/api/me", "destination": "/api/dashboard?route=me" },
-    { "source": "/", "destination": "/public/index.html" }
+    {
+      "source": "/api/login",
+      "destination": "/api/dashboard?route=login"
+    },
+    {
+      "source": "/api/me",
+      "destination": "/api/dashboard?route=me"
+    },
+    {
+      "source": "/crn-versao",
+      "destination": "/api/dashboard?route=crn_versao"
+    },
+    {
+      "source": "/",
+      "destination": "/public/index.html"
+    }
   ]
 }
