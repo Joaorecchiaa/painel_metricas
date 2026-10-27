@@ -1793,7 +1793,10 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
     ganhos_sdr = _m4.ganhos_por_sdr(deals_ganhos, opcoes_q)
     meta_fin_por_pessoa = {n: metas[n]["meta_fin"] for n in sdr_sniper_nomes}
     meta_fin_sniper = sum(meta_fin_por_pessoa.values())
-    realizado_fin_por_qualificador = {q: _m2.multiplicador(lista) for q, lista in ganhos_sdr.items() if q in sdr_sniper_nomes}
+    # A1: no Sniper o resultado é do time todo — a venda qualificada por líder/head do Sniper também entra
+    # no realizado (a meta financeira continua sendo só a dos SDRs).
+    nomes_fin_sniper = sdr_sniper_nomes | {nome_por_id[i] for i in ids_sniper if i in nome_por_id}
+    realizado_fin_por_qualificador = {q: _m2.multiplicador(lista) for q, lista in ganhos_sdr.items() if q in nomes_fin_sniper}
     realizado_fin_sniper = sum(realizado_fin_por_qualificador.values())
     resultado["debug_sniper_financeiro"] = {
         "meta_por_pessoa": meta_fin_por_pessoa,
