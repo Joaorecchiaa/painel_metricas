@@ -542,8 +542,7 @@
       <thead>
         <tr>
           <th>Métrica</th>
-          <th>Olympus</th>
-          <th>Total Consolidado</th>
+          <th>TOTAL CONSOLIDADO - OLYMPUS</th>
         </tr>
       </thead>
       <tbody id="tabelaFinanceiro"></tbody>
@@ -1300,7 +1299,6 @@ async function atualizar() {
 
     document.getElementById("tabelaFinanceiro").innerHTML = tabelaTransposta(METRICAS_FINANCEIRO, [
       { dados: data.squads.Olympus },
-      { dados: data.squads.Total, isTotal: true },
     ]);
     document.getElementById("tabelaFinanceiro").classList.toggle("previsto-aberto", previstoHojeAberto);
 
