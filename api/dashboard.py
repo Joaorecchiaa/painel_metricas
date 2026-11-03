@@ -407,6 +407,25 @@ def carregar_metas(mes, ano):
     return out
 
 
+def carregar_mes_com_fallback(ano, mes, tentativas=3):
+    """Colab + Metas do mês. Se o mês ainda não foi preenchido nas planilhas (ex.: virou o mês e a
+    Colab/Metas novas não chegaram), mostra o último mês preenchido — o resultado do último dia dele.
+    Devolve (ano, mes, colaboradores, metas, aviso). aviso = None quando é o mês pedido."""
+    a, m = ano, mes
+    ultimo_erro = None
+    for _ in range(tentativas):
+        try:
+            colab = carregar_colaboradores(m, a)
+            metas = carregar_metas(m, a)
+            aviso = None if (a, m) == (ano, mes) else (
+                f"Colab/Metas de {mes:02d}/{ano} ainda não preenchidas — mostrando o resultado de {m:02d}/{a}.")
+            return a, m, colab, metas, aviso
+        except _fontes.FonteInvalida as e:
+            ultimo_erro = e
+            a, m = (a - 1, 12) if m == 1 else (a, m - 1)
+    raise ultimo_erro
+
+
 # ---------------------------------------------------------------------------
 # DIAS ÚTEIS (A2 — CRN)
 # ---------------------------------------------------------------------------
@@ -1488,7 +1507,7 @@ def montar_resposta_perdidos_periodo(mes_param, ano_param, perdidos_inicio, perd
         return {"erro": "Login necessário pra ver a aba Perdidos."}
     hoje = hoje_brt()
     ano, mes = ano_param or hoje.year, mes_param or hoje.month
-    colaboradores = carregar_colaboradores(mes, ano)
+    ano, mes, colaboradores, _metas, _aviso = carregar_mes_com_fallback(ano, mes)
     users_map = pd_users()
     data_ini = dt.date.fromisoformat(perdidos_inicio)
     data_fim_p = dt.date.fromisoformat(perdidos_fim)
@@ -1509,8 +1528,8 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
     e_mes_atual = (ano, mes) == (hoje.year, hoje.month)
 
     feriados = carregar_feriados()
-    colaboradores = carregar_colaboradores(mes, ano)
-    metas = carregar_metas(mes, ano)
+    ano, mes, colaboradores, metas, aviso_periodo = carregar_mes_com_fallback(ano, mes)
+    e_mes_atual = (ano, mes) == (hoje.year, hoje.month)
     du = calcular_dias_uteis(ano, mes, feriados)
     # Se não sobra nenhum dia útil DEPOIS de hoje, mas hoje ainda é dia útil,
     # considera hoje como "1 dia" pra não zerar o Meta/Dia 100% no último dia do mês.
@@ -1624,6 +1643,7 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
         "squads": {}, "geradoEm": dt.datetime.now(dt.timezone.utc).isoformat(),
         "mes": mes, "ano": ano, "e_mes_atual": e_mes_atual,
         "crn_versao": crn.versao(),
+        "aviso_periodo": aviso_periodo,
     }
 
     rotulo_financeiro = dict(SQUAD_DISPLAY)
