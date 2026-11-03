@@ -1,1448 +1,1319 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
+<!doctype html>
+<html lang="pt-br">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Métricas Comerciais - 2026</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ nome_painel }} — {{ month }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #ffffff;
-    --ink: #1a1d21;
-    --muted: #6b7280;
-    --border: #e5e7eb;
-    --accent: #111827;
-    --ok: #15803d;
-    --warn: #b45309;
-    --bad: #b91c1c;
-    --head-bg: #f3f4f6;
-    --total-bg: #f9fafb;
+    --bg: #000000;
+    --card: rgba(17, 17, 17, 0.38);
+    --border: #2a2a2a;
+    --text: #ffffff;
+    --muted: #9a9a9a;
+    --gold: #d4af37;
+    /* Tom mais acinzentado/bronze, mais perto do "5" da logo do João (ver
+       imagem de referência, 06/10) do que o dourado vivo usado nos
+       destaques — só usado no "5" do título e no contorno decorativo. */
+    --gold-logo: #b9a06a;
+    --green: #3ecf8e;
   }
   * { box-sizing: border-box; }
+  /* RESPONSIVO (07/10, pedido do João: cada TV/PC tem resolução e escala
+     do Windows diferente — já tentamos acertar um valor fixo manualmente
+     várias vezes e cada tela real dava um resultado diferente do
+     simulado). Em vez de cravar um font-size só, o script
+     "ajustarZoomParaCaber" (fim do <body>) mede o espaço de verdade
+     disponível em CADA computador/tela e ajusta sozinho o maior tamanho
+     que ainda cabe sem rolar — funciona em qualquer resolução/escala sem
+     precisar calibrar na mão de novo. O valor abaixo é só o ponto de
+     partida (antes do JS calcular o ideal, ou se JS estiver desligado). */
+  html { font-size: 16px; }
   body {
     margin: 0;
     background: var(--bg);
-    color: var(--ink);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-    padding: 20px 24px 30px;
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    padding: 14px 22px 22px;
+    position: relative;
   }
-  header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: #0b0b0f;
-    color: #fff;
-    padding: 14px 20px;
-    margin: -20px -24px 20px;
-    border-radius: 0 0 10px 10px;
-  }
-  .header-esquerda { display: flex; align-items: center; gap: 14px; }
-  h1 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; color: #fff; }
-  h2.titulo-tabela { font-size: 12px; font-weight: 600; margin: 18px 0 8px; color: var(--ink); }
-  h2.titulo-ba-destaque {
-    background: #0b0b0f;
-    color: #fff;
-    font-size: 13px;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    padding: 10px 16px;
-    margin: 26px 0 12px;
-    border-radius: 8px;
-    border-left: 4px solid #fbbf24;
-  }
-  .abas {
-    display: flex;
-    gap: 4px;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 4px;
-  }
-  .aba-btn {
-    background: none;
-    border: none;
-    border-bottom: 2px solid transparent;
-    padding: 6px 2px;
-    margin-right: 14px;
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--muted);
-    cursor: pointer;
-  }
-  .aba-btn.ativa { color: var(--ink); border-bottom-color: #0b0b0f; }
-  .aba-btn:hover { color: var(--ink); }
-  .sub { color: rgba(255,255,255,0.55); font-size: 10px; margin-top: 2px; letter-spacing: 0.03em; text-transform: uppercase; }
-  .badge-dias-uteis {
-    font-size: 11px;
-    color: rgba(255,255,255,0.85);
-    background: rgba(255,255,255,0.08);
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 999px;
-    padding: 5px 14px;
-  }
-  .badge-dias-uteis .destaque { color: #fbbf24; font-weight: 600; }
-  button#refresh {
-    background: #fff;
-    color: #0b0b0f;
-    border: none;
-    padding: 7px 13px;
-    border-radius: 6px;
-    font-size: 11px;
-    font-weight: 600;
-    cursor: pointer;
-  }
-  button#refresh:disabled { opacity: 0.5; cursor: default; }
-  .seletor-periodo { display: flex; gap: 8px; align-items: center; }
-  .seletor-periodo select {
-    padding: 7px 10px;
-    border: 1px solid rgba(255,255,255,0.15);
-    border-radius: 6px;
-    font-size: 11px;
-    background: rgba(255,255,255,0.06);
-    color: #fff;
-  }
-  .meta-info { font-size: 10px; color: rgba(255,255,255,0.5); text-align: right; margin-top: 5px; }
+  @media (max-width: 700px) { body { padding: 12px 10px 14px; } }
 
-  .authbar { display: inline-flex; align-items: center; gap: 8px; margin-left: 4px; }
-  .authbar .who { color: #fbbf24; font-size: 10px; }
-  .btn-auth {
-    background: transparent;
-    color: rgba(255,255,255,0.75);
-    border: 1px solid rgba(255,255,255,0.15);
-    border-radius: 6px;
-    padding: 6px 12px;
-    font-size: 11px;
-    font-weight: 600;
-    cursor: pointer;
-  }
-  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 200; }
-  .modal-bg.show { display: flex; }
-  .modal { background: #0b0b0f; color: #f2f2f2; border: 1px solid #2a2a2a; border-top: 3px solid #fbbf24; border-radius: 12px; padding: 22px; width: 300px; max-width: 90vw; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
-  .modal h3 { margin: 0 0 14px; font-size: 14px; color: #fbbf24; text-transform: uppercase; letter-spacing: .5px; }
-  .modal label { display: block; font-size: 10px; color: #9a9a9a; text-transform: uppercase; letter-spacing: .5px; margin: 10px 0 4px; }
-  .modal input { width: 100%; background: #1a1a1a; color: #f2f2f2; border: 1px solid #2a2a2a; border-radius: 6px; padding: 8px 9px; font-size: 13px; box-sizing: border-box; }
-  .modal input:focus { outline: none; border-color: #fbbf24; }
-  .modal .m-actions { display: flex; gap: 8px; margin-top: 16px; }
-  .modal .m-actions button { flex: 1; padding: 8px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer; border: none; }
-  .modal .m-ok { background: #fbbf24; color: #1a1a1a; }
-  .modal .m-cancel { background: #1a1a1a; color: #f2f2f2; border: 1px solid #2a2a2a; }
-  .modal .m-erro { color: #f87171; font-size: 11px; margin-top: 8px; min-height: 13px; }
-  .perdidos-bloqueado {
-    border: 1px dashed var(--border);
-    border-radius: 8px;
-    padding: 30px 20px;
-    text-align: center;
-    color: var(--muted);
-    font-size: 13px;
-  }
-  .perdidos-bloqueado button { margin-top: 10px; }
+  /* --- Fundo animado "poeira dourada" (mesmo mecanismo do ARENA, cores
+       ajustadas pro preto puro) — fica fixo atrás de tudo. */
+  #bg-particulas { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; display: block; }
 
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 10.5px;
-    table-layout: fixed;
+  .wrap { max-width: 1680px; margin: 0 auto; position: relative; z-index: 1; }
+  header { position: relative; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; padding: 6px 4px; overflow: hidden; }
+  /* --- Texto gigante e esmaecido atrás do título, baseado no elemento
+       decorativo em linha fina da logo (imagem de referência, 06/10) —
+       fica só na faixa do cabeçalho, não na página inteira (o fundo
+       continua preto sólido, como pedido antes). Era o numeral "5" (logo
+       do "BOARD 5ANOS"); TROCADO 03/11 (pedido do João, depois da
+       renomeação pra "BOARD BLACK NOVEMBER") por "BLACK NOVEMBER" —
+       fonte bem menor que o "5" sozinho pra caber a frase inteira sem
+       estourar o cabeçalho. */
+  header::before {
+    content: "BLACK NOVEMBER";
+    position: absolute;
+    /* Empurrado pro canto inferior direito (pedido do João 03/11: "deixe
+       mais para o canto e desça um pouco, não dá pra ver direito") —
+       antes ficava centralizado verticalmente (top:50%) e, com o header
+       tendo "overflow: hidden", a metade de cima do texto cortava. Sem
+       centralizar (ancorado pelo bottom), ele fica inteiro visível,
+       encostado no canto. */
+    right: 0.4em; bottom: -6px; top: auto; transform: none;
+    font-family: "Anton", Impact, "Arial Narrow", sans-serif;
+    font-size: 2.1rem;
+    letter-spacing: 2px;
+    line-height: 1;
+    white-space: nowrap;
+    color: transparent;
+    -webkit-text-stroke: 1px rgba(185, 160, 106, 0.22);
+    pointer-events: none;
+    z-index: 0;
   }
-  th, td {
-    padding: 5px 6px;
-    text-align: right;
-    border-bottom: 1px solid var(--border);
-    overflow-wrap: break-word;
-  }
-  th:first-child, td:first-child { text-align: left; }
-  thead th {
-    background: var(--head-bg);
-    font-weight: 600;
-    color: var(--muted);
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-  }
-  td.total, #tabela-financeiro th:nth-child(4) { background: var(--total-bg); font-weight: 600; border-left: 2px solid var(--border); }
-  #tabelaFinanceiro td:nth-child(2), #tabela-financeiro th:nth-child(2) { background: #f0f9f4; }
-  #tabelaFinanceiro td:nth-child(3), #tabela-financeiro th:nth-child(3) { background: #fff7ed; }
-  th.col-olympus, td.col-olympus { background: #eef2ff; }
-  th.col-elite, td.col-elite { background: #ecfdf5; }
-  .valor-mes-passado {
-    display: block;
-    color: var(--muted);
-    font-size: 10px;
-    margin-top: 2px;
-  }
-  .previsto-toggle-label {
-    cursor: pointer;
-    text-decoration: underline dotted;
-    text-underline-offset: 2px;
-  }
-  .previsto-buckets {
-    display: none;
-    margin-top: 4px;
-    padding-top: 4px;
-    border-top: 1px solid #f0f0f0;
-  }
-  #tabelaFinanceiro.previsto-aberto .previsto-buckets { display: block; }
-  .previsto-bucket-item summary {
-    cursor: pointer;
-    list-style: none;
-  }
-  .previsto-bucket-item summary::-webkit-details-marker { display: none; }
-  .previsto-bucket-linha {
-    display: grid;
-    grid-template-columns: 28px 42px 1fr;
-    gap: 6px;
-    font-size: 10px;
-    font-weight: 400;
-    color: var(--muted);
-    padding: 1px 0;
-  }
-  .previsto-bucket-linha span:last-child { text-align: right; }
-  .previsto-bucket-negocios {
-    padding: 2px 0 4px 10px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-  }
-  .dica-metrica {
-    font-size: 11px;
-    font-weight: 400;
-    color: #8a8f98;
-    line-height: 1.3;
-    margin-top: 2px;
-    max-width: 260px;
-  }
-  .cel-detalhe summary {
-    cursor: pointer;
-    list-style: none;
-  }
-  .cel-detalhe summary::-webkit-details-marker { display: none; }
-  .cel-detalhe summary::after {
-    content: " ▾";
-    color: var(--muted);
-    font-size: 9px;
-  }
-  .cel-detalhe-sub {
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
-    font-size: 10px;
-    font-weight: 400;
-    color: var(--muted);
-    padding: 1px 0;
-    border-top: 1px dashed #eee;
-    margin-top: 2px;
-  }
-  .cel-detalhe-sub span:first-child { font-weight: 600; }
-  .pill {
+  h1 { position: relative; z-index: 1; font-size: 1.75rem; margin: 0; letter-spacing: 1.5px; font-weight: 800; white-space: nowrap; }
+  h1 .palavra-board { color: var(--text); }
+  h1 .palavra-resto { color: var(--text); }
+  /* --- "5" com fonte diferente e cor bronze (fonte de impacto, Anton),
+     levemente sobreposto às palavras ao redor — mesmo espírito da logo de
+     referência (06/10), sem depender de pixels fixos pra um texto
+     dinâmico. */
+  h1 .numero-5 {
+    font-family: "Anton", Impact, "Arial Narrow", sans-serif;
+    font-size: 1.55em;
+    letter-spacing: 0;
+    color: var(--gold-logo);
+    text-shadow: 0 2px 10px rgba(0,0,0,0.6);
+    vertical-align: middle;
     display: inline-block;
-    font-size: 10px;
-    font-weight: 600;
-    padding: 1px 6px;
-    border-radius: 999px;
+    margin: 0 -0.08em;
+    transform: translateY(0.03em);
+    position: relative;
+    z-index: 1;
   }
-  .pill.ok { background: #dcfce7; color: var(--ok); }
-  .pill.warn { background: #fef3c7; color: var(--warn); }
-  .pill.bad { background: #fee2e2; color: var(--bad); }
-  #erro { color: var(--bad); font-size: 13px; margin-top: 20px; display: none; }
-
-  .produto-card {
+  .meta-info { position: relative; z-index: 1; color: var(--muted); font-size: 0.75rem; }
+  h2 { font-size: 0.8125rem; margin: 0 0 7px; letter-spacing: 0.5px; color: var(--gold); text-transform: uppercase; }
+  h2.titulo-branco { color: var(--text); }
+  .card {
+    background: var(--card);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    margin-bottom: 10px;
+    border-radius: 10px;
+    padding: 11px 14px;
+    box-sizing: border-box;
+  }
+  .avisos { margin-bottom: 8px; }
+  .aviso { background: #2a1f0a; border: 1px solid #4a3a12; color: var(--gold); border-radius: 8px; padding: 6px 10px; font-size: 0.75rem; margin-bottom: 4px; }
+
+  /* --- Destaque do dia (1º a bater a Meta do dia) ------------------------ */
+  .secao { margin-bottom: 14px; }
+  .destaque-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (max-width: 900px) {
+    .destaque-grid, .continuo-grid, .squads-grid, .detalhe-grid { grid-template-columns: 1fr; }
+  }
+  .destaque-card { text-align: center; display: flex; flex-direction: column; justify-content: center; }
+  .destaque-card .label { color: var(--muted); font-size: 0.75rem; margin-bottom: 6px; }
+  .destaque-card .label .trofeu { color: var(--gold); }
+  .destaque-pessoa { display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 10px; }
+  /* Movimento suave só nas fotos de destaque (dia e contínuo) — pedido do
+     João 06/10, "não precisa colocar no detalhamento do dia" (avatar-mini
+     fica parado). Flutuação bem sutil, pra não cansar numa TV ligada o
+     dia todo. */
+  @keyframes flutuar-suave {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-3px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .avatar, .avatar-continuo { animation: none; }
+  }
+  .avatar {
+    position: relative;
+    width: 44px; height: 44px; border-radius: 50%;
+    flex-shrink: 0;
+    border: 2px solid var(--gold);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 0.875rem; color: var(--gold);
+    background: #1a1a1a;
     overflow: hidden;
+    animation: flutuar-suave 4s ease-in-out infinite;
   }
-  .produto-card > summary {
-    cursor: pointer;
-    list-style: none;
-    background: var(--head-bg);
-    font-size: 12px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    color: var(--ink);
-    padding: 9px 14px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-  .produto-total-abertos {
-    font-size: 10px;
-    font-weight: 500;
-    text-transform: none;
-    letter-spacing: normal;
-    color: var(--muted);
-  }
-  .produto-card > summary::-webkit-details-marker { display: none; }
-  .produto-card > summary::before { content: "▸ "; color: var(--muted); }
-  .produto-card[open] > summary::before { content: "▾ "; }
-  .produto-card[open] > summary { border-bottom: 1px solid var(--border); }
+  .avatar.tem-foto { background: transparent; }
+  .avatar .foto { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 0.2s; }
+  .avatar .foto.carregada { opacity: 1; }
+  .tem-foto .iniciais-fallback { visibility: hidden; }
+  .destaque-texto { text-align: left; }
+  .destaque-nome { font-weight: 700; font-size: 0.9375rem; }
+  .destaque-stat { color: var(--muted); font-size: 0.75rem; }
+  .destaque-stat b { color: var(--gold); font-variant-numeric: tabular-nums; }
+  .destaque-vazio { color: var(--muted); font-size: 1rem; padding: 4px 0; }
 
-  .produto-squads {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+  /* Brilho em quem lidera (pedido do João 03/11: "dash mais dinâmico") —
+     só acende quando o card tem gente de verdade (não no "-" vazio). */
+  @keyframes liderBrilho {
+    0%, 100% { box-shadow: 0 0 0 1px rgba(212,175,55,0.25), 0 0 12px rgba(212,175,55,0.2); }
+    50% { box-shadow: 0 0 0 1px rgba(212,175,55,0.45), 0 0 26px rgba(212,175,55,0.5); }
   }
-  .produto-squads-3 { grid-template-columns: 1fr 1fr 1fr; }
-  .produto-squads-3 .produto-squad:not(:last-child) { border-right: 1px solid var(--border); }
-  .produto-squads-4 { grid-template-columns: 1fr 1fr 1fr; }
-  .produto-squads-4 .produto-squad:not(:last-child) { border-right: 1px solid var(--border); }
-  .produto-squad { padding: 12px 16px; }
-  .produto-squad:first-child { border-right: 1px solid var(--border); }
-  .produto-squad-titulo {
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--muted);
-    margin-bottom: 8px;
+  .destaque-card.tem-lider { border-color: var(--gold); animation: liderBrilho 2.8s ease-in-out infinite; }
+  .continuo-card.tem-lider { animation: liderBrilho 3.2s ease-in-out infinite; }
+  @media (prefers-reduced-motion: reduce) {
+    .destaque-card.tem-lider, .continuo-card.tem-lider { animation: none; }
   }
 
-  .status-grupo {
-    display: flex;
-    justify-content: space-between;
-    padding: 4px 0;
-    font-size: 12px;
-    border-bottom: 1px solid #f3f4f6;
+  /* --- Destaque contínuo (recorde até alguém bater) ---------------------- */
+  .continuo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .continuo-card { text-align: center; border-color: var(--gold); position: relative; display: flex; align-items: center; justify-content: center; gap: 12px; }
+  .continuo-card .label { color: var(--muted); font-size: 0.75rem; margin-bottom: 3px; }
+  .continuo-info { text-align: left; }
+  .avatar-continuo-wrap { display: inline-flex; position: relative; flex-shrink: 0; }
+  .avatar-continuo {
+    position: relative;
+    width: 56px; height: 56px; border-radius: 50%;
+    border: 3px solid var(--gold);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 1.0625rem; color: var(--gold);
+    background: #1a1a1a;
+    overflow: hidden;
+    box-shadow: 0 0 0 4px rgba(212, 175, 55, 0.15);
+    animation: flutuar-suave 4.5s ease-in-out infinite;
+    animation-delay: 0.3s;
   }
-  .status-grupo-destaque {
-    background: #f8fafc;
-    padding: 4px 0;
-    border-bottom: none;
+  .avatar-continuo.tem-foto { background: transparent; }
+  .avatar-continuo .foto { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 0.2s; }
+  .avatar-continuo .foto.carregada { opacity: 1; }
+  .selo-dias {
+    position: absolute; top: -12px; right: -12px;
+    background: var(--gold); color: #000;
+    font-size: 0.625rem; font-weight: 800;
+    border-radius: 999px; padding: 2px 7px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+    white-space: nowrap;
   }
-  .status-grupo-destaque .status-titulo { color: var(--ink); font-weight: 600; }
-  .status-grupo-destaque .status-numero { color: var(--ink); font-weight: 600; }
-  .status-grupo-destaque summary { cursor: pointer; }
-  .status-grupo:last-child { border-bottom: none; }
-  .status-titulo { color: var(--muted); }
-  .status-numero { font-weight: 600; }
+  .continuo-nome { font-weight: 800; font-size: 1rem; margin-top: 0; }
+  .continuo-stat { color: var(--gold); font-weight: 700; font-size: 0.8125rem; margin-top: 1px; }
+  .continuo-vazio { color: var(--muted); font-size: 1rem; padding: 8px 0; }
 
-  .status-grupo-dropdown {
-    padding: 4px 0;
-    border-bottom: 1px solid #f3f4f6;
+  /* --- Meta do time (Sniper + Olympus) ----------------------------------- */
+  .squads-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .squad-card { display: flex; align-items: center; gap: 12px; padding: 9px 14px; }
+  /* width em "ch" (não px fixo) — CORRIGIDO 07/10: com o zoom automático
+     podendo ficar bem maior que antes, uma largura fixa em px não
+     acompanhava a fonte e "Olympus" invadia a barra ao lado. */
+  .squad-card .squad-nome { flex-shrink: 0; width: 8ch; font-weight: 700; font-size: 0.8125rem; margin-bottom: 0; }
+  .squad-bar-wrap { flex: 1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  /* Barra bem mais fina e discreta (pedido do João, 06/10: "bem menor e
+     mais fino") — era 24px, virou 8px. */
+  .squad-barra { position: relative; flex: 1; height: 8px; background: #1e1e1e; border-radius: 999px; overflow: hidden; border: 1px solid var(--border); }
+  .squad-barra-fill {
+    position: relative; height: 100%;
+    background: linear-gradient(90deg, #8a6d1a, var(--gold));
+    border-radius: 999px; overflow: hidden;
+    transition: width 0.6s ease;
   }
-  .status-grupo-dropdown:last-child { border-bottom: none; }
-  .status-grupo-dropdown summary {
-    cursor: pointer;
-    list-style: none;
-    display: flex;
-    justify-content: space-between;
-    font-size: 12px;
+  /* "Movimento" pedido (06/10): brilho diagonal deslizando dentro da barra,
+     igual já valido no ARENA — sinaliza "ao vivo" sem precisar reconsultar
+     o Pipedrive. */
+  .squad-barra-fill::after {
+    content: ""; position: absolute; inset: 0; width: 40%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent);
+    animation: squadBrilho 2.4s ease-in-out infinite;
   }
-  .status-grupo-dropdown summary .status-titulo { text-decoration: underline; }
-  .status-grupo-dropdown summary::-webkit-details-marker { display: none; }
-  .status-ids-lista {
-    margin-top: 6px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
+  @keyframes squadBrilho {
+    0% { transform: translateX(-120%); }
+    100% { transform: translateX(350%); }
   }
-  .status-id-item {
-    font-size: 11px;
-    color: var(--accent);
-    background: #f3f4f6;
-    border-radius: 4px;
-    padding: 2px 7px;
-    text-decoration: none;
+  .squad-barra-fill.destaque { background: linear-gradient(90deg, var(--green), #5be0a0); box-shadow: 0 0 8px rgba(62, 207, 142, 0.55); }
+  /* Marcos de 25/50/75/100% na barra (pedido do João 03/11) — linha fina
+     por cima do preenchimento; o de 100% fica um pouco pra dentro (não
+     bem na borda) porque .squad-barra tem overflow:hidden e cortaria ele
+     pela metade se ficasse exatamente em left:100%. */
+  .squad-marco {
+    position: absolute; top: 0; bottom: 0; width: 1px;
+    background: rgba(0,0,0,0.4); z-index: 1; pointer-events: none;
   }
-  .status-id-item:hover { background: #e5e7eb; }
-  .status-vazio { font-size: 11px; color: var(--muted); }
+  /* "Pulso" ao ultrapassar um marco (JS detecta via localStorage e soma
+     essa classe por ~1.6s — ver script no fim do body). */
+  .squad-barra.pulso-marco { animation: squadMarcoPulso 1.6s ease-out; }
+  @keyframes squadMarcoPulso {
+    0% { box-shadow: 0 0 0 0 rgba(212,175,55,0.65); }
+    60% { box-shadow: 0 0 0 10px rgba(212,175,55,0); }
+    100% { box-shadow: 0 0 0 0 rgba(212,175,55,0); }
+  }
+  @media (prefers-reduced-motion: reduce) { .squad-barra.pulso-marco { animation: none; } }
+  .squad-pct { flex-shrink: 0; font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+  .squad-pct b { color: var(--gold); }
+  .squad-pct-detalhe { flex-basis: 100%; font-size: 0.625rem; color: var(--muted); margin-top: 2px; }
+  .squad-pct-detalhe b { color: var(--gold); font-variant-numeric: tabular-nums; }
 
-  .filtro-perdidos {
-    display: flex;
-    align-items: flex-end;
-    gap: 14px;
-    flex-wrap: wrap;
-    margin-bottom: 14px;
-    padding: 10px 12px;
-    background: #fafafa;
-    border: 1px solid var(--border);
-    border-radius: 8px;
+  /* --- Destrinche do % Final do Sniper ------------------------------------ */
+  .destrinche-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .destrinche-card {
+    padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px;
+    background: rgba(255,255,255,0.02);
   }
-  .filtro-perdidos label {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    font-size: 10px;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-  }
-  .filtro-perdidos input, .filtro-perdidos select {
-    padding: 6px 8px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    font-size: 12px;
-    color: var(--ink);
-    background: #fff;
-  }
-  .filtro-perdidos button {
-    padding: 7px 14px;
-    border-radius: 6px;
-    border: none;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-  }
-  #btnFiltrarPerdidos { background: var(--accent); color: #fff; }
-  #btnLimparFiltroPerdidos { background: #f3f4f6; color: var(--ink); }
-  .perdidos-resumo {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    margin-bottom: 16px;
-  }
-  .perdidos-resumo-card {
-    flex: 1;
-    min-width: 160px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 14px 16px;
-  }
-  .perdidos-resumo-card .rotulo { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
-  .perdidos-resumo-card .valor { font-size: 22px; font-weight: 700; color: var(--bad); margin-top: 4px; }
-  #resumoNovosLeadsProdutos .valor { color: var(--ink); }
-  #resumoNovosLeadsProdutos { margin-bottom: 20px; }
-  .card-destaque-suave { background: rgba(11, 11, 15, 0.035); }
-  .valor-taxa { font-size: 12px; font-weight: 500; color: var(--muted); }
+  .destrinche-rotulo { font-size: 0.75rem; font-weight: 700; color: var(--text); }
+  .destrinche-peso { font-weight: 400; color: var(--muted); font-size: 0.6875rem; }
+  .destrinche-conta { font-size: 0.6875rem; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .destrinche-pct { font-size: 1.25rem; font-weight: 800; color: var(--gold); margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .destrinche-final { border-color: var(--gold); }
+  .destrinche-final .destrinche-pct { color: var(--green); }
 
-  .motivos-lista { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 20px; }
-  .motivo-dropdown { border-bottom: 1px solid #f3f4f6; }
-  .motivo-dropdown:last-child { border-bottom: none; }
-  .motivo-linha {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 8px 14px;
-    font-size: 12px;
-    cursor: pointer;
-    list-style: none;
-  }
-  .motivo-linha::-webkit-details-marker { display: none; }
-  .motivo-linha:hover { background: #f8fafc; }
-  .motivo-nome { flex: 1; }
-  .motivo-barra-wrap { flex: 2; background: #f3f4f6; border-radius: 999px; height: 8px; overflow: hidden; }
-  .motivo-barra { background: var(--bad); height: 100%; }
-  .motivo-qtd { width: 90px; text-align: right; color: var(--muted); }
-  .motivo-pct { width: 50px; text-align: right; font-weight: 600; }
-  .motivo-colaboradores { padding: 6px 14px 10px 28px; background: #fafafa; }
-  .papel-grupo { margin-bottom: 8px; }
-  .papel-titulo { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); margin-bottom: 4px; }
+  /* --- Detalhamento do dia: SDR (quadradinhos) e Termômetro Olympus ------ */
+  .detalhe-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: stretch; }
 
-  .bloco-ba { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-  .bloco-ba .papel-titulo {
-    background: rgba(11, 11, 15, 0.72);
-    color: #fff;
-    margin: 0;
-    padding: 8px 14px;
-    font-size: 10.5px;
+  /* --- Termômetro de vendas Olympus (substituiu "Detalhamento · Closer",
+     pedido do João 26/10) — visual tipo termômetro de verdade (bulbo +
+     tubo graduado), pedido do João 27/10, só um (não dois lado a lado). */
+  .termometro-wrap {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 10px; padding: 10px 4px 4px; height: 100%; text-align: center;
   }
-  .ba-linha {
-    display: flex;
-    align-items: center;
-    gap: 22px;
-    padding: 6px 14px;
-    font-size: 12px;
-    border-bottom: 1px solid #ececec;
+  .termometro-meta-topo { display: flex; flex-direction: column; align-items: center; gap: 0; margin-bottom: 2px; }
+  .termometro-meta-rotulo { font-size: 0.6875rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .termometro-meta-valor { font-size: 2.25rem; font-weight: 800; color: var(--gold); line-height: 1.1; font-variant-numeric: tabular-nums; text-shadow: 0 0 16px rgba(212,175,55,0.35); }
+  /* Tubo+bulbo e escala como colunas IRMÃS (flex), em vez de uma por cima
+     da outra com posicionamento absoluto manual — CORRIGIDO 27/10 (João:
+     "ficou cortado o 10%"): o bulbo (88px de largura) é mais largo que o
+     tubo (38px) e, com a escala posicionada perto do tubo, a label mais
+     baixa (10%) caía embaixo do bulbo e ficava encoberta por ele (desenhado
+     por cima, depois, no DOM). Como colunas separadas lado a lado, não tem
+     mais essa sobreposição possível. */
+  .termometro-linha { display: flex; align-items: flex-start; gap: 12px; }
+  .termometro-corpo { position: relative; width: 112px; height: 360px; flex-shrink: 0; }
+  .termometro-tubo {
+    position: absolute; left: 50%; top: 0; transform: translateX(-50%);
+    width: 38px; height: 280px; border-radius: 19px 19px 0 0;
+    background: rgba(255,255,255,0.05); border: 4px solid var(--border); border-bottom: none;
+    overflow: hidden; display: flex; align-items: flex-end;
+    box-shadow: inset 0 4px 8px rgba(0,0,0,0.35);
   }
-  .ba-linha:last-child { border-bottom: none; }
-  .ba-linha:nth-child(even) { background: #f4f6f8; }
-  .ba-nome { flex: 0 0 78px; font-weight: 700; color: var(--ink); }
-  .ba-metrica { color: var(--muted); white-space: nowrap; }
-  .ba-metrica strong { color: var(--ink); font-weight: 700; }
-  .colaborador-dropdown { border-bottom: 1px solid #f0f0f0; }
-  .colaborador-dropdown:last-child { border-bottom: none; }
-  .colaborador-dropdown summary {
-    display: flex;
-    justify-content: space-between;
-    padding: 5px 8px;
-    font-size: 12px;
-    cursor: pointer;
-    list-style: none;
+  /* Linhas dividindo cada 10% dentro do tubo (pedido do João 27/10) — uma
+     a cada 28px (280px de tubo ÷ 10), por cima do líquido. */
+  .termometro-tubo-linhas {
+    position: absolute; inset: 0; pointer-events: none;
+    background-image: repeating-linear-gradient(0deg, rgba(0,0,0,0.4) 0 1px, transparent 1px 28px);
   }
-  .colaborador-dropdown summary::-webkit-details-marker { display: none; }
-  .colaborador-dropdown summary:hover { background: #f0f0f0; }
-  .colaborador-nome { text-decoration: underline; }
-  .colaborador-qtd { color: var(--muted); font-weight: 600; }
-  .colaborador-negocios { padding: 6px 8px 8px 16px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .termometro-escala {
+    display: flex; flex-direction: column; justify-content: space-between;
+    height: 280px; padding: 2px 0; box-sizing: border-box; opacity: 0.55;
+  }
+  .termometro-escala-item { font-size: 0.5625rem; font-weight: 600; color: var(--muted); line-height: 1; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .termometro-fill {
+    position: relative; width: 100%; overflow: hidden;
+    background: linear-gradient(0deg, #8a6d1a, var(--gold));
+    transition: height 0.6s ease;
+  }
+  .termometro-fill::after {
+    content: ""; position: absolute; inset: 0; height: 40%;
+    background: linear-gradient(0deg, transparent, rgba(255,255,255,0.45), transparent);
+    animation: termoBrilho 2.4s ease-in-out infinite;
+  }
+  @keyframes termoBrilho {
+    0% { transform: translateY(120%); }
+    100% { transform: translateY(-350%); }
+  }
+  .termometro-fill.destaque { background: linear-gradient(0deg, var(--green), #5be0a0); }
+  .termometro-bulbo {
+    position: absolute; left: 50%; bottom: 0; transform: translateX(-50%);
+    width: 112px; height: 112px; border-radius: 50%; border: 4px solid var(--border);
+    background:
+      radial-gradient(circle at 34% 28%, rgba(255,255,255,0.4), transparent 45%),
+      linear-gradient(145deg, #8a6d1a, var(--gold));
+    box-shadow: 0 0 20px rgba(201,162,39,0.5);
+  }
+  .termometro-bulbo.destaque {
+    background:
+      radial-gradient(circle at 34% 28%, rgba(255,255,255,0.4), transparent 45%),
+      linear-gradient(145deg, var(--green), #5be0a0);
+    box-shadow: 0 0 16px rgba(62,207,142,0.5);
+  }
+  /* Porcentagem "viva" — pisca bem suave (opacidade), pedido do João 27/10.
+     Voltou pra preta (era branca) e um pouco menor, pedido do João 27/10. */
+  .termometro-bulbo-pct {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-size: 1.375rem; font-weight: 800; color: #1a1406; font-variant-numeric: tabular-nums;
+    text-shadow: 0 1px 1px rgba(255,255,255,0.25);
+    animation: termoPctPiscar 2.6s ease-in-out infinite;
+  }
+  .termometro-bulbo.destaque .termometro-bulbo-pct { color: #06281a; }
+  @keyframes termoPctPiscar {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.72; }
+  }
+  .termometro-info { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+  .termometro-periodo { font-size: 0.6875rem; font-weight: 700; color: var(--muted); }
+  .termometro-datas { font-size: 0.625rem; color: var(--muted); font-weight: 400; opacity: 0.8; }
+  .termometro-valores { font-size: 0.6875rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .termometro-valores b { color: var(--gold); }
+  .termometro-pct { font-size: 1.125rem; font-weight: 800; color: var(--gold); margin-top: 1px; font-variant-numeric: tabular-nums; }
+  .termometro-pct.destaque { color: var(--green); }
+  .detalhe-grid .card { height: 100%; display: flex; flex-direction: column; }
+  .detalhe-grid .tabela-detalhe { flex: 1; }
+  .tabela-detalhe { width: 100%; border-collapse: collapse; }
+  .tabela-detalhe td { padding: 4px 5px; border-bottom: 1px solid var(--border); font-size: 0.75rem; vertical-align: middle; }
+  .tabela-detalhe tr:last-child td { border-bottom: none; }
+  /* Destaque (não mais "apagado") pra quem já bateu a meta do dia — pedido
+     do João 03/11: "deixa a linha do nome da pessoa no detalhamento em
+     destaque" (antes isso deixava a linha meio apagada, o oposto do que
+     ele quer agora). Era um gradiente (90deg, mais forte pra mais fraco);
+     TROCADO 03/11 (pedido do João: "deixe tbm o destaque verde continuo")
+     — cada <td> desenhava o gradiente inteiro por conta própria, criando
+     uma "costura" entre as colunas (Nome/Validadas/Agendadas) em vez de
+     um verde contínuo pela linha toda. Cor sólida resolve, sem costura. */
+  .tabela-detalhe tr.linha--bateu td {
+    background: rgba(62,207,142,0.1);
+  }
+  /* A barrinha lateral só na 1ª célula da linha (pedido do João 03/11:
+     "deixa continuo, sem essas duas divisorias ao lado de 'Validadas' e
+     'Agendadas'" — antes o box-shadow ia em TODO td da linha, criando uma
+     barrinha repetida em cada coluna em vez de uma só, contínua, no
+     início da linha). */
+  .tabela-detalhe tr.linha--bateu td:first-child { box-shadow: inset 3px 0 0 var(--green); }
+  .tabela-detalhe tr.linha--bateu .nome { color: var(--green); font-weight: 800; }
+  /* "Quase lá" (pedido do João 03/11) — ainda não bateu, mas já está a
+     15% ou menos de bater (>= 85% da meta do dia): borda pulsando
+     amarela, diferente do verde de quem já bateu. */
+  .tabela-detalhe tr.linha--quase td {
+    animation: linhaQuasePulsar 1.6s ease-in-out infinite;
+  }
+  .tabela-detalhe tr.linha--quase td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
+  .tabela-detalhe tr.linha--quase .nome { color: var(--gold); font-weight: 700; }
+  @keyframes linhaQuasePulsar {
+    0%, 100% { background: rgba(212,175,55,0.04); }
+    50% { background: rgba(212,175,55,0.18); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tabela-detalhe tr.linha--quase td { animation: none; background: rgba(212,175,55,0.1); }
+  }
+  .col-nome { width: 34%; }
+  .nome-grupo { display: inline-flex; align-items: center; gap: 6px; }
+  .avatar-mini {
+    position: relative; width: 22px; height: 22px; border-radius: 50%;
+    border: 1.5px solid var(--gold); display: inline-flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 0.5625rem; color: var(--gold); background: #1a1a1a; overflow: hidden; flex-shrink: 0;
+  }
+  .avatar-mini.tem-foto { background: transparent; }
+  .avatar-mini .foto { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 0.2s; }
+  .avatar-mini .foto.carregada { opacity: 1; }
+  .nome-grupo .nome { font-weight: 600; }
+  .rotulo { color: var(--muted); font-size: 0.625rem; display: block; margin-bottom: 1px; }
+  .quadradinhos { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px; vertical-align: middle; }
+  .quadradinho {
+    width: 10px; height: 10px; border-radius: 2px; border: 1px solid var(--border);
+    background: transparent; display: inline-block;
+  }
+  .quadradinho.preenchido { background: var(--green); border-color: var(--green); }
+  .quadrado-check-grande {
+    display: inline-flex; align-items: center; justify-content: center; vertical-align: middle;
+    width: 18px; height: 18px; border-radius: 5px; background: var(--green);
+    color: #000; font-weight: 800; font-size: 0.6875rem; line-height: 1;
+  }
+  .valor-rs { font-variant-numeric: tabular-nums; }
+  .valor-rs.bateu { color: var(--green); font-weight: 700; }
+  .selo-a-vista {
+    display: inline-flex; align-items: center; gap: 3px; margin-left: 4px;
+    background: var(--gold); color: #17181c; font-weight: 700; font-size: 0.5625rem;
+    border-radius: 999px; padding: 1px 6px;
+  }
+  /* Selo "Giro liberado" (pedido do João 03/11; ajustado no mesmo dia —
+     só o PRIMEIRO a bater a meta do dia gira, os demais que baterem depois
+     não) — ao lado do nome de quem já é o primeiro_sdr_dia/primeiro_closer_dia,
+     remetendo à roleta FÍSICA de prêmios que o time gira na mão (confirmado
+     com o João: a roleta em si é manual, isso aqui é só o aviso visual no
+     painel). Mesmo padrão visual do selo "à vista" (pill dourada), com um
+     brilho pulsando pra chamar mais atenção na TV. */
+  .selo-giro {
+    display: inline-flex; align-items: center; gap: 3px; margin-left: 6px;
+    background: var(--gold); color: #17181c; font-weight: 700; font-size: 0.5625rem;
+    border-radius: 999px; padding: 1px 7px; white-space: nowrap;
+    animation: seloGiroBrilho 1.8s ease-in-out infinite;
+  }
+  @keyframes seloGiroBrilho {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(212,175,55,0.55); }
+    50% { box-shadow: 0 0 7px 1px rgba(212,175,55,0.85); }
+  }
+  @media (prefers-reduced-motion: reduce) { .selo-giro { animation: none; } }
+  .empty { color: var(--muted); font-size: 0.75rem; padding: 4px 0; }
 
-  .perdidos-funis {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 14px;
+  /* --- Ticker de atividade recente (pedido do João 03/11: "dash mais
+       dinâmico") — faixa rolante com reuniões validadas e vendas de hoje,
+       logo acima do rodapé. Trilho duplicado (dois .ticker-conteudo
+       iguais lado a lado) pra rolar sem "costura" visível no loop. */
+  .ticker-wrap { margin-bottom: 10px; }
+  .ticker-trilho {
+    display: flex; overflow: hidden; white-space: nowrap;
+    border: 1px solid var(--border); border-radius: 8px;
+    background: rgba(255,255,255,0.03); padding: 7px 0;
   }
-  .perdidos-funil-card { border: 1px solid var(--border); border-radius: 8px; padding: 14px; background: rgba(11, 11, 15, 0.035); }
-  .perdidos-funil-titulo { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 10px; }
-  .perdidos-funil-resumo { display: flex; gap: 10px; margin-bottom: 10px; font-size: 12px; color: var(--muted); }
-  .perdidos-funil-resumo strong { color: var(--ink); font-size: 14px; }
-  .auditoria-etapa { margin-bottom: 16px; }
-  .auditoria-etapa-titulo {
-    font-size: 12px;
-    font-weight: 700;
-    margin-bottom: 6px;
-    color: var(--ink);
+  .ticker-conteudo { display: flex; align-items: center; flex-shrink: 0; animation: tickerRolar 38s linear infinite; }
+  @keyframes tickerRolar { 0% { transform: translateX(0); } 100% { transform: translateX(-100%); } }
+  .ticker-item { font-size: 0.75rem; color: var(--text); padding: 0 10px; }
+  .ticker-icone { margin-right: 4px; }
+  .ticker-sep { color: var(--muted); }
+  @media (prefers-reduced-motion: reduce) { .ticker-conteudo { animation: none; } }
+
+  /* --- Celebração ao bater meta (pedido do João 03/11) — aviso + confete
+       disparados só no cliente (JS no fim da página), sem nada novo do
+       servidor. */
+  .celebracao-aviso {
+    position: fixed; top: 18px; left: 50%; transform: translateX(-50%);
+    background: linear-gradient(90deg, var(--gold), #f0d888);
+    color: #1a1406; font-weight: 800; font-size: 0.9375rem;
+    padding: 10px 22px; border-radius: 999px; z-index: 999;
+    box-shadow: 0 6px 24px rgba(212,175,55,0.45);
+    animation: celebracaoEntrar 0.4s ease-out;
   }
-  .auditoria-etapa-titulo .qtd { color: var(--bad); font-weight: 500; font-size: 11px; }
-  .tabela-wrap { border: 1px solid var(--border); border-radius: 8px; }
-  .tabela-wrap-estreita { max-width: 48vw; min-width: 520px; }
-  .tabela-wrap-estreita table { width: 100%; table-layout: auto; }
-  .tabela-wrap-estreita td:first-child, .tabela-wrap-estreita th:first-child { padding-right: 40px; }
-  .tabela-wrap-estreita td:last-child, .tabela-wrap-estreita th:last-child { padding-left: 40px; }
-  th.grupo-hoje, td.grupo-hoje { background: #eff6ff; }
-  th.grupo-ontem, td.grupo-ontem { background: #f9fafb; }
-  th.grupo-inicio, td.grupo-inicio { border-left: 2px solid var(--border); }
-  thead tr:first-child th { border-bottom: 1px solid var(--border); }
+  @keyframes celebracaoEntrar { 0% { opacity: 0; transform: translate(-50%, -16px); } 100% { opacity: 1; transform: translate(-50%, 0); } }
+  .confete {
+    position: fixed; top: -12px; width: 8px; height: 14px; z-index: 998;
+    opacity: 0.9; animation-name: confeteCair; animation-timing-function: ease-in;
+    animation-iteration-count: 1;
+  }
+  @keyframes confeteCair {
+    0% { transform: translateY(0) rotate(0deg); opacity: 0.9; }
+    100% { transform: translateY(105vh) rotate(540deg); opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) { .confete { display: none; } }
+
+  /* --- Oculto a pedido (07/10): taxas Financeiro/Reuniões por baixo da
+       barra da Meta do time — fica só o % final, sem poluir. Classe em
+       vez de apagar o bloco, pra ser fácil reativar se precisar. --- */
+  .oculto { display: none !important; }
+
+  /* --- Link discreto "detalhamento" no canto superior direito (07/10,
+       pedido do João: trocar os botões "Detalhes" por linha de SDR por um
+       único campo pequeno, disfarçado, que não rouba atenção) --- */
+  .link-detalhe-discreto {
+    font-size: 0.625rem; color: var(--muted); opacity: 0.55; cursor: pointer;
+    text-decoration: underline dotted; text-underline-offset: 2px;
+  }
+  .link-detalhe-discreto:hover { opacity: 0.9; color: var(--gold); }
+  .versao-crn-discreta { font-size: 0.625rem; color: var(--muted); opacity: 0.55; }
+  .painel-detalhe-todos { margin-top: 6px; }
+  .painel-detalhe-todos td { padding: 6px 5px 8px 5px; background: rgba(255,255,255,0.03); }
+  .tabela-reunioes-detalhe { width: 100%; border-collapse: collapse; }
+  .tabela-reunioes-detalhe th {
+    text-align: left; font-size: 0.625rem; color: var(--muted); font-weight: 600;
+    padding: 2px 6px; border-bottom: 1px solid var(--border);
+  }
+  .tabela-reunioes-detalhe td { font-size: 0.6875rem; padding: 2px 6px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+  .tabela-reunioes-detalhe tr:last-child td { border-bottom: none; }
+  .resumo-contagem-sdr {
+    display: flex; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 8px;
+    padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  }
+  .contagem-sdr-item { font-size: 0.6875rem; color: var(--muted); }
+  .contagem-sdr-item b { color: var(--gold); font-variant-numeric: tabular-nums; }
+
+  footer { margin-top: 18px; text-align: center; color: var(--muted); font-size: 0.6875rem; letter-spacing: 1px; }
 </style>
 </head>
 <body>
-
-<header>
-  <div class="header-esquerda">
-    <div>
-      <h1>Métricas Comerciais - 2026</h1>
-      <div class="sub">Board Academy</div>
+<canvas id="bg-particulas" aria-hidden="true"></canvas>
+<div class="wrap">
+  <header>
+    {% set partes_nome = nome_painel.split(" ", 1) %}
+    <h1>
+      <span class="palavra-board">{{ partes_nome[0] }}</span>
+      {% if partes_nome | length > 1 %}
+        <span class="palavra-resto">
+          {%- for ch in partes_nome[1] -%}
+            {%- if ch == "5" -%}<span class="numero-5">5</span>&nbsp;{%- else -%}{{ ch }}{%- endif -%}
+          {%- endfor -%}
+        </span>
+      {% endif %}
+    </h1>
+    <div class="meta-info">
+      Atualizado em {{ gerado_em }}
+      {% if versao_crn %}
+      &middot; <span class="versao-crn-discreta">CRN {{ versao_crn }}</span>
+      {% endif %}
+      {% if detalhe_reunioes_lista %}
+      &middot; <span class="link-detalhe-discreto" onclick="toggleDetalhe('detalhe-todos')">detalhamento</span>
+      &middot; <span class="link-detalhe-discreto" onclick="exportarReunioesCSV()">exportar CSV</span>
+      {% endif %}
     </div>
-    <div class="badge-dias-uteis" id="badgeDiasUteis">—</div>
+  </header>
+
+  {% if detalhe_reunioes_lista %}
+  <table id="detalhe-todos" class="painel-detalhe-todos" style="display:none; width:100%;">
+    <tbody>
+      <tr>
+        <td>
+          <div class="resumo-contagem-sdr">
+            {% for a in detalhe_reunioes_lista %}
+              <span class="contagem-sdr-item"><b>{{ a.nome }}</b>: {{ a.qtd_reunioes_mes }}</span>
+            {% endfor %}
+          </div>
+          <table id="tabela-reunioes-detalhe" class="tabela-reunioes-detalhe">
+            <thead><tr><th>SDR</th><th>Data</th><th>Negócio</th><th>Dono do negócio</th></tr></thead>
+            <tbody>
+              {% for a in detalhe_reunioes_lista %}
+                {% for r in a.reunioes_mes %}
+                <tr><td>{{ a.nome }}</td><td>{{ r.data }}</td><td>{{ r.deal_titulo }}</td><td>{{ r.closer }}</td></tr>
+                {% endfor %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% if avisos %}
+  <div class="avisos">
+    {% for a in avisos %}
+    <div class="aviso">⚠ {{ a }}</div>
+    {% endfor %}
   </div>
-  <div>
-    <div class="seletor-periodo">
-      <select id="seletorMes"></select>
-      <select id="seletorAno"></select>
-      <button id="refresh" onclick="atualizar()">Atualizar painel</button>
-      <span class="authbar">
-        <span class="who" id="authWho"></span>
-        <button class="btn-auth" id="btnAuth">Entrar</button>
-      </span>
+  {% endif %}
+
+  {% macro avatar(nome, tamanho_classe) %}
+  <div class="{{ tamanho_classe }}">
+    <span class="iniciais-fallback">{{ nome | iniciais }}</span>
+    <img class="foto" alt="" data-candidatos='{{ (nome | fotos) | tojson }}'>
+  </div>
+  {% endmacro %}
+  {% macro avatar_mini(nome) %}
+  <span class="avatar-mini">
+    <span class="iniciais-fallback">{{ nome | iniciais }}</span>
+    <img class="foto" alt="" data-candidatos='{{ (nome | fotos) | tojson }}'>
+  </span>
+  {% endmacro %}
+
+  <!-- 1) Destaque do dia: 1º Closer e 1º SDR a bater a Meta do dia (Closer
+       comparado com a receita COM MULTIPLICADOR, não bruta). -->
+  <div class="secao destaque-grid">
+    <div class="card destaque-card{{ ' tem-lider' if primeiro_closer_dia else '' }}">
+      <div class="label"><span class="trofeu">🏆</span> 1º Closer a bater a Meta do dia</div>
+      {% if primeiro_closer_dia %}
+      <div class="destaque-pessoa">
+        {{ avatar(primeiro_closer_dia.nome, "avatar") }}
+        <div class="destaque-texto">
+          <div class="destaque-nome">{{ primeiro_closer_dia.nome }}</div>
+          <div class="destaque-stat">
+            <b>R$ {{ "{:,.0f}".format(primeiro_closer_dia.valor_no_momento).replace(",", ".") }}</b>
+          </div>
+        </div>
+      </div>
+      {% else %}
+      <div class="destaque-vazio">-</div>
+      {% endif %}
     </div>
-    <div class="meta-info" id="ultimaAtualizacao">—</div>
-    <div class="meta-info" id="carimboCrn" style="font-size:11px;opacity:.75"></div>
-  </div>
-</header>
-
-<div class="modal-bg" id="loginModal">
-  <div class="modal">
-    <h3>Acesso restrito</h3>
-    <label>Usuário</label>
-    <input id="in-user" autocomplete="username">
-    <label>Senha</label>
-    <input id="in-pass" type="password" autocomplete="current-password">
-    <div class="m-erro" id="loginErro"></div>
-    <div class="m-actions">
-      <button class="m-cancel" id="loginCancel">Cancelar</button>
-      <button class="m-ok" id="loginOk">Entrar</button>
+    <div class="card destaque-card{{ ' tem-lider' if primeiro_sdr_dia else '' }}">
+      <div class="label"><span class="trofeu">🏆</span> 1º SDR a bater a Meta do dia</div>
+      {% if primeiro_sdr_dia %}
+      <div class="destaque-pessoa">
+        {{ avatar(primeiro_sdr_dia.nome, "avatar") }}
+        <div class="destaque-texto">
+          <div class="destaque-nome">{{ primeiro_sdr_dia.nome }}</div>
+          <div class="destaque-stat">
+            <b>{{ primeiro_sdr_dia.quantidade_no_momento }}</b> reuniões
+          </div>
+        </div>
+      </div>
+      {% else %}
+      <div class="destaque-vazio">-</div>
+      {% endif %}
     </div>
   </div>
-</div>
 
-<nav class="abas">
-  <button class="aba-btn ativa" id="btnAbaMetricas" onclick="mostrarPagina('metricas')">Métricas</button>
-  <button class="aba-btn" id="btnAbaProdutos" onclick="mostrarPagina('produtos')">Produtos</button>
-  <button class="aba-btn" id="btnAbaPerdidos" onclick="mostrarPagina('perdidos')">Perdidos</button>
-  <button class="aba-btn" id="btnAbaMetasBA" onclick="mostrarPagina('metasba')">Metas BA</button>
-</nav>
-
-<div id="paginaMetricas">
-  <h2 class="titulo-tabela">OLYMPUS</h2>
-  <div class="tabela-wrap">
-    <table id="tabela-financeiro">
-      <thead>
-        <tr>
-          <th>Métrica</th>
-          <th>TOTAL CONSOLIDADO - OLYMPUS</th>
-        </tr>
-      </thead>
-      <tbody id="tabelaFinanceiro"></tbody>
-    </table>
-  </div>
-
-  <h2 class="titulo-tabela">SNIPER</h2>
-  <div class="tabela-wrap tabela-wrap-estreita">
-    <table>
-      <thead>
-        <tr>
-          <th>Métrica</th>
-          <th>Sniper</th>
-        </tr>
-      </thead>
-      <tbody id="tabelaSniper"></tbody>
-    </table>
-  </div>
-  <div id="reunioesPorSdr"></div>
-</div>
-
-<div id="paginaProdutos" style="display:none;">
-  <div id="secaoProdutos">
-    <div id="resumoNovosLeadsProdutos" class="perdidos-resumo"></div>
-    <h2 class="titulo-tabela">PRODUTOS - DETALHAMENTO</h2>
-    <div id="cardsProdutos"></div>
-  </div>
-</div>
-
-<div id="paginaPerdidos" style="display:none;">
-  <div id="perdidosBloqueado" class="perdidos-bloqueado" style="display:none;">
-    <div>🔒 Essa aba é restrita — faça login pra ver os dados de Perdidos.</div>
-    <button class="btn-auth" onclick="abreLogin()">Entrar</button>
-  </div>
-  <div id="perdidosConteudo">
-    <h2 class="titulo-tabela">PERDIDOS — GERAL</h2>
-    <div class="filtro-perdidos">
-      <label>De <input type="date" id="perdidosDataInicio"></label>
-      <label>Até <input type="date" id="perdidosDataFim"></label>
-      <label>Responsável
-        <select id="perdidosResponsavel"><option value="">Todos</option></select>
-      </label>
-      <button id="btnFiltrarPerdidos" onclick="aplicarFiltroPerdidos()">Filtrar</button>
-      <button id="btnLimparFiltroPerdidos" onclick="limparFiltroPerdidos()" style="display:none;">Limpar filtro</button>
+  <!-- 2) Destaque contínuo: os DOIS são ACUMULADO DO MÊS agora (pedido do
+       João 06/10) — só crescem; só trocam de dono se outra pessoa superar
+       o total acumulado. O selo dourado mostra há quantos dias está no
+       posto (só zera quando a liderança muda de pessoa).
+       REESCRITO 26/10: app.py não depende mais de arquivo em disco pra
+       isso (recalcula sem estado a cada request) — funciona igual local e
+       na Vercel, mostrar_destaque_continuo sempre True. -->
+  {% if mostrar_destaque_continuo %}
+  <div class="secao">
+    <h2 class="titulo-branco">Destaque contínuo</h2>
+    <div class="continuo-grid">
+      <div class="card continuo-card{{ ' tem-lider' if destaque_continuo_closer else '' }}">
+        {% if destaque_continuo_closer %}
+        <div class="avatar-continuo-wrap">
+          {{ avatar(destaque_continuo_closer.nome, "avatar-continuo") }}
+          <span class="selo-dias">há {{ destaque_continuo_closer.dias }} dia{{ "s" if destaque_continuo_closer.dias != 1 else "" }}</span>
+        </div>
+        <div class="continuo-info">
+          <div class="label">Valor bruto acumulado no mês</div>
+          <div class="continuo-nome">{{ destaque_continuo_closer.nome }}</div>
+          <div class="continuo-stat">R$ {{ "{:,.0f}".format(destaque_continuo_closer.valor).replace(",", ".") }}</div>
+        </div>
+        {% else %}
+        <div class="continuo-vazio">Valor bruto acumulado no mês: -</div>
+        {% endif %}
+      </div>
+      <div class="card continuo-card{{ ' tem-lider' if destaque_continuo_sdr else '' }}">
+        {% if destaque_continuo_sdr %}
+        <div class="avatar-continuo-wrap">
+          {{ avatar(destaque_continuo_sdr.nome, "avatar-continuo") }}
+          <span class="selo-dias">há {{ destaque_continuo_sdr.dias }} dia{{ "s" if destaque_continuo_sdr.dias != 1 else "" }}</span>
+        </div>
+        <div class="continuo-info">
+          <div class="label">Mais reuniões validadas no mês</div>
+          <div class="continuo-nome">{{ destaque_continuo_sdr.nome }}</div>
+          <div class="continuo-stat">{{ destaque_continuo_sdr.valor }} reuniões</div>
+        </div>
+        {% else %}
+        <div class="continuo-vazio">Mais reuniões validadas no mês: -</div>
+        {% endif %}
+      </div>
     </div>
-    <div id="resumoPerdidosGeral" class="perdidos-resumo"></div>
-    <div id="motivosPerdidosGeral"></div>
-
-    <h2 class="titulo-tabela">PERDIDOS — POR FUNIL</h2>
-    <div id="cardsPerdidosFunil" class="perdidos-funis"></div>
-
-    <h2 class="titulo-tabela">AUDITORIA DE PERDAS</h2>
-    <div class="sub" style="color:var(--muted); margin-bottom:10px;">Motivos de perda fora do esperado pra etapa em que o negócio estava</div>
-    <div id="auditoriaPerdidosGeral"></div>
-    <div id="cardsAuditoriaFunil" class="perdidos-funis"></div>
   </div>
+  {% endif %}
+
+  <!-- 3) Meta do time: só Sniper e Olympus -->
+  {% macro barra_squad(nome_squad, dado) %}
+  {% set destacado = dado and dado.atingimento is not none and dado.atingimento >= 75 %}
+  <div class="card squad-card">
+    <div class="squad-nome">{{ nome_squad }}</div>
+    <div class="squad-bar-wrap">
+    {% if dado and dado.atingimento is not none %}
+    <!-- Marcos de 25/50/75/100% (pedido do João 03/11) — id/data-atingimento
+         só pro script do fim da página detectar quando um marco foi
+         ultrapassado desde o último carregamento (localStorage por mês,
+         mesmo espírito da celebração) e disparar o "pulso". -->
+    <div class="squad-barra" id="squad-barra-{{ nome_squad | lower }}" data-atingimento="{{ dado.atingimento }}">
+      <div class="squad-barra-fill{{ ' destaque' if destacado else '' }}" style="width: {{ [dado.atingimento, 100] | min }}%;"></div>
+      <span class="squad-marco" style="left: 25%;"></span>
+      <span class="squad-marco" style="left: 50%;"></span>
+      <span class="squad-marco" style="left: 75%;"></span>
+      <span class="squad-marco" style="left: calc(100% - 1px);"></span>
+    </div>
+    <div class="squad-pct"><b>{{ "%.1f"|format(dado.atingimento)|replace(".", ",") }}%</b> do mês</div>
+    {% if dado.financeiro_pct is defined and dado.financeiro_pct is not none %}
+    <div class="squad-pct-detalhe oculto">
+      Financeiro <b>{{ "%.1f"|format(dado.financeiro_pct)|replace(".", ",") }}%</b>
+      &middot; Reuniões <b>{{ "%.1f"|format(dado.reunioes_pct)|replace(".", ",") }}%</b>
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="squad-barra"></div>
+    <div class="squad-pct">sem meta</div>
+    {% endif %}
+    </div>
+  </div>
+  {% endmacro %}
+  <div class="secao">
+    <h2 class="titulo-branco">Meta do time</h2>
+    <div class="squads-grid">
+      {{ barra_squad("Olympus", squads.OLYMPUS) }}
+      {{ barra_squad("Sniper", squads.SNIPER) }}
+    </div>
+  </div>
+
+  <!-- Destrinche do % Final do Sniper (pedido do João, 23/10: "preciso que
+       destrinche pra mim esses valores") — mostra reuniões e financeiro
+       separados, com realizado/meta de cada um, e a fórmula de combinação.
+       Só o Sniper tem essa conta dividida (Olympus é atingimento simples).
+       OCULTADO 23/10 (pedido do João: "deixe esses dados ocultos") — classe
+       "oculto" só esconde (display:none), não apaga o bloco nem o cálculo;
+       é só tirar a classe pra voltar a mostrar. -->
+  {% if squads.SNIPER and squads.SNIPER.atingimento is not none %}
+  <div class="secao oculto">
+    <h2>Como chegamos no % Final do Sniper</h2>
+    <div class="destrinche-grid">
+      <div class="destrinche-card">
+        <div class="destrinche-rotulo">Reuniões <span class="destrinche-peso">(peso 70%)</span></div>
+        <div class="destrinche-conta">
+          {{ squads.SNIPER.realizado }} validadas ÷ {{ "{:,.0f}".format(squads.SNIPER.meta or 0).replace(",", ".") }} meta
+        </div>
+        <div class="destrinche-pct">{{ "%.1f"|format(squads.SNIPER.reunioes_pct)|replace(".", ",") if squads.SNIPER.reunioes_pct is not none else "—" }}%</div>
+      </div>
+      <div class="destrinche-card">
+        <div class="destrinche-rotulo">Financeiro <span class="destrinche-peso">(peso 30%)</span></div>
+        <div class="destrinche-conta">
+          R$ {{ "{:,.0f}".format(squads.SNIPER.financeiro_realizado or 0).replace(",", ".") }}
+          ÷ R$ {{ "{:,.0f}".format(squads.SNIPER.financeiro_meta or 0).replace(",", ".") }} meta
+        </div>
+        <div class="destrinche-pct">{{ "%.1f"|format(squads.SNIPER.financeiro_pct)|replace(".", ",") if squads.SNIPER.financeiro_pct is not none else "—" }}%</div>
+      </div>
+      <div class="destrinche-card destrinche-final">
+        <div class="destrinche-rotulo">% Final</div>
+        <div class="destrinche-conta">
+          Reuniões × 70% + Financeiro × 30%
+        </div>
+        <div class="destrinche-pct">{{ "%.1f"|format(squads.SNIPER.atingimento)|replace(".", ",") }}%</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- 4) Detalhamento do dia: SDR com quadradinhos (Validadas/Agendadas) e
+       Closer Olympus com meta/vendido do dia em multiplicador. -->
+  {% macro bloco_progresso(label, feitas, alvo, bateu) %}
+  <span>
+    <span class="rotulo">{{ label }} &middot; {{ feitas }}/{{ alvo }}</span>
+    {% if bateu %}
+    <span class="quadrado-check-grande" title="Meta batida">✓</span>
+    {% elif (alvo | int) > 16 %}
+    <span class="rotulo">⏳ em andamento</span>
+    {% else %}
+    {% set n = (alvo | int) if (alvo | int) > 0 else 1 %}
+    <span class="quadradinhos">
+      {% for i in range(n) %}
+      <span class="quadradinho{{ ' preenchido' if i < feitas else '' }}"></span>
+      {% endfor %}
+    </span>
+    {% endif %}
+  </span>
+  {% endmacro %}
+  <div class="secao detalhe-grid">
+    <div class="card">
+      {% if mostrar_termometro_olympus and termometro_olympus %}
+      <h2 class="titulo-branco">Termômetro &middot; Vendas Olympus</h2>
+      {% set destacado_termo = termometro_olympus.pct is not none and termometro_olympus.pct >= 100 %}
+      <div class="termometro-wrap">
+        <div class="termometro-meta-topo">
+          <span class="termometro-meta-valor">R$ {{ "{:,.0f}".format(termometro_olympus.meta).replace(",", ".") }}</span>
+        </div>
+        <div class="termometro-linha">
+          <div class="termometro-corpo">
+            <div class="termometro-tubo">
+              <div class="termometro-fill{{ ' destaque' if destacado_termo else '' }}" style="height: {{ [termometro_olympus.pct or 0, 100] | min }}%;"></div>
+              <div class="termometro-tubo-linhas"></div>
+            </div>
+            <div class="termometro-bulbo{{ ' destaque' if destacado_termo else '' }}">
+              <span class="termometro-bulbo-pct">{{ "%.1f"|format(termometro_olympus.pct)|replace(".", ",") if termometro_olympus.pct is not none else "—" }}%</span>
+            </div>
+          </div>
+          <div class="termometro-escala">
+            {% for marca in [100, 90, 80, 70, 60, 50, 40, 30, 20, 10] %}
+            <span class="termometro-escala-item">{{ marca }}%</span>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="termometro-info">
+          <div class="termometro-periodo">
+            {{ termometro_olympus.label_periodo }}
+            <span class="termometro-datas">({{ termometro_olympus.inicio }}–{{ termometro_olympus.fim }})</span>
+          </div>
+          <div class="termometro-valores">
+            <b>R$ {{ "{:,.0f}".format(termometro_olympus.realizado).replace(",", ".") }}</b>
+            realizado
+          </div>
+        </div>
+      </div>
+      {% else %}
+      <h2 class="titulo-branco">Detalhamento do dia &middot; Closer</h2>
+      {% if closers_olympus %}
+      <table class="tabela-detalhe">
+        <colgroup><col class="col-nome"><col style="width:32%"><col style="width:32%"></colgroup>
+        <tbody>
+          {% for c in closers_olympus %}
+          <tr class="{{ 'linha--bateu' if c.bateu else ('linha--quase' if c.quase else '') }}">
+            <td><span class="nome-grupo">{{ avatar_mini(c.nome) }}<span class="nome">{{ c.nome }}</span>{% if primeiro_closer_dia and primeiro_closer_dia.nome == c.nome %}<span class="selo-giro">🎡 Giro liberado</span>{% endif %}</span></td>
+            <td>
+              <span class="rotulo">Meta do dia</span>
+              <span class="valor-rs">R$ {{ "{:,.0f}".format(c.alvo_diario).replace(",", ".") }}</span>
+            </td>
+            <td>
+              <span class="rotulo">Vendido hoje</span>
+              <span class="valor-rs{{ ' bateu' if c.bateu else '' }}">R$ {{ "{:,.0f}".format(c.vendido_hoje).replace(",", ".") }}</span>
+              {% if c.a_vista_hoje %}<span class="selo-a-vista">💰 {{ c.a_vista_hoje }} à vista</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty">Nenhum Closer do squad Olympus encontrado (confira a coluna SUBAREA na aba Colaboradores).</div>
+      {% endif %}
+      {% endif %}
+    </div>
+    <div class="card">
+      <h2 class="titulo-branco">Detalhamento do dia &middot; SDR</h2>
+      {% if alvo_do_dia_sdr %}
+      <table class="tabela-detalhe">
+        <colgroup><col class="col-nome"><col style="width:32%"><col style="width:32%"></colgroup>
+        <tbody>
+          {% for a in alvo_do_dia_sdr %}
+          <tr class="{{ 'linha--bateu' if a.bateu else ('linha--quase' if a.quase else '') }}">
+            <td>
+              <span class="nome-grupo">{{ avatar_mini(a.nome) }}<span class="nome">{{ a.nome }}</span>{% if primeiro_sdr_dia and primeiro_sdr_dia.nome == a.nome %}<span class="selo-giro">🎡 Giro liberado</span>{% endif %}</span>
+            </td>
+            <td>{{ bloco_progresso("Validadas", a.feitas_hoje, a.alvo_diario, a.bateu) }}</td>
+            <td>{{ bloco_progresso("Agendadas", a.agendamentos_hoje, a.alvo_diario, a.bateu_agendamento) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty">Sem metas individuais encontradas na aba "Metas" pra este mês.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if atividades_recentes %}
+  <div class="secao ticker-wrap">
+    <div class="ticker-trilho">
+      <div class="ticker-conteudo">
+        {% for item in atividades_recentes %}
+        <span class="ticker-item"><span class="ticker-icone">{{ item.icone }}</span>{{ item.texto }}</span>
+        <span class="ticker-sep">&bull;</span>
+        {% endfor %}
+      </div>
+      <div class="ticker-conteudo" aria-hidden="true">
+        {% for item in atividades_recentes %}
+        <span class="ticker-item"><span class="ticker-icone">{{ item.icone }}</span>{{ item.texto }}</span>
+        <span class="ticker-sep">&bull;</span>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <footer>{{ nome_painel }} &middot; Board Academy</footer>
 </div>
-
-<div id="paginaMetasBA" style="display:none;">
-  <div class="filtro-perdidos">
-    <span class="sub" style="color:var(--muted);">4 funis: Sniper + Elite + Olympus + Navigator</span>
-    <button id="btnAtualizarMetasBA" onclick="carregarMetasBA(true)">Atualizar</button>
-  </div>
-  <div id="metasBaCarregando" class="status-vazio" style="padding:20px 0;">Clique em "Metas BA" pra carregar (consulta pesada — só busca quando você abre a aba)</div>
-  <div id="metasBaConteudo" style="display:none;">
-
-    <h2 class="titulo-tabela titulo-ba-destaque">QUANTO ESTAMOS DA META</h2>
-    <div id="metaCardsPrincipais" class="perdidos-resumo"></div>
-    <div id="metaMqlPorProduto" class="bloco-ba" style="margin-top:12px;"></div>
-    <div id="geralLeadsPorProduto" class="bloco-ba" style="margin-top:12px;"></div>
-    <div id="metaGanhosPorProduto" class="bloco-ba" style="margin-top:12px;"></div>
-    <div id="metaTaxas" class="perdidos-resumo" style="margin-top:12px;"></div>
-    <div id="metaGargalo" class="perdidos-bloqueado" style="text-align:left; margin-top:12px;"></div>
-
-    <h2 class="titulo-tabela titulo-ba-destaque">NO MÊS, NO GERAL</h2>
-    <div id="geralCardsPrincipais" class="perdidos-resumo"></div>
-    <div id="geralMqlPorProduto2" class="bloco-ba" style="margin-top:12px;"></div>
-    <div id="geralMqlHojeOntemPorProduto" class="bloco-ba" style="margin-top:12px;"></div>
-    <div id="geralTkmPorProduto" class="bloco-ba" style="margin-top:12px;"></div>
-
-    <h2 class="titulo-tabela titulo-ba-destaque">HISTÓRICO CONSOLIDADO (JAN–JUN/2026)</h2>
-    <div id="historicoResumo" class="perdidos-resumo"></div>
-    <div id="historicoMix" class="bloco-ba" style="margin-top:12px;"></div>
-
-  </div>
-</div>
-
-<div id="erro"></div>
-
 <script>
-const API_URL = "/api/dashboard";
-const INTERVALO_MS = 10 * 60 * 1000; // 10 minutos
+  // Botão "Detalhes" (lista de reuniões validadas no mês, por SDR) — só
+  // mostra/esconde a linha da tabela; não depende de nada mais. Depois de
+  // abrir/fechar, reaproveita o auto-ajuste de zoom (ver script abaixo)
+  // pra continuar garantindo que não precisa rolar, já que abrir o painel
+  // aumenta a altura da página.
+  function toggleDetalhe(id) {
+    var linha = document.getElementById(id);
+    if (!linha) return;
+    linha.style.display = (linha.style.display === "none") ? "" : "none";
+    if (window.__boardBlackNovemberAjustarZoom) window.__boardBlackNovemberAjustarZoom();
+  }
 
-// ---- login / autenticação ----
-let TOKEN = sessionStorage.getItem("dash_token") || null;
-let PAPEL = sessionStorage.getItem("dash_papel") || null;
-let USUARIO = sessionStorage.getItem("dash_usuario") || null;
+  // Exportar CSV (pedido do João, 23/10) — monta o CSV direto a partir da
+  // tabela de detalhamento já renderizada na página (sem GET extra ao
+  // servidor), incluindo uma primeira linha de resumo "SDR,Total" por
+  // pessoa antes da lista reunião a reunião. Abre o Excel certinho em
+  // PT-BR porque usa ; como separador (vírgula já é usada no valor
+  // decimal/nome em PT-BR) e BOM UTF-8 (senão acento quebra no Excel).
+  function exportarReunioesCSV() {
+    var tabela = document.getElementById("tabela-reunioes-detalhe");
+    if (!tabela) return;
 
-function authHeaders() {
-  return TOKEN ? { "Authorization": "Bearer " + TOKEN } : {};
-}
-function estaLogado() { return !!TOKEN; }
-
-function abreLogin() {
-  document.getElementById("loginErro").textContent = "";
-  document.getElementById("in-user").value = "";
-  document.getElementById("in-pass").value = "";
-  document.getElementById("loginModal").classList.add("show");
-  document.getElementById("in-user").focus();
-}
-function fechaLogin() { document.getElementById("loginModal").classList.remove("show"); }
-
-async function fazLogin() {
-  const usuario = document.getElementById("in-user").value.trim();
-  const senha = document.getElementById("in-pass").value;
-  document.getElementById("loginErro").textContent = "";
-  try {
-    const res = await fetch("/api/login", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ usuario, senha }),
+    var linhas = [];
+    linhas.push(["SDR", "Total de reuniões"].join(";"));
+    document.querySelectorAll(".contagem-sdr-item").forEach(function (span) {
+      var nome = span.querySelector("b").textContent;
+      var total = span.textContent.split(":").pop().trim();
+      linhas.push([nome, total].map(csvCampo).join(";"));
     });
-    const d = await res.json();
-    if (!res.ok) {
-      document.getElementById("loginErro").textContent = d.error || "Falha no login";
-      return;
-    }
-    TOKEN = d.token; PAPEL = d.papel; USUARIO = d.usuario;
-    sessionStorage.setItem("dash_token", TOKEN);
-    sessionStorage.setItem("dash_papel", PAPEL);
-    sessionStorage.setItem("dash_usuario", USUARIO);
-    fechaLogin();
-    atualizaAuthUI();
-    atualizar();
-  } catch (e) {
-    document.getElementById("loginErro").textContent = "Erro de conexão";
-  }
-}
-
-function logout() {
-  TOKEN = null; PAPEL = null; USUARIO = null;
-  sessionStorage.removeItem("dash_token");
-  sessionStorage.removeItem("dash_papel");
-  sessionStorage.removeItem("dash_usuario");
-  atualizaAuthUI();
-  atualizar();
-}
-
-function atualizaAuthUI() {
-  if (estaLogado()) {
-    document.getElementById("authWho").textContent = `● ${USUARIO} (${PAPEL})`;
-    document.getElementById("btnAuth").textContent = "Sair";
-  } else {
-    document.getElementById("authWho").textContent = "";
-    document.getElementById("btnAuth").textContent = "Entrar";
-  }
-}
-
-async function validaTokenSalvo() {
-  if (!TOKEN) return;
-  try {
-    const me = await (await fetch("/api/me", { headers: authHeaders() })).json();
-    if (!me.logado) {
-      TOKEN = null; PAPEL = null; USUARIO = null;
-      sessionStorage.removeItem("dash_token");
-      sessionStorage.removeItem("dash_papel");
-      sessionStorage.removeItem("dash_usuario");
-    } else {
-      PAPEL = me.papel; USUARIO = me.usuario;
-    }
-  } catch (e) {}
-  atualizaAuthUI();
-}
-
-document.getElementById("btnAuth").addEventListener("click", () => { estaLogado() ? logout() : abreLogin(); });
-document.getElementById("loginCancel").addEventListener("click", fechaLogin);
-document.getElementById("loginOk").addEventListener("click", fazLogin);
-document.getElementById("in-pass").addEventListener("keydown", e => { if (e.key === "Enter") fazLogin(); });
-document.getElementById("loginModal").addEventListener("click", e => { if (e.target.id === "loginModal") fechaLogin(); });
-
-function listaNegociosSimples(negocios) {
-  if (!negocios || negocios.length === 0) return `<div class="status-vazio">Nenhum</div>`;
-  return negocios.map(n => `<a class="status-id-item" href="${n.url}" target="_blank" rel="noopener">#${n.id}</a>`).join("");
-}
-
-function listaColaboradores(colaboradores) {
-  if (!colaboradores) return `<div class="status-vazio" style="padding:8px 14px;">Sem dados de colaborador</div>`;
-  const papeis = ["Closer", "SDR", "Outro"];
-  const blocos = papeis.map(papel => {
-    const pessoas = colaboradores[papel] || [];
-    if (pessoas.length === 0) return "";
-    const linhasPessoas = pessoas.map(p => `
-      <details class="colaborador-dropdown">
-        <summary><span class="colaborador-nome">${p.nome}</span> <span class="colaborador-qtd">${p.quantidade}</span></summary>
-        <div class="colaborador-negocios">${listaNegociosSimples(p.negocios)}</div>
-      </details>`).join("");
-    return `<div class="papel-grupo"><div class="papel-titulo">${papel}</div>${linhasPessoas}</div>`;
-  }).join("");
-  return blocos || `<div class="status-vazio" style="padding:8px 14px;">Nenhum colaborador identificado</div>`;
-}
-
-function listaMotivos(motivos) {
-  if (!motivos || motivos.length === 0) {
-    return `<div class="status-vazio" style="padding:14px;">Nenhum motivo registrado</div>`;
-  }
-  return motivos.map(m => `
-    <details class="motivo-dropdown">
-      <summary class="motivo-linha">
-        <span class="motivo-nome">${m.motivo}</span>
-        <div class="motivo-barra-wrap"><div class="motivo-barra" style="width:${m.percentual}%"></div></div>
-        <span class="motivo-qtd">${m.quantidade} negócios</span>
-        <span class="motivo-pct">${m.percentual}%</span>
-      </summary>
-      <div class="motivo-colaboradores">${listaColaboradores(m.colaboradores)}</div>
-    </details>`).join("");
-}
-
-async function aplicarFiltroPerdidos() {
-  const inicio = document.getElementById("perdidosDataInicio").value;
-  const fim = document.getElementById("perdidosDataFim").value;
-  const responsavel = document.getElementById("perdidosResponsavel").value;
-  if (!inicio || !fim) {
-    alert("Escolhe as duas datas (De / Até) antes de filtrar.");
-    return;
-  }
-  const btn = document.getElementById("btnFiltrarPerdidos");
-  btn.disabled = true;
-  btn.textContent = "Filtrando...";
-  try {
-    const params = new URLSearchParams({ perdidos_inicio: inicio, perdidos_fim: fim });
-    if (responsavel) params.set("perdidos_responsavel", responsavel);
-    const resp = await fetch(`${API_URL}?${params.toString()}`, { cache: "no-store", headers: authHeaders() });
-    const data = await resp.json();
-    if (data.erro) throw new Error(data.erro);
-    const p = data.perdidos_periodo;
-    document.getElementById("resumoPerdidosGeral").innerHTML = `
-      <div class="perdidos-resumo-card">
-        <div class="rotulo">Perdidos no Período</div>
-        <div class="valor">${p.total ?? 0}</div>
-      </div>`;
-    document.getElementById("motivosPerdidosGeral").innerHTML =
-      `<div class="motivos-lista">${listaMotivos(p.motivos)}</div>`;
-    document.getElementById("btnLimparFiltroPerdidos").style.display = "";
-  } catch (e) {
-    alert("Erro ao filtrar: " + e.message);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = "Filtrar";
-  }
-}
-
-function limparFiltroPerdidos() {
-  document.getElementById("perdidosDataInicio").value = "";
-  document.getElementById("perdidosDataFim").value = "";
-  document.getElementById("perdidosResponsavel").value = "";
-  document.getElementById("btnLimparFiltroPerdidos").style.display = "none";
-  renderizarPerdidos(ultimaAnalisePerdidos);
-}
-
-let ultimaAnalisePerdidos = null;
-
-function renderizarPerdidos(analise) {
-  ultimaAnalisePerdidos = analise;
-
-  if (!analise) {
-    document.getElementById("perdidosBloqueado").style.display = "";
-    document.getElementById("perdidosConteudo").style.display = "none";
-    return;
-  }
-  document.getElementById("perdidosBloqueado").style.display = "none";
-  document.getElementById("perdidosConteudo").style.display = "";
-
-  const geral = analise.geral || { total_mes: 0, total_hoje: 0, motivos: [] };
-  document.getElementById("resumoPerdidosGeral").innerHTML = `
-    <div class="perdidos-resumo-card">
-      <div class="rotulo">Perdidos Hoje</div>
-      <div class="valor">${geral.total_hoje ?? 0}</div>
-    </div>
-    <div class="perdidos-resumo-card">
-      <div class="rotulo">Perdidos no Mês</div>
-      <div class="valor">${geral.total_mes ?? 0}</div>
-    </div>`;
-
-  const seletorResp = document.getElementById("perdidosResponsavel");
-  if (seletorResp && seletorResp.options.length <= 1) {
-    (analise.responsaveis || []).forEach(nome => {
-      const opt = document.createElement("option");
-      opt.value = nome;
-      opt.textContent = nome;
-      seletorResp.appendChild(opt);
-    });
-  }
-
-  document.getElementById("motivosPerdidosGeral").innerHTML =
-    `<div class="motivos-lista">${listaMotivos(geral.motivos)}</div>`;
-
-  const porFunil = analise.por_funil || {};
-  const funis = Object.keys(porFunil); // 1 funil (papel restrito) ou os 3 (admin)
-  document.getElementById("cardsPerdidosFunil").innerHTML = funis.map(squad => {
-    const dados = porFunil[squad] || { total_mes: 0, total_hoje: 0, motivos: [] };
-    return `
-      <div class="perdidos-funil-card">
-        <div class="perdidos-funil-titulo">${squad}</div>
-        <div class="perdidos-funil-resumo">
-          <span>Hoje: <strong>${dados.total_hoje ?? 0}</strong></span>
-          <span>Mês: <strong>${dados.total_mes ?? 0}</strong></span>
-        </div>
-        <div class="motivos-lista">${listaMotivos(dados.motivos)}</div>
-      </div>`;
-  }).join("");
-
-  function listaAuditoria(auditoria) {
-    if (!auditoria || auditoria.length === 0) {
-      return `<div class="status-vazio" style="padding:14px;">Nenhum motivo fora da regra encontrado 🎉</div>`;
-    }
-    return auditoria.map(a => `
-      <div class="auditoria-etapa">
-        <div class="auditoria-etapa-titulo">${a.etapa} <span class="qtd">(${a.total} fora da regra)</span></div>
-        <div class="motivos-lista">${listaMotivos(a.motivos)}</div>
-      </div>`).join("");
-  }
-
-  document.getElementById("auditoriaPerdidosGeral").innerHTML = listaAuditoria(geral.auditoria);
-
-  document.getElementById("cardsAuditoriaFunil").innerHTML = funis.map(squad => {
-    const dados = porFunil[squad] || { auditoria: [] };
-    return `
-      <div class="perdidos-funil-card">
-        <div class="perdidos-funil-titulo">${squad}</div>
-        ${listaAuditoria(dados.auditoria)}
-      </div>`;
-  }).join("");
-}
-
-function mostrarPagina(pagina) {
-  document.getElementById("paginaMetricas").style.display = pagina === "metricas" ? "" : "none";
-  document.getElementById("paginaProdutos").style.display = pagina === "produtos" ? "" : "none";
-  document.getElementById("paginaPerdidos").style.display = pagina === "perdidos" ? "" : "none";
-  document.getElementById("paginaMetasBA").style.display = pagina === "metasba" ? "" : "none";
-  document.getElementById("btnAbaMetricas").classList.toggle("ativa", pagina === "metricas");
-  document.getElementById("btnAbaProdutos").classList.toggle("ativa", pagina === "produtos");
-  document.getElementById("btnAbaPerdidos").classList.toggle("ativa", pagina === "perdidos");
-  document.getElementById("btnAbaMetasBA").classList.toggle("ativa", pagina === "metasba");
-  if (pagina === "metasba" && !metasBaCarregada) {
-    carregarMetasBA(false);
-  }
-}
-
-let metasBaCarregada = false;
-
-function fmtMoedaBA(v) {
-  return (v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
-}
-function fmtPctBA(v) {
-  return (v ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + "%";
-}
-function pillClasseBA(pct) {
-  if (pct >= 100) return "ok";
-  if (pct >= 70) return "warn";
-  return "bad";
-}
-function cardMetaBA(rotulo, realizado, meta, pct, formatador) {
-  return `
-    <div class="perdidos-resumo-card">
-      <div class="rotulo">${rotulo}</div>
-      <div class="valor" style="font-size:18px;">${formatador(realizado)} <span class="pill ${pillClasseBA(pct)}" style="font-size:10px;">${fmtPctBA(pct)}</span></div>
-      <div style="font-size:11px; color:var(--muted); margin-top:4px;">Meta: ${formatador(meta)}</div>
-    </div>`;
-}
-function linhaMotivoSimplesBA(nome, valor1, rotulo1, valor2, rotulo2) {
-  return `
-    <div class="ba-linha">
-      <span class="ba-nome">${nome}</span>
-      <span class="ba-metrica">${rotulo1}: <strong>${valor1}</strong></span>
-      <span class="ba-metrica">${rotulo2}: <strong>${valor2}</strong></span>
-    </div>`;
-}
-
-async function carregarMetasBA(forcarRecarregar) {
-  const btn = document.getElementById("btnAtualizarMetasBA");
-  const carregando = document.getElementById("metasBaCarregando");
-  const conteudo = document.getElementById("metasBaConteudo");
-  btn.disabled = true;
-  btn.textContent = "Carregando...";
-  carregando.style.display = "";
-  carregando.textContent = "Carregando (pode levar alguns segundos — 4 funis, todo o histórico do mês)...";
-  conteudo.style.display = "none";
-  try {
-    const mesSelecionado = document.getElementById("seletorMes").value;
-    const anoSelecionado = document.getElementById("seletorAno").value;
-    const params = new URLSearchParams({ route: "metas_ba", mes: mesSelecionado, ano: anoSelecionado });
-    const resp = await fetch(`${API_URL}?${params.toString()}`, { cache: "no-store", headers: authHeaders() });
-    const data = await resp.json();
-    if (data.erro) throw new Error(data.erro);
-    renderizarMetasBA(data.metas_board_academy);
-    metasBaCarregada = true;
-    carregando.style.display = "none";
-    conteudo.style.display = "";
-  } catch (e) {
-    carregando.textContent = "Erro ao carregar: " + e.message;
-  } finally {
-    btn.disabled = false;
-    btn.textContent = "Atualizar";
-  }
-}
-
-function renderizarMetasBA(m) {
-  if (!m) return;
-  const q = m.quanto_estamos_da_meta;
-  const g = m.no_mes_geral;
-  const h = m.historico;
-
-  // ---- Seção 1: Quanto estamos da meta ----
-  document.getElementById("metaCardsPrincipais").innerHTML =
-    cardMetaBA("Leads", q.leads.realizado, q.leads.meta, q.leads.pct, v => v) +
-    cardMetaBA("MQL", q.mql.realizado, q.mql.meta, q.mql.pct, v => v) +
-    cardMetaBA("Ganhos", q.ganhos.realizado, q.ganhos.meta, q.ganhos.pct, v => v) +
-    cardMetaBA("Receita", q.receita.realizado, q.receita.meta, q.receita.pct, fmtMoedaBA);
-
-  document.getElementById("metaMqlPorProduto").innerHTML =
-    `<div class="papel-titulo">MQL por produto (meta)</div>` +
-    ["PFCC", "LEAN", "CES"].map(p => {
-      const d = q.mql.por_produto[p] || { realizado: 0, meta: 0 };
-      return linhaMotivoSimplesBA(p, d.realizado, "Realizado", d.meta, "Meta");
-    }).join("");
-
-  document.getElementById("metaGanhosPorProduto").innerHTML =
-    `<div class="papel-titulo">Ganhos por produto (meta)</div>` +
-    Object.keys(q.ganhos.por_produto).map(p => {
-      const d = q.ganhos.por_produto[p];
-      return linhaMotivoSimplesBA(p, d.realizado, "Realizado", d.meta, "Meta");
-    }).join("");
-
-  document.getElementById("metaTaxas").innerHTML = `
-    <div class="perdidos-resumo-card">
-      <div class="rotulo">Tx. Qualificação</div>
-      <div class="valor" style="font-size:18px;">${fmtPctBA(q.taxas.lead_para_mql_real_pct)}</div>
-      <div style="font-size:11px; color:var(--muted); margin-top:4px;">Assumida: ${fmtPctBA(q.taxas.lead_para_mql_assumida_pct)}</div>
-    </div>
-    <div class="perdidos-resumo-card">
-      <div class="rotulo">Tx. Conversão</div>
-      <div class="valor" style="font-size:18px;">${fmtPctBA(q.taxas.mql_para_ganho_real_pct)}</div>
-      <div style="font-size:11px; color:var(--muted); margin-top:4px;">Assumida: ${fmtPctBA(q.taxas.mql_para_ganho_assumida_pct)}</div>
-    </div>`;
-
-  // gargalo: identifica qual etapa está mais atrasada em relação à meta
-  const etapas = [
-    { nome: "Leads", pct: q.leads.pct },
-    { nome: "MQL", pct: q.mql.pct },
-    { nome: "Ganhos", pct: q.ganhos.pct },
-  ];
-  etapas.sort((a, b) => a.pct - b.pct);
-  const pior = etapas[0];
-  let textoGargalo = `A etapa mais atrasada em relação à meta é <strong>${pior.nome}</strong> (${fmtPctBA(pior.pct)} da meta do mês). `;
-  if (q.taxas.lead_para_mql_real_pct < q.taxas.lead_para_mql_assumida_pct) {
-    textoGargalo += `A conversão Lead→MQL real (${fmtPctBA(q.taxas.lead_para_mql_real_pct)}) está abaixo da assumida (${fmtPctBA(q.taxas.lead_para_mql_assumida_pct)}) — pode valer revisar qualificação. `;
-  }
-  if (q.taxas.mql_para_ganho_real_pct < q.taxas.mql_para_ganho_assumida_pct) {
-    textoGargalo += `A conversão MQL→Ganho real (${fmtPctBA(q.taxas.mql_para_ganho_real_pct)}) está abaixo da assumida (${fmtPctBA(q.taxas.mql_para_ganho_assumida_pct)}) — pode valer revisar o time comercial.`;
-  }
-  document.getElementById("metaGargalo").innerHTML = `<div>📍 ${textoGargalo}</div>`;
-
-  // ---- Seção 2: No mês, no geral ----
-  document.getElementById("geralCardsPrincipais").innerHTML = `
-    <div class="perdidos-resumo-card card-destaque-suave">
-      <div class="rotulo">MQL Hoje / Ontem</div>
-      <div class="valor">${g.mql_hoje} <span style="font-size:13px; color:var(--muted);">/ ${g.mql_ontem}</span></div>
-    </div>
-    <div class="perdidos-resumo-card">
-      <div class="rotulo">Leads (Novos / Reaplicação)</div>
-      <div class="valor">${g.leads_total}</div>
-      <div style="font-size:11px; color:var(--muted); margin-top:4px;">${g.leads_novos} novos · ${g.leads_reaplicacao} reaplicação</div>
-    </div>
-    <div class="perdidos-resumo-card card-destaque-suave">
-      <div class="rotulo">Leads Hoje / Ontem</div>
-      <div class="valor">${g.leads_hoje} <span style="font-size:13px; color:var(--muted);">/ ${g.leads_ontem}</span></div>
-    </div>
-    <div class="perdidos-resumo-card">
-      <div class="rotulo">MQL Total</div>
-      <div class="valor">${g.mql_total}</div>
-    </div>
-    <div class="perdidos-resumo-card">
-      <div class="rotulo">Ganhos</div>
-      <div class="valor">${g.ganhos_total}</div>
-    </div>
-    <div class="perdidos-resumo-card">
-      <div class="rotulo">Receita</div>
-      <div class="valor">${fmtMoedaBA(g.receita_total)}</div>
-    </div>`;
-
-  document.getElementById("geralLeadsPorProduto").innerHTML =
-    `<div class="papel-titulo">Leads por produto</div>` +
-    Object.keys(g.leads_por_produto).map(p => `
-      <div class="ba-linha">
-        <span class="ba-nome">${p}</span>
-        <span class="ba-metrica">Leads: <strong>${g.leads_por_produto[p]}</strong></span>
-      </div>`).join("");
-
-  document.getElementById("geralMqlPorProduto2").innerHTML =
-    `<div class="papel-titulo">MQL / Ganhos / Receita por produto</div>` +
-    Array.from(new Set([...Object.keys(g.mql_por_produto), ...Object.keys(g.ganhos_por_produto)])).map(p => `
-      <div class="ba-linha">
-        <span class="ba-nome">${p}</span>
-        <span class="ba-metrica">MQL: <strong>${g.mql_por_produto[p] ?? 0}</strong></span>
-        <span class="ba-metrica">Ganhos: <strong>${g.ganhos_por_produto[p] ?? 0}</strong></span>
-        <span class="ba-metrica">${fmtMoedaBA(g.receita_por_produto[p] ?? 0)}</span>
-      </div>`).join("");
-
-  const produtosMqlHojeOntem = ["PFCC", "LEAN", "CES"];
-  document.getElementById("geralMqlHojeOntemPorProduto").innerHTML =
-    `<div class="papel-titulo">MQL Hoje / Ontem por produto</div>` +
-    produtosMqlHojeOntem.map(p => `
-      <div class="ba-linha">
-        <span class="ba-nome">${p}</span>
-        <span class="ba-metrica">Hoje: <strong>${(g.mql_hoje_por_produto || {})[p] ?? 0}</strong></span>
-        <span class="ba-metrica">Ontem: <strong>${(g.mql_ontem_por_produto || {})[p] ?? 0}</strong></span>
-      </div>`).join("");
-
-  document.getElementById("geralTkmPorProduto").innerHTML =
-    `<div class="papel-titulo">Ticket Médio Realizado (TKM) — Blended: ${fmtMoedaBA(g.tkm_blended)}</div>` +
-    Object.keys(g.tkm_por_produto).map(p => `
-      <div class="ba-linha">
-        <span class="ba-nome">${p}</span>
-        <span class="ba-metrica">${fmtMoedaBA(g.tkm_por_produto[p])}</span>
-      </div>`).join("");
-
-  // ---- Seção 3: Histórico consolidado ----
-  document.getElementById("historicoResumo").innerHTML = `
-    <div class="perdidos-resumo-card">
-      <div class="rotulo">Negócios Criados (Jan–Jun/26)</div>
-      <div class="valor">${h.negocios_criados.toLocaleString("pt-BR")}</div>
-    </div>
-    <div class="perdidos-resumo-card">
-      <div class="rotulo">Negócios Ganhos</div>
-      <div class="valor">${h.negocios_ganhos}</div>
-    </div>
-    <div class="perdidos-resumo-card">
-      <div class="rotulo">Taxa de Conversão</div>
-      <div class="valor">${fmtPctBA(h.tx_conversao_pct)}</div>
-    </div>`;
-
-  document.getElementById("historicoMix").innerHTML =
-    `<div class="papel-titulo">Mix histórico de produto</div>` +
-    h.mix.map(item => `
-      <div class="ba-linha">
-        <span class="ba-nome">${item.produto}</span>
-        <div class="motivo-barra-wrap"><div class="motivo-barra" style="width:${item.pct}%"></div></div>
-        <span class="ba-metrica">${item.qtd} negócios</span>
-        <span class="ba-metrica"><strong>${item.pct}%</strong></span>
-      </div>`).join("");
-}
-
-function fmtMoeda(v) {
-  return (v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
-}
-function fmtNum(v) {
-  return (v ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 });
-}
-function pillClasse(pct) {
-  if (pct >= 100) return "ok";
-  if (pct >= 70) return "warn";
-  return "bad";
-}
-function pill(pct) {
-  return `<span class="pill ${pillClasse(pct)}">${fmtNum(pct)}%</span>`;
-}
-
-let premissasAtual = {};
-function fmtMoedaComPct(pctKey) {
-  return (v) => `${fmtMoeda(v)} <span style="color:var(--muted);font-size:11px;">(${fmtNum(premissasAtual[pctKey] ?? 0)}%)</span>`;
-}
-function fmtMoedaComMesPassado(chaveMesPassado) {
-  return (v, linha) => `${fmtMoeda(v)} <span class="valor-mes-passado">Mês passado (${mesPassadoRotuloAtual || "—"}): ${fmtMoeda((linha || {})[chaveMesPassado] ?? 0)}</span>`;
-}
-function fmtNumComMesPassado(chaveMesPassado) {
-  return (v, linha) => `${fmtNum(v)} <span class="valor-mes-passado">Mês passado (${mesPassadoRotuloAtual || "—"}): ${fmtNum((linha || {})[chaveMesPassado] ?? 0)}</span>`;
-}
-function pillComMesPassado(chaveMesPassado) {
-  return (v, linha) => `${pill(v)} <span class="valor-mes-passado">Mês passado (${mesPassadoRotuloAtual || "—"}): ${fmtNum((linha || {})[chaveMesPassado] ?? 0)}%</span>`;
-}
-function rawComMesPassado(chaveMesPassado) {
-  return (v, linha) => `${v ?? 0} <span class="valor-mes-passado">Mês passado (${mesPassadoRotuloAtual || "—"}): ${(linha || {})[chaveMesPassado] ?? 0}</span>`;
-}
-let previstoHojeAberto = false;
-function togglePrevistoHoje() {
-  previstoHojeAberto = !previstoHojeAberto;
-  document.getElementById("tabelaFinanceiro").classList.toggle("previsto-aberto", previstoHojeAberto);
-}
-
-function fmtPrevistoHojeComBuckets(v, linha) {
-  const buckets = (linha || {})._previsto_hoje_buckets;
-  if (!buckets) return fmtMoeda(v);
-  const linhaBucket = (rotulo, chave) => {
-    const b = buckets[chave] || { quantidade: 0, valor_total: 0, negocios: [] };
-    return `
-      <details class="previsto-bucket-item">
-        <summary class="previsto-bucket-linha">
-          <span>${rotulo}</span><span>${b.quantidade} neg.</span><span>${fmtMoeda(b.valor_total)}</span>
-        </summary>
-        <div class="previsto-bucket-negocios">${listaNegociosSimples(b.negocios)}</div>
-      </details>`;
-  };
-  return `
-    ${fmtMoeda(v)}
-    <div class="previsto-buckets">
-      ${linhaBucket("20%", "20")}
-      ${linhaBucket("50%", "50")}
-      ${linhaBucket("70%", "70")}
-    </div>`;
-}
-function fmtNumComPct(pctKey) {
-  return (v) => `${fmtNum(v)} <span style="color:var(--muted);font-size:11px;">(${fmtNum(premissasAtual[pctKey] ?? 0)}%)</span>`;
-}
-
-const DICA_ATINGIMENTO = "Contra a meta proporcional até hoje. Mostra se o time está no ritmo.";
-const DICA_META_MES = "Contra a meta do mês inteiro. Mostra o quanto falta para fechar.";
-
-const METRICAS_FINANCEIRO = [
-  { label: "Meta Mês",                   key: "meta_mes",                fmt: fmtMoeda },
-  { label: "Meta Dia",                   key: "meta_dia",                 fmt: fmtMoeda },
-  { label: "Realizado Bruto",            key: "realizado_bruto",          fmt: fmtMoedaComMesPassado("mes_passado_bruto") },
-  { label: "Realizado Multiplicador",    key: "realizado_multiplicador",  fmt: fmtMoedaComMesPassado("mes_passado_mesmo_dia") },
-  { label: "Deveria Estar até Hoje (MTD - 100%)", key: "onde_deveria_100",  fmt: fmtMoedaComPct("ritmo_100_pct") },
-  { label: "GAP - MTD (Multiplicador - 100%)", key: "onde_deveria_100", fmt: (v, linha) => fmtMoeda(Math.max(0, v - ((linha || {}).realizado_multiplicador ?? 0))) },
-  { label: "GAP - MTD (Bruto - 100%)",         key: "onde_deveria_100", fmt: (v, linha) => fmtMoeda(Math.max(0, v - ((linha || {}).realizado_bruto ?? 0))) },
-  { label: "% do ATINGIMENTO - Batido (Multiplicador)", key: "realizado_multiplicador", dica: DICA_ATINGIMENTO, fmt: (v, linha) => pill((linha || {}).onde_deveria_100 ? (v / linha.onde_deveria_100) * 100 : 0) },
-  { label: "% do ATINGIMENTO - Batido (Bruto)",         key: "realizado_bruto",          dica: DICA_ATINGIMENTO, fmt: (v, linha) => pill((linha || {}).onde_deveria_100 ? (v / linha.onde_deveria_100) * 100 : 0) },
-  { label: "% da Meta do Mês - Batida",  key: "atingimento", dica: DICA_META_MES, fmt: pillComMesPassado("mes_passado_atingimento") },
-  // ocultas a pedido (14/09) — descomenta pra voltar com elas:
-  // { label: "Deveria (40%) - MTD",        key: "onde_deveria_40",          fmt: fmtMoedaComPct("ritmo_40_pct") },
-  // { label: "Gap 40%",                    key: "gap_40",                   fmt: fmtMoeda },
-  // { label: "Meta/Dia 40%",               key: "meta_dia_40",              fmt: fmtMoeda },
-  { label: "GAP - Meta do Mês (R$)",     key: "gap_100",                  fmt: fmtMoeda },
-  { label: "Meta/Dia Restante p/ Fechar o Mês (Mult.)",  key: "meta_dia_100",       fmt: fmtMoeda },
-  { label: "Meta/Dia Restante p/ Fechar o Mês (Bruto)",  key: "meta_dia_100_bruto", fmt: fmtMoeda },
-  { label: "Previsto Ontem",             key: "previsto_ontem_media",     fmt: fmtMoeda, grupo: "ontem" },
-  { label: "Entrou Ontem (Multiplicador)", key: "ontem",                  fmt: fmtMoeda, grupo: "ontem" },
-  { label: "Entrou Ontem (Bruto)",       key: "ontem_bruto",              fmt: fmtMoeda, grupo: "ontem" },
-  { label: () => `<span class="previsto-toggle-label" onclick="togglePrevistoHoje()">Previsto Hoje</span>`, key: "previsto_hoje_media", fmt: fmtPrevistoHojeComBuckets, grupo: "hoje" },
-  { label: "Em Aberto Hoje",             key: "em_aberto_hoje",           fmt: fmtMoeda, grupo: "hoje" },
-  { label: "Entrou Hoje (Multiplicador)", key: "hoje",                    fmt: fmtMoeda, grupo: "hoje" },
-  { label: "Entrou Hoje (Bruto)",        key: "hoje_bruto",               fmt: fmtMoeda, grupo: "hoje" },
-];
-
-const METRICAS_SNIPER = [
-  { label: "Meta Mês",             key: "meta_mes_reunioes",    fmt: v => v },
-  { label: "Meta Dia",             key: "meta_dia_reunioes",    fmt: fmtNum },
-  { label: "Realizado",            key: "realizado_reunioes",   fmt: rawComMesPassado("mes_passado_reunioes") },
-  { label: "Deveria (100%) - MTD", key: "onde_deveria_100",     fmt: fmtNumComPct("ritmo_100_pct") },
-  { label: "Deveria (40%) - MTD",  key: "onde_deveria_40",      fmt: fmtNumComPct("ritmo_40_pct") },
-  { label: "Atingimento% - MTD (Reuniões)", key: "realizado_reunioes_ate_ontem", dica: "Realizado até ontem contra o MTD (meta proporcional até ontem). Mostra se o time está no ritmo.", fmt: (v, linha) => pill((linha || {}).onde_deveria_100 ? ((v ?? 0) / linha.onde_deveria_100) * 100 : 0) },
-  { label: "Atingimento% - Reuniões",   key: "atingimento",            fmt: (v, linha) => `${pill(v)} <span class="valor-mes-passado">${fmtNum((linha || {}).realizado_reunioes ?? 0)} de ${fmtNum((linha || {}).meta_mes_reunioes ?? 0)} reuniões</span> <span class="valor-mes-passado">Mês passado (${mesPassadoRotuloAtual || "—"}): ${fmtNum((linha || {}).mes_passado_atingimento ?? 0)}%</span>` },
-  { label: "Atingimento% - Financeiro", key: "atingimento_financeiro", fmt: (v, linha) => `${pill(v ?? 0)} <span class="valor-mes-passado">${fmtMoeda((linha || {}).realizado_financeiro ?? 0)} de ${fmtMoeda((linha || {}).meta_financeira ?? 0)}</span>` },
-  { label: "Atingimento% - Final",      key: "atingimento_final",      fmt: v => pill(v ?? 0) },
-  { label: "Gap 100%",             key: "gap_100",              fmt: fmtNum },
-  { label: "Gap 40%",              key: "gap_40",               fmt: fmtNum },
-  { label: "Meta/Dia 40%",         key: "meta_dia_40",          fmt: fmtNum },
-  { label: "Meta/Dia 100%",        key: "meta_dia_100",         fmt: fmtNum },
-  { label: "Previsto Ontem",       key: "previsto_ontem",        fmt: v => v, grupo: "ontem" },
-  { label: "Realizadas Ontem",     key: "dia_anterior_reunioes", fmt: v => v, grupo: "ontem" },
-  { label: "Gap Ontem",            key: "gap_ontem",             fmt: v => v, grupo: "ontem" },
-  { label: "Novos Leads Ontem",    key: "novos_leads_ontem",     fmt: v => v, grupo: "ontem" },
-  { label: "Previsto Hoje",        key: "previsto_hoje",         fmt: v => v, grupo: "hoje" },
-  { label: "Realizadas Hoje",      key: "reunioes_hoje",         fmt: v => v, grupo: "hoje" },
-  { label: "Gap Hoje",             key: "gap_hoje",              fmt: v => v, grupo: "hoje" },
-  { label: "Novos Leads Hoje",     key: "novos_leads_hoje",      fmt: v => v, grupo: "hoje" },
-];
-
-function classesGrupo(grupo) {
-  if (!grupo) return "";
-  return `grupo-${grupo} grupo-inicio`;
-}
-
-let mesAtualSelecionado = true;
-let mesPassadoRotuloAtual = "";
-
-function celulaComDetalheOpcional(m, dados) {
-  const det = dados && dados.detalhe;
-  if (det && det.Elite && det.Atlantis && m.key in det.Elite) {
-    const principal = m.fmt(dados[m.key], dados);
-    const eliteSub = m.fmt(det.Elite[m.key], det.Elite);
-    const atlSub = m.fmt(det.Atlantis[m.key], det.Atlantis);
-    return `
-      <details class="cel-detalhe">
-        <summary>${principal}</summary>
-        <div class="cel-detalhe-sub"><span>Elite</span><span>${eliteSub}</span></div>
-        <div class="cel-detalhe-sub"><span>Atlantis</span><span>${atlSub}</span></div>
-      </details>`;
-  }
-  return m.fmt(dados[m.key], dados);
-}
-
-function tabelaTransposta(metricas, colunas) {
-  // colunas: [{label, dados, isTotal}]
-  const linhas = mesAtualSelecionado ? metricas : metricas.filter(m => !m.grupo);
-  return linhas.map(m => `
-    <tr>
-      <td class="${classesGrupo(m.grupo)}">${typeof m.label === "function" ? m.label() : m.label}${m.dica ? `<div class="dica-metrica">${m.dica}</div>` : ""}</td>
-      ${colunas.map(c => `<td class="${c.isTotal ? 'total ' : ''}${classesGrupo(m.grupo)}">${celulaComDetalheOpcional(m, c.dados)}</td>`).join("")}
-    </tr>`).join("");
-}
-
-const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
-
-function popularSeletores() {
-  const hoje = new Date();
-  const anoAtual = hoje.getFullYear();
-  const mesAtual = hoje.getMonth() + 1; // 1-12
-  const selMes = document.getElementById("seletorMes");
-  const selAno = document.getElementById("seletorAno");
-
-  MESES.forEach((nome, i) => {
-    const opt = document.createElement("option");
-    opt.value = i + 1;
-    opt.textContent = nome;
-    selMes.appendChild(opt);
-  });
-
-  for (let ano = anoAtual; ano >= 2026; ano--) {
-    const opt = document.createElement("option");
-    opt.value = ano;
-    opt.textContent = ano;
-    selAno.appendChild(opt);
-  }
-
-  selMes.value = mesAtual;
-  selAno.value = anoAtual;
-}
-popularSeletores();
-
-async function atualizar() {
-  const btn = document.getElementById("refresh");
-  const erroBox = document.getElementById("erro");
-  const mesSelecionado = document.getElementById("seletorMes").value;
-  const anoSelecionado = document.getElementById("seletorAno").value;
-  btn.disabled = true;
-  btn.textContent = "Atualizando...";
-  erroBox.style.display = "none";
-  try {
-    const resp = await fetch(`${API_URL}?mes=${mesSelecionado}&ano=${anoSelecionado}`, { cache: "no-store", headers: authHeaders() });
-    const data = await resp.json();
-    if (data.erro) throw new Error(data.erro);
-    premissasAtual = data.premissas || {};
-    const nomeMes = MESES[(data.mes || 1) - 1];
-    document.getElementById("badgeDiasUteis").innerHTML =
-      `${nomeMes} ${data.ano} · <span class="destaque">${premissasAtual.dias_uteis_passados ?? "—"}/${premissasAtual.dias_uteis_total ?? "—"}</span> dias úteis · <span class="destaque">${premissasAtual.dias_uteis_restantes ?? "—"}</span> restantes`;
-    mesAtualSelecionado = !!data.e_mes_atual;
-    mesPassadoRotuloAtual = data.mes_passado_rotulo || "";
-    document.getElementById("secaoProdutos").style.display = mesAtualSelecionado ? "" : "none";
-
-    const previstoHojeDet = data.previsto_hoje_detalhes || {};
-    ["Olympus", "Total"].forEach(s => {
-      if (data.squads[s]) data.squads[s]._previsto_hoje_buckets = previstoHojeDet[s] || null;
+    linhas.push("");
+    linhas.push(["SDR", "Data", "Negócio", "Dono do negócio"].join(";"));
+    tabela.querySelectorAll("tbody tr").forEach(function (tr) {
+      var celulas = Array.prototype.map.call(tr.querySelectorAll("td"), function (td) {
+        return csvCampo(td.textContent.trim());
+      });
+      linhas.push(celulas.join(";"));
     });
 
-    document.getElementById("tabelaFinanceiro").innerHTML = tabelaTransposta(METRICAS_FINANCEIRO, [
-      { dados: data.squads.Olympus },
-    ]);
-    document.getElementById("tabelaFinanceiro").classList.toggle("previsto-aberto", previstoHojeAberto);
-
-    document.getElementById("tabelaSniper").innerHTML = tabelaTransposta(METRICAS_SNIPER, [
-      { dados: data.squads.Sniper },
-    ]);
-
-    // Reuniões por SDR (conferência): quantas contaram e por que as demais foram descartadas
-    const sdrsReu = (data.squads.Sniper || {}).reunioes_por_sdr || [];
-    const tdn = (v) => `<td style="text-align:right">${v ?? 0}</td>`;
-    document.getElementById("reunioesPorSdr").innerHTML = sdrsReu.length ? `
-      <details class="detalhe-sdr" style="margin-top:10px">
-        <summary style="cursor:pointer;font-weight:600">Reuniões por SDR (${sdrsReu.length}) — conferência</summary>
-        <div class="tabela-wrap" style="margin-top:8px"><table>
-          <thead><tr><th>SDR</th><th style="text-align:right">Meta</th><th style="text-align:right">Contadas</th>
-            <th style="text-align:right" title="Reuniões fora por 'Reunião Validada? = Não' no deal (M6)">Validada? = Não</th></tr></thead>
-          <tbody>
-            ${sdrsReu.map(s => `<tr><td>${s.nome}</td>${tdn(s.meta)}${tdn(s.contadas)}${tdn(s.deal_fora_da_lista)}</tr>`).join("")}
-            <tr style="font-weight:700"><td>Total</td>${tdn(sdrsReu.reduce((t, s) => t + (s.meta || 0), 0))}${tdn(sdrsReu.reduce((t, s) => t + s.contadas, 0))}${tdn(sdrsReu.reduce((t, s) => t + s.deal_fora_da_lista, 0))}</tr>
-          </tbody>
-        </table></div>
-      </details>` : "";
-
-    const numeros = data.produtos_em_aberto_detalhes || {};
-    const linhasProdutos = ["PFCC", "CES", "LEAN", "ABP", "COAUTORIA", "Não classificado"];
-
-    function totalGeralNovosLeads(chave) {
-      return ["Sniper", "Navigator"].reduce((soma, squad) =>
-        soma + linhasProdutos.reduce((s2, p) => s2 + (((numeros[squad] || {})[p] || {})[chave] ?? 0), 0), 0);
-    }
-    const mql = data.mql_pfcc || { hoje: 0, mes: 0 };
-    const reapl = data.reaplicacoes || { hoje: 0, mes: 0, taxa_mes_pct: 0 };
-    document.getElementById("resumoNovosLeadsProdutos").innerHTML = `
-      <div class="perdidos-resumo-card card-destaque-suave">
-        <div class="rotulo">Novos MQL's/Leads Hoje - Geral</div>
-        <div class="valor">${totalGeralNovosLeads("novos_hoje")}</div>
-      </div>
-      <div class="perdidos-resumo-card card-destaque-suave">
-        <div class="rotulo">Novos MQL's/Leads Mês - Geral</div>
-        <div class="valor">${totalGeralNovosLeads("novos_mes")}</div>
-      </div>
-      <div class="perdidos-resumo-card card-destaque-suave">
-        <div class="rotulo">Reaplicações Mês - Geral</div>
-        <div class="valor">${reapl.mes ?? 0} <span class="valor-taxa">(${reapl.taxa_mes_pct ?? 0}% de taxa)</span></div>
-      </div>
-      <div class="perdidos-resumo-card">
-        <div class="rotulo">Novos MQL's <strong>PFCC</strong> — Hoje</div>
-        <div class="valor">${mql.hoje ?? 0}</div>
-      </div>
-      <div class="perdidos-resumo-card">
-        <div class="rotulo">Novos MQL's <strong>PFCC</strong> — Mês (Novos)</div>
-        <div class="valor">${mql.mes_novos ?? 0}</div>
-      </div>
-      <div class="perdidos-resumo-card">
-        <div class="rotulo">Novos MQL's <strong>PFCC</strong> — Mês (Reaplicados)</div>
-        <div class="valor">${mql.mes_reaplicados ?? 0}</div>
-      </div>
-      <div class="perdidos-resumo-card">
-        <div class="rotulo">Novos MQL's <strong>PFCC</strong> — Mês (Total)</div>
-        <div class="valor">${mql.mes ?? 0}</div>
-      </div>`;
-    const CATEGORIAS = [
-      { key: "abertos", label: "Abertos" },
-      { key: "novos_hoje", label: "Novos Leads Hoje", destaque: true, listaKey: "novos_hoje_lista" },
-      { key: "novos_ontem", label: "Novos Leads Ontem", destaque: true, listaKey: "novos_ontem_lista" },
-      { key: "novos_mes", label: "Novos Leads Mês", destaque: true, listaKey: "novos_mes_lista" },
-      { key: "reaplicacoes_hoje", label: "Reaplicações Hoje", destaque: true, listaKey: "reaplicacoes_hoje_lista" },
-      { key: "reaplicacoes_mes", label: "Reaplicações Mês", destaque: true, listaKey: "reaplicacoes_mes_lista" },
-      { key: "perdidos_mes", label: "Perdidos - Mês" },
-      { key: "perdidos_hoje", label: "Perdidos - Hoje" },
-      { key: "ganhos_mes", label: "Ganhos - Mês", listaKey: "ganhos_mes_lista" },
-      { key: "ganhos_hoje", label: "Ganhos - Hoje", listaKey: "ganhos_hoje_lista" },
-    ];
-
-    function listaIds(lista) {
-      if (!lista || lista.length === 0) return "<div class=\"status-vazio\">Nenhum</div>";
-      return lista.map(n => `<a class="status-id-item" href="${n.url}" target="_blank" rel="noopener">#${n.id}</a>`).join("");
+    function csvCampo(v) {
+      v = String(v == null ? "" : v);
+      return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
     }
 
-    function totalAbertosProduto(produto) {
-      return ["Olympus", "Sniper", "Navigator"].reduce(
-        (soma, squad) => soma + (((numeros[squad] || {})[produto] || {}).abertos ?? 0), 0
-      );
-    }
-
-    function blocoSquad(squad, produto) {
-      const dadosProduto = ((numeros[squad] || {})[produto]) || {};
-      const squadsComNovosLeads = ["Sniper", "Navigator"];
-      let categorias = CATEGORIAS;
-      if (squad === "Sniper") categorias = categorias.filter(c => !c.key.startsWith("ganhos"));
-      if (!squadsComNovosLeads.includes(squad)) categorias = categorias.filter(c => !c.key.startsWith("novos_") && !c.key.startsWith("reaplicacoes_"));
-      const grupos = categorias.map(cat => {
-        if (cat.listaKey) {
-          const lista = dadosProduto[cat.listaKey] || [];
-          return `
-            <details class="status-grupo-dropdown${cat.destaque ? ' status-grupo-destaque' : ''}">
-              <summary><span class="status-titulo">${cat.label}:</span> <span class="status-numero">${dadosProduto[cat.key] ?? 0}</span></summary>
-              <div class="status-ids-lista">${listaIds(lista)}</div>
-            </details>`;
-        }
-        return `
-          <div class="status-grupo${cat.destaque ? ' status-grupo-destaque' : ''}">
-            <span class="status-titulo">${cat.label}:</span>
-            <span class="status-numero">${dadosProduto[cat.key] ?? 0}</span>
-          </div>`;
-      }).join("");
-      return `
-        <div class="produto-squad">
-          <div class="produto-squad-titulo">${squad}</div>
-          ${grupos}
-        </div>`;
-    }
-
-    document.getElementById("cardsProdutos").innerHTML = linhasProdutos.map(p => `
-      <details class="produto-card">
-        <summary>${p} <span class="produto-total-abertos">Total aberto: ${totalAbertosProduto(p)}</span></summary>
-        <div class="produto-squads produto-squads-4">
-          ${blocoSquad("Olympus", p)}
-          ${blocoSquad("Sniper", p)}
-          ${blocoSquad("Navigator", p)}
-        </div>
-      </details>`).join("");
-
-    renderizarPerdidos(data.perdidos_analise);
-
-    document.getElementById("ultimaAtualizacao").textContent =
-      "Atualizado às " + new Date(data.geradoEm).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo" });
-    const c = data.carimbo || {};
-    document.getElementById("carimboCrn").textContent = c.crn_versao
-      ? `CRN ${c.crn_versao} · Squads: ${c.squads}` + (data.aviso_periodo ? ` · ⚠ ${data.aviso_periodo}` : "")
-      : "";
-  } catch (e) {
-    erroBox.textContent = "Erro ao atualizar: " + e.message;
-    erroBox.style.display = "block";
-  } finally {
-    btn.disabled = false;
-    btn.textContent = "Atualizar painel";
+    var bom = "﻿";
+    var blob = new Blob([bom + linhas.join("\n")], { type: "text/csv;charset=utf-8;" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    var hoje = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = "reunioes_validadas_" + hoje + ".csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
-}
-
-atualizaAuthUI();
-validaTokenSalvo().then(atualizar);
-setInterval(atualizar, INTERVALO_MS);
 </script>
+<script>
+  // RESPONSIVO (07/10, pedido do João: "consegue deixar ele responsivo
+  // dependendo da tela e computador?") — depois de rodadas tentando
+  // acertar um font-size fixo manualmente pra TV do João (cada tela real
+  // (resolução x escala do Windows x tela cheia ou não) deu um resultado
+  // diferente do simulado), a solução de verdade é medir o espaço que
+  // SOBROU de verdade em cada computador e ajustar sozinho, em vez de
+  // cravar um valor só. Busca binária: testa tamanhos de letra entre
+  // FONT_MIN e FONT_MAX e fica com o MAIOR que ainda cabe sem rolar
+  // (document.body.scrollHeight <= window.innerHeight) na tela de quem
+  // estiver vendo — funciona em qualquer resolução/escala/tela cheia,
+  // sem precisar calibrar na mão de novo a cada TV/PC diferente.
+  (function () {
+    var FONT_MIN = 9;
+    var FONT_MAX = 28;
+    var html = document.documentElement;
 
+    function cabeSemRolar() {
+      return document.body.scrollHeight <= window.innerHeight;
+    }
+
+    function ajustarZoomParaCaber() {
+      html.style.fontSize = FONT_MAX + "px";
+      if (cabeSemRolar()) return; // tela grande/alta o bastante pro tamanho máximo
+
+      html.style.fontSize = FONT_MIN + "px";
+      if (!cabeSemRolar()) return; // nem no tamanho mínimo coube — fica no mínimo mesmo assim
+
+      var baixo = FONT_MIN, alto = FONT_MAX, tentativas = 0;
+      while (alto - baixo > 0.5 && tentativas < 12) {
+        var meio = (baixo + alto) / 2;
+        html.style.fontSize = meio + "px";
+        if (cabeSemRolar()) {
+          baixo = meio;
+        } else {
+          alto = meio;
+        }
+        tentativas++;
+      }
+      html.style.fontSize = baixo + "px";
+    }
+
+    window.__boardBlackNovemberAjustarZoom = ajustarZoomParaCaber;
+    ajustarZoomParaCaber();
+
+    var resizeTimeout;
+    window.addEventListener("resize", function () {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(ajustarZoomParaCaber, 200);
+    });
+  })();
+</script>
+<script>
+  // Auto-atualização a cada 15 min (CORRIGIDO 07/10, pedido do João: "tá
+  // travando um pouco na TV"). Antes isso trocava o conteúdo com
+  // document.open()/write()/close() pra não "piscar a tela" — só que isso
+  // NÃO encerra o loop de animação do fundo (canvas de partículas, rodando
+  // a ~60fps) nem os listeners de resize/visibilidade da versão anterior:
+  // o window continua o mesmo por baixo do document.write, então cada
+  // ciclo de atualização criava um loop de animação NOVO por cima dos
+  // antigos, sem nunca cancelar os velhos. Numa TV ligada o dia inteiro,
+  // isso ia acumulando dezenas de loops "fantasmas" desenhando em canvas
+  // invisíveis — é esse acúmulo, bem mais que o servidor Flask em si, que
+  // ia deixando a máquina lenta ao longo do dia. location.reload() é uma
+  // recarga de página de verdade: destrói e recria o JS inteiro a cada
+  // ciclo, sem deixar nada pra trás (custa um pisca rápido de tela a cada
+  // 15 min, que numa TV sem ninguém mexendo não é perceptível).
+  //
+  // CORRIGIDO 07/10 (2ª rodada, pedido do João: "a cada atualização volta
+  // pra tela de Carregando...") — a tela de carregamento inicial troca o
+  // conteúdo com document.write, que NÃO atualiza a URL na barra de
+  // endereço: ela fica parada em "/", sem o "?_carregado=1". Um
+  // location.reload() simples recarregava essa URL crua de novo, caindo
+  // de novo na tela de carregamento a cada 15 min. Agora montamos a URL
+  // certa (com _carregado=1, e preservando month/tv se existirem) e
+  // navegamos pra ela — assim o reload sempre cai direto no dashboard.
+  setInterval(function () {
+    var url = new URL(window.location.href);
+    url.searchParams.set("_carregado", "1");
+    window.location.href = url.toString();
+  }, 15 * 60 * 1000);
+</script>
+<script>
+  // Foto (mesmo mecanismo do ARENA): tenta cada URL candidata até achar
+  // uma que exista; se nenhuma existir, fica invisível e as iniciais
+  // continuam aparecendo por baixo.
+  (function () {
+    function tentarProximaFoto(img) {
+      var candidatos;
+      try {
+        candidatos = JSON.parse(img.getAttribute("data-candidatos") || "[]");
+      } catch (e) {
+        candidatos = [];
+      }
+      if (!candidatos.length) return;
+      var proxima = candidatos.shift();
+      img.setAttribute("data-candidatos", JSON.stringify(candidatos));
+      img.src = proxima;
+    }
+    document.querySelectorAll(".foto[data-candidatos]").forEach(function (img) {
+      img.addEventListener("error", function () { tentarProximaFoto(img); });
+      img.addEventListener("load", function () {
+        img.classList.add("carregada");
+        if (img.parentElement) img.parentElement.classList.add("tem-foto");
+      });
+      tentarProximaFoto(img);
+    });
+  })();
+</script>
+<script>
+  // Fundo animado "poeira dourada" (mesmo mecanismo do ARENA, cores
+  // ajustadas pro preto puro) — canvas 2D puro, sem imagem/vídeo externo.
+  (function () {
+    var canvas = document.getElementById("bg-particulas");
+    if (!canvas || !canvas.getContext) return;
+    var ctx = canvas.getContext("2d");
+    var reduzMovimento = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    var largura, altura, dpr;
+    function redimensionar() {
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      largura = window.innerWidth;
+      altura = window.innerHeight;
+      canvas.width = largura * dpr;
+      canvas.height = altura * dpr;
+      canvas.style.width = largura + "px";
+      canvas.style.height = altura + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    // Reduzido de 70 (pedido do João, 07/10: "travando um pouco na TV") —
+    // menos partículas pra desenhar em todo frame.
+    var N_PARTICULAS = 40;
+    // Velocidade/oscilação aumentadas (pedido do João 03/11: "coloque um
+    // movimento maior no fundo, esta muito lento" — e de novo, mesmo dia:
+    // "deixe um movimento maior ao fundo, com uma cor um pouco mais
+    // viva") — subida ainda mais rápida (~2x em cima do primeiro ajuste) e
+    // sway maior; continua leve pra desenhar (só mudou deslocamento/cor,
+    // não a quantidade de partículas nem o jeito de desenhar).
+    function novaParticula(y) {
+      return {
+        x: Math.random() * largura,
+        y: y === undefined ? Math.random() * altura : y,
+        r: 0.6 + Math.random() * 2.1,
+        vy: 0.7 + Math.random() * 1.5,
+        fase: Math.random() * Math.PI * 2,
+        velFase: 0.04 + Math.random() * 0.07,
+        amplitude: 14 + Math.random() * 34,
+        brilhoBase: 0.3 + Math.random() * 0.6,
+      };
+    }
+    var particulas = [];
+    function recriarParticulas() {
+      particulas = [];
+      for (var i = 0; i < N_PARTICULAS; i++) particulas.push(novaParticula());
+    }
+
+    var t = 0;
+
+    // CORRIGIDO 07/10 — o gradiente radial do brilho de fundo era recriado
+    // (createRadialGradient, uma operação cara) em TODO frame. Só recalcula
+    // a cada FRAME_SKIP_GRADIENTE frames e reaproveita o último gradiente
+    // nos frames entre um recálculo e outro.
+    //
+    // MUDADO 03/11 (pedido do João: "deixei essa cor de fundo sem piscar,
+    // mas ela passando devagar pela tela toda, 'andando'") — antes o
+    // brilho ficava PARADO num canto só PISCANDO (opacidade/raio
+    // oscilando). Agora opacidade e raio são FIXOS (sem piscar) e quem se
+    // move é a POSIÇÃO do brilho — percorre a tela inteira devagar, num
+    // trajeto meio solto (frequências diferentes em X e Y, tipo Lissajous)
+    // em vez de ir e voltar numa linha reta óbvia. Baixei o
+    // FRAME_SKIP_GRADIENTE (10→4) pra esse movimento contínuo ficar mais
+    // suave; ainda é barato de desenhar (só 1 gradiente por recálculo).
+    var gradCache = null;
+    var gradCacheFrame = -999;
+    var FRAME_SKIP_GRADIENTE = 4;
+    function desenharFundo(numFrame) {
+      ctx.clearRect(0, 0, largura, altura);
+      ctx.fillStyle = "#000000";
+      ctx.fillRect(0, 0, largura, altura);
+
+      if (!gradCache || numFrame - gradCacheFrame >= FRAME_SKIP_GRADIENTE) {
+        var faseX = reduzMovimento ? 0 : t * 0.00009;
+        var faseY = reduzMovimento ? 0 : t * 0.00006;
+        var glowX = largura * (0.5 + 0.42 * Math.sin(faseX));
+        var glowY = altura * (0.5 + 0.42 * Math.sin(faseY * 0.73 + 1.7));
+        var glowR = Math.max(largura, altura) * 0.6;
+        gradCache = ctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, glowR);
+        gradCache.addColorStop(0, "rgba(255,183,40,0.30)");
+        gradCache.addColorStop(0.4, "rgba(200,130,20,0.13)");
+        gradCache.addColorStop(1, "rgba(0,0,0,0)");
+        gradCacheFrame = numFrame;
+      }
+      ctx.fillStyle = gradCache;
+      ctx.fillRect(0, 0, largura, altura);
+    }
+
+    // CORRIGIDO 07/10 (pedido do João: "travando um pouco na TV") — cada
+    // partícula usava ctx.shadowBlur (desenho com blur de verdade, bem
+    // pesado em CPU/GPU integrada) pra fazer o brilho. Trocado por um
+    // círculo levemente maior com opacidade mais baixa por fora — bem
+    // mais barato de desenhar, mantendo o efeito de "poeira dourada".
+    function desenharParticulas() {
+      // Cor mais viva (pedido do João 03/11) — âmbar mais puro/quente
+      // (255,190,50) em vez do dourado acinzentado de antes (212,175,55).
+      for (var i = 0; i < particulas.length; i++) {
+        var p = particulas[i];
+        var brilho = p.brilhoBase * (reduzMovimento ? 1 : (0.5 + 0.5 * Math.sin(p.fase)));
+        var x = p.x + (reduzMovimento ? 0 : Math.sin(p.fase * 0.5) * p.amplitude * 0.15);
+        ctx.beginPath();
+        ctx.fillStyle = "rgba(255,190,50," + (brilho * 0.4).toFixed(3) + ")";
+        ctx.arc(x, p.y, p.r * 2.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.fillStyle = "rgba(255,190,50," + brilho.toFixed(3) + ")";
+        ctx.arc(x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function atualizarParticulas() {
+      for (var i = 0; i < particulas.length; i++) {
+        var p = particulas[i];
+        p.y -= p.vy;
+        p.fase += p.velFase;
+        if (p.y < -10) {
+          particulas[i] = novaParticula(altura + 10);
+        }
+      }
+    }
+
+    // CORRIGIDO 07/10 — rodava a cada requestAnimationFrame (até 60fps)
+    // sem necessidade nenhuma, pra um movimento tão lento/sutil. Agora
+    // limita a desenhar no máximo ~30x por segundo (pula um frame de
+    // cada dois) — metade do trabalho de desenho, sem diferença visível.
+    var animando = false;
+    var numFrame = 0;
+    var ultimoDesenho = 0;
+    function frame(agora) {
+      if (animando && !reduzMovimento) requestAnimationFrame(frame);
+      agora = agora || 0;
+      if (agora - ultimoDesenho < 32) return;
+      ultimoDesenho = agora;
+      numFrame++;
+      t += 32;
+      desenharFundo(numFrame);
+      desenharParticulas();
+      if (!reduzMovimento) atualizarParticulas();
+    }
+
+    function iniciar() {
+      redimensionar();
+      recriarParticulas();
+      gradCache = null;
+      desenharFundo(0);
+      desenharParticulas();
+      if (reduzMovimento) return;
+      if (!animando) {
+        animando = true;
+        requestAnimationFrame(frame);
+      }
+    }
+
+    document.addEventListener("visibilitychange", function () {
+      if (document.hidden) {
+        animando = false;
+      } else if (!reduzMovimento && !animando) {
+        animando = true;
+        requestAnimationFrame(frame);
+      }
+    });
+
+    var resizeTimeout;
+    window.addEventListener("resize", function () {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(iniciar, 150);
+    });
+
+    iniciar();
+  })();
+</script>
+<script>
+  // Celebração ao bater meta (pedido do João 03/11: "dash mais dinâmico") —
+  // só no cliente, sem depender de websocket/servidor. A cada carregada da
+  // página comparamos quem é o 1º SDR/Closer do dia com o que ficou salvo
+  // no localStorage DESTE navegador/TV pra essa MESMA data; se é alguém
+  // novo, dispara aviso + confete uma vez. Chave leva a data de hoje, então
+  // reseta sozinho todo dia, sem nada a mais no servidor — mesmo espírito
+  // do "Destaque Contínuo sem estado".
+  (function () {
+    try {
+      var hoje = {{ hoje_iso | tojson }};
+      var atual = {
+        sdr: {{ (primeiro_sdr_dia.nome if primeiro_sdr_dia else none) | tojson }},
+        closer: {{ (primeiro_closer_dia.nome if primeiro_closer_dia else none) | tojson }}
+      };
+      var chave = "boardBlackNovemberCelebracao_" + hoje;
+      var anteriorBruto = null;
+      try { anteriorBruto = localStorage.getItem(chave); } catch (e) { anteriorBruto = null; }
+
+      if (anteriorBruto === null) {
+        // 1ª carregada do dia nesta TV/navegador: só grava a referência,
+        // sem comemorar (senão comemora quem já tinha batido antes de
+        // abrir a página).
+        try { localStorage.setItem(chave, JSON.stringify(atual)); } catch (e) {}
+        return;
+      }
+
+      var anterior = {};
+      try { anterior = JSON.parse(anteriorBruto) || {}; } catch (e) { anterior = {}; }
+
+      var novos = [];
+      if (atual.sdr && atual.sdr !== anterior.sdr) novos.push(atual.sdr + " (SDR)");
+      if (atual.closer && atual.closer !== anterior.closer) novos.push(atual.closer + " (Closer)");
+
+      try { localStorage.setItem(chave, JSON.stringify(atual)); } catch (e) {}
+
+      if (novos.length) {
+        dispararCelebracao(novos.join(" e ") + " bateu a meta do dia! 🎉");
+      }
+    } catch (e) {
+      // nunca deixa essa "firula" derrubar o resto do painel
+    }
+  })();
+
+  function dispararCelebracao(mensagem) {
+    var aviso = document.createElement("div");
+    aviso.className = "celebracao-aviso";
+    aviso.textContent = mensagem;
+    document.body.appendChild(aviso);
+    setTimeout(function () { aviso.remove(); }, 6000);
+
+    var reduzMovimento = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduzMovimento) return;
+
+    var cores = ["#d4af37", "#3ecf8e", "#ffffff", "#b9a06a"];
+    for (var i = 0; i < 70; i++) {
+      var c = document.createElement("div");
+      c.className = "confete";
+      c.style.left = (Math.random() * 100) + "vw";
+      c.style.background = cores[Math.floor(Math.random() * cores.length)];
+      c.style.animationDuration = (2.4 + Math.random() * 1.6) + "s";
+      c.style.animationDelay = (Math.random() * 0.5) + "s";
+      document.body.appendChild(c);
+      (function (el) { setTimeout(function () { el.remove(); }, 5200); })(c);
+    }
+  }
+
+  // Pulso ao ultrapassar um marco de 25/50/75/100% na barra de "Meta do
+  // time" (pedido do João 03/11) — mesma ideia da celebração: compara o
+  // % atual com o que ficou salvo no localStorage (chave por MÊS, não por
+  // dia, já que o atingimento é acumulado do mês inteiro) e, se cruzou
+  // algum marco desde o último carregamento, soma a classe "pulso-marco"
+  // por ~1.6s. Zero estado no servidor, reseta sozinho na virada do mês.
+  (function () {
+    try {
+      var MARCOS = [25, 50, 75, 100];
+      var chaveMes = "boardBlackNovemberMarcosSquad_" + {{ month | tojson }};
+      var anterior = {};
+      try { anterior = JSON.parse(localStorage.getItem(chaveMes) || "{}") || {}; } catch (e) { anterior = {}; }
+
+      var barras = document.querySelectorAll(".squad-barra[data-atingimento]");
+      var atual = {};
+      barras.forEach(function (barra) {
+        var squad = barra.id.replace("squad-barra-", "");
+        var pct = parseFloat(barra.getAttribute("data-atingimento")) || 0;
+        atual[squad] = pct;
+
+        var pctAnterior = anterior[squad];
+        if (typeof pctAnterior === "number") {
+          var cruzouAlgum = MARCOS.some(function (marco) {
+            return pctAnterior < marco && pct >= marco;
+          });
+          if (cruzouAlgum) {
+            barra.classList.add("pulso-marco");
+            setTimeout(function () { barra.classList.remove("pulso-marco"); }, 1700);
+          }
+        }
+      });
+
+      try { localStorage.setItem(chaveMes, JSON.stringify(atual)); } catch (e) {}
+    } catch (e) {
+      // nunca deixa essa "firula" derrubar o resto do painel
+    }
+  })();
+</script>
 </body>
 </html>
