@@ -1430,7 +1430,7 @@ async function atualizar() {
       "Atualizado às " + new Date(data.geradoEm).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo" });
     const c = data.carimbo || {};
     document.getElementById("carimboCrn").textContent = c.crn_versao
-      ? `CRN ${c.crn_versao} · Squads: ${c.squads}`
+      ? `CRN ${c.crn_versao} · Squads: ${c.squads}` + (data.aviso_periodo ? ` · ⚠ ${data.aviso_periodo}` : "")
       : "";
   } catch (e) {
     erroBox.textContent = "Erro ao atualizar: " + e.message;
