@@ -1530,6 +1530,9 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
     feriados = carregar_feriados()
     ano, mes, colaboradores, metas, aviso_periodo = carregar_mes_com_fallback(ano, mes)
     e_mes_atual = (ano, mes) == (hoje.year, hoje.month)
+    # Mês fechado (fallback): compara com o mês anterior até o último dia do mês mostrado.
+    comparar_mes_passado = e_mes_atual or bool(aviso_periodo)
+    data_ref = hoje if e_mes_atual else dt.date(ano, mes, calendar.monthrange(ano, mes)[1])
     du = calcular_dias_uteis(ano, mes, feriados)
     # Se não sobra nenhum dia útil DEPOIS de hoje, mas hoje ainda é dia útil,
     # considera hoje como "1 dia" pra não zerar o Meta/Dia 100% no último dia do mês.
@@ -1582,11 +1585,11 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
     squads_mes_passado_atingimento = {s: 0.0 for s in SQUADS_FINANCEIROS}
     mes_passado_rotulo = None
     colaboradores_mp, metas_mp, ano_passado, mes_passado, dia_alvo_mes_passado = None, None, None, None, None
-    if e_mes_atual:
+    if comparar_mes_passado:
         ano_passado = ano - 1 if mes == 1 else ano
         mes_passado = 12 if mes == 1 else mes - 1
         ultimo_dia_mes_passado = calendar.monthrange(ano_passado, mes_passado)[1]
-        dia_alvo_mes_passado = min(hoje.day, ultimo_dia_mes_passado)
+        dia_alvo_mes_passado = min(data_ref.day, ultimo_dia_mes_passado)
         data_corte_mes_passado = dt.date(ano_passado, mes_passado, dia_alvo_mes_passado)
         mes_passado_rotulo = data_corte_mes_passado.strftime("%d/%m")
 
@@ -1730,7 +1733,7 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
         **{k: round(v, 2) for k, v in totais_previsto.items()},
         "mes_passado_atingimento": round(
             safe_div(sum(squads_mes_passado.values()), sum(meta_squad_mp(s) for s in SQUADS_FINANCEIROS)) * 100, 2
-        ) if e_mes_atual else 0.0,
+        ) if comparar_mes_passado else 0.0,
     }
     resultado["mes_passado_rotulo"] = mes_passado_rotulo
 
@@ -1784,7 +1787,7 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
     # ---- Sniper: mesmo comparativo do mês passado (M6 com Colab/Metas daquele mês) ----
     validadas_mes_passado = 0
     meta_reunioes_mes_passado = 0.0
-    if e_mes_atual and colaboradores_mp is not None:
+    if comparar_mes_passado and colaboradores_mp is not None:
         colab_mp = next(iter(colaboradores_mp.values()))["_colab"] if colaboradores_mp else []
         ini_mp = dt.date(ano_passado, mes_passado, 1)
         corte_mp = dt.date(ano_passado, mes_passado, dia_alvo_mes_passado)
