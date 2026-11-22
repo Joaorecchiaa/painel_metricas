@@ -533,6 +533,7 @@
   <button class="aba-btn" id="btnAbaProdutos" onclick="mostrarPagina('produtos')">Produtos</button>
   <button class="aba-btn" id="btnAbaPerdidos" onclick="mostrarPagina('perdidos')">Perdidos</button>
   <button class="aba-btn" id="btnAbaMetasBA" onclick="mostrarPagina('metasba')">Metas BA</button>
+  <button class="aba-btn" id="btnAbaClosers" onclick="mostrarPagina('closers')">Closers</button>
 </nav>
 
 <div id="paginaMetricas">
@@ -598,6 +599,20 @@
     <div class="sub" style="color:var(--muted); margin-bottom:10px;">Motivos de perda fora do esperado pra etapa em que o negócio estava</div>
     <div id="auditoriaPerdidosGeral"></div>
     <div id="cardsAuditoriaFunil" class="perdidos-funis"></div>
+  </div>
+</div>
+
+<div id="paginaClosers" style="display:none;">
+  <div class="filtro-perdidos">
+    <span class="sub" style="color:var(--muted);">Closers do Olympus · vendido no mês e quanto falta para a meta</span>
+    <button id="btnAtualizarClosers" onclick="carregarClosers()">Atualizar</button>
+  </div>
+  <div id="closersCarregando" class="status-vazio" style="padding:20px 0;">Clique em "Closers" pra carregar</div>
+  <div id="closersConteudo" style="display:none;">
+    <h2 class="titulo-tabela">CLOSERS — VENDIDO E FALTA PARA A META</h2>
+    <div class="tabela-wrap"><table id="tabelaClosers"></table></div>
+    <div id="closersObs" style="font-size:11px; color:var(--muted); margin-top:8px;"></div>
+    <div id="closersCarimbo" style="font-size:11px; color:var(--muted); margin-top:4px;"></div>
   </div>
 </div>
 
@@ -885,12 +900,56 @@ function mostrarPagina(pagina) {
   document.getElementById("btnAbaProdutos").classList.toggle("ativa", pagina === "produtos");
   document.getElementById("btnAbaPerdidos").classList.toggle("ativa", pagina === "perdidos");
   document.getElementById("btnAbaMetasBA").classList.toggle("ativa", pagina === "metasba");
+  document.getElementById("paginaClosers").style.display = pagina === "closers" ? "" : "none";
+  document.getElementById("btnAbaClosers").classList.toggle("ativa", pagina === "closers");
+  if (pagina === "closers" && !closersCarregado) carregarClosers();
   if (pagina === "metasba" && !metasBaCarregada) {
     carregarMetasBA(false);
   }
 }
 
 let metasBaCarregada = false;
+let closersCarregado = false;
+
+async function carregarClosers() {
+  const btn = document.getElementById("btnAtualizarClosers");
+  const carregando = document.getElementById("closersCarregando");
+  const conteudo = document.getElementById("closersConteudo");
+  btn.disabled = true; btn.textContent = "Carregando...";
+  carregando.style.display = ""; carregando.textContent = "Carregando..."; conteudo.style.display = "none";
+  try {
+    const params = new URLSearchParams({ route: "closers", mes: document.getElementById("seletorMes").value, ano: document.getElementById("seletorAno").value });
+    const resp = await fetch(`${API_URL}?${params.toString()}`, { cache: "no-store", headers: authHeaders() });
+    const data = await resp.json();
+    if (data.erro) throw new Error(data.erro);
+    renderizarClosers(data.closers);
+    closersCarregado = true;
+    carregando.style.display = "none"; conteudo.style.display = "";
+  } catch (e) {
+    carregando.textContent = "Erro ao carregar: " + e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = "Atualizar";
+  }
+}
+
+function renderizarClosers(c) {
+  const m = v => fmtMoedaBA(v);
+  const pill = v => v == null ? "—" : `<span class="pill ${pillClasseBA(v)}">${fmtPctBA(v)}</span>`;
+  const cab = ["Closer","Vendas","Meta","Bruto","Falta (bruto)","% (bruto)","C/ multiplicador","Falta (c/ mult.)","% (c/ mult.)"];
+  const linha = r => `<tr><td>${r.nome}</td><td>${r.vendas}</td><td>${m(r.meta)}</td><td>${m(r.bruto)}</td><td>${m(r.falta_bruto)}</td><td>${pill(r.pct_bruto)}</td><td>${m(r.multi)}</td><td>${m(r.falta_multi)}</td><td>${pill(r.pct_multi)}</td></tr>`;
+  const t = c.total;
+  document.getElementById("tabelaClosers").innerHTML =
+    `<thead><tr>${cab.map(x => `<th>${x}</th>`).join("")}</tr></thead><tbody>${c.linhas.map(linha).join("")}` +
+    `<tr class="total-linha" style="font-weight:600"><td>TOTAL OLYMPUS</td><td>${t.vendas}</td><td>${m(t.meta)}</td><td>${m(t.bruto)}</td><td>${m(t.falta_bruto)}</td><td>${pill(t.meta ? t.bruto / t.meta * 100 : null)}</td><td>${m(t.multi)}</td><td>${m(t.falta_multi)}</td><td>${pill(t.meta ? t.multi / t.meta * 100 : null)}</td></tr></tbody>`;
+  const sm = c.sem_meta;
+  document.getElementById("closersObs").textContent =
+    "Falta = meta − vendido (zero quando já bateu). A meta financeira é medida com multiplicador; a coluna bruto compara o bruto com a mesma meta." +
+    (sm.qtd ? ` Fora da tabela, sem meta individual: ${sm.qtd} venda(s), ${m(sm.bruto)} bruto / ${m(sm.multi)} c/ mult.` : "") +
+    (c.aviso ? " ⚠ " + c.aviso : "");
+  const k = c.carimbo;
+  document.getElementById("closersCarimbo").textContent =
+    `CRN ${k.crn_versao} · Eixo: ${k.eixo} · Valor: ${k.valor} · Recorte: ${k.recorte} · Atualizado: ${k.atualizado}`;
+}
 
 function fmtMoedaBA(v) {
   return (v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
