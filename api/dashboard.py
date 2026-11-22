@@ -1105,6 +1105,42 @@ def montar_resposta_metas_ba(mes_param, ano_param):
     return {"metas_board_academy": montar_metas_board_academy(ano, mes, hoje, ontem)}
 
 
+def montar_closers(ano_param, mes_param):
+    """Aba Closers: por closer do Olympus, vendido no mês (M2-B bruto e M2-M c/ multiplicador, via M1)
+    e quanto falta para a meta financeira (M3). Eixo: data de ganho (Brasília)."""
+    hoje = hoje_brt()
+    ano, mes = ano_param or hoje.year, mes_param or hoje.month
+    ano, mes, colaboradores, metas, aviso = carregar_mes_com_fallback(ano, mes)
+    users_map = pd_users()
+    validos = buscar_deals_ganhos(ano, mes, users_map)
+    colab_lista = next(iter(colaboradores.values()))["_colab"] if colaboradores else []
+    por = _m1.ganhos_por_closer(validos, colab_lista, _funis_cached(), users_map)
+    linhas, sem_meta = [], {"qtd": 0, "bruto": 0.0, "multi": 0.0}
+    for nome, c in colaboradores.items():
+        if c["subarea"] != "mgm":
+            continue
+        deals = por.get(nome, {}).get("deals", [])
+        m = metas.get(nome)
+        meta = m["meta_fin"] if m and m.get("papel") == "closer" else 0
+        bruto, multi = _m2.bruto(deals), _m2.multiplicador(deals)
+        if not meta:
+            sem_meta["qtd"] += len(deals); sem_meta["bruto"] += bruto; sem_meta["multi"] += multi
+            continue
+        linhas.append({
+            "nome": c["nome_exibicao"], "vendas": len(deals), "meta": meta,
+            "bruto": round(bruto, 2), "multi": round(multi, 2),
+            "falta_bruto": round(max(0, meta - bruto), 2), "falta_multi": round(max(0, meta - multi), 2),
+            "pct_bruto": _m3.atingimento(bruto, meta), "pct_multi": _m3.atingimento(multi, meta),
+        })
+    linhas.sort(key=lambda r: -r["multi"])
+    tot = {k: round(sum(r[k] for r in linhas), 2) for k in ("meta", "bruto", "multi", "falta_bruto", "falta_multi")}
+    tot["vendas"] = sum(r["vendas"] for r in linhas)
+    return {"closers": {"mes": mes, "ano": ano, "aviso": aviso, "linhas": linhas, "total": tot,
+                        "sem_meta": {k: round(v, 2) for k, v in sem_meta.items()},
+                        "carimbo": {"crn_versao": crn.versao(), "eixo": "data de ganho", "valor": "bruto e c/ multiplicador",
+                                    "recorte": "closers do Olympus com meta", "atualizado": _fuso.agora_brasil().strftime("%d/%m/%Y %H:%M")}}}
+
+
 def montar_atingimento_historico(ano, mes, dia_inicio, dia_fim):
     """Só cálculo (não vai pro painel) — reconstrói o Atingimento (%) de cada dia,
     olhando só os negócios que já estavam ganhos até aquela data (won_time <= dia).
@@ -2060,6 +2096,16 @@ class handler(BaseHTTPRequestHandler):
 
             if rota == "metas_ba":
                 payload = montar_resposta_metas_ba(mes_param, ano_param)
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            if rota == "closers":
+                payload = montar_closers(ano_param, mes_param)
                 body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
