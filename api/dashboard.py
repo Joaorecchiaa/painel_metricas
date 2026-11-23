@@ -1613,6 +1613,38 @@ def montar_resposta_perdidos_periodo(mes_param, ano_param, perdidos_inicio, perd
 
 
 
+def filtrar_painel_por_papel(res, papel):
+    """Segmentação por equipe (servidor): admin vê tudo; olympus só Olympus; sniper só Sniper (+ Navigator nos Produtos,
+    que compõem os Novos Leads do Sniper). O dado das outras equipes nem sai do servidor."""
+    if papel == "admin":
+        return res
+    zero_mql = {"hoje": 0, "mes": 0, "mes_novos": 0, "mes_reaplicados": 0}
+    zero_reapl = {"hoje": 0, "mes": 0, "taxa_mes_pct": 0}
+    if papel == "olympus":
+        manter = {"Olympus", "Total"}
+        res["squads"] = {k: v for k, v in res["squads"].items() if k in manter}
+        res["produtos_em_aberto_detalhes"] = {k: v for k, v in res["produtos_em_aberto_detalhes"].items() if k == "Olympus"}
+        res["previsto_hoje_detalhes"] = {k: v for k, v in res["previsto_hoje_detalhes"].items() if k in manter}
+        res["debug_previsto_hoje_deals"] = {k: v for k, v in res["debug_previsto_hoje_deals"].items() if k == "Olympus"}
+        res["debug_closers"] = {k: v for k, v in res["debug_closers"].items() if k == "Olympus"}
+        res["mql_pfcc"], res["reaplicacoes"] = zero_mql, zero_reapl
+        for k in ("debug_sniper", "debug_sniper_financeiro"):
+            res.pop(k, None)
+        if isinstance(res.get("carimbo"), dict):
+            res["carimbo"]["squads"] = "Olympus"
+    elif papel == "sniper":
+        res["squads"] = {k: v for k, v in res["squads"].items() if k == "Sniper"}
+        res["produtos_em_aberto_detalhes"] = {k: v for k, v in res["produtos_em_aberto_detalhes"].items() if k in ("Sniper", "Navigator")}
+        res["previsto_hoje_detalhes"] = {}
+        res["debug_previsto_hoje_deals"] = {}
+        res["debug_closers"] = {}
+        if isinstance(res.get("carimbo"), dict):
+            res["carimbo"]["squads"] = "Sniper"
+    else:
+        raise PermissionError("Papel sem acesso ao painel.")
+    return res
+
+
 def montar_painel(ano_param=None, mes_param=None, papel=None):
     hoje = hoje_brt()
     ano, mes = ano_param or hoje.year, mes_param or hoje.month
@@ -2115,7 +2147,7 @@ def montar_painel(ano_param=None, mes_param=None, papel=None):
         "squads": "Olympus e Sniper",
         "atualizado": dt.datetime.now(_fuso.TZ_BR).strftime("%d/%m/%Y %H:%M") if hasattr(_fuso, "TZ_BR") else _fuso.agora_brasil().strftime("%d/%m/%Y %H:%M"),
     }
-    return resultado
+    return filtrar_painel_por_papel(resultado, papel)
 
 
 # ---------------------------------------------------------------------------
@@ -2148,6 +2180,25 @@ class handler(BaseHTTPRequestHandler):
 
             mes_param = int(query["mes"][0]) if "mes" in query else None
             ano_param = int(query["ano"][0]) if "ano" in query else None
+
+            # Segmentação por equipe: tudo exige login. metas_ba/históricos = só admin; closers = admin e olympus.
+            sessao = sessao_da_requisicao(self.headers)
+            papel_sessao = sessao["papel"] if sessao else None
+            negado = None
+            if papel_sessao is None:
+                negado = (401, "Login necessário.")
+            elif rota in ("metas_ba", "historico_mql_ganhos", "atingimento_historico") and papel_sessao != "admin":
+                negado = (403, "Sem acesso a esta aba.")
+            elif rota == "closers" and papel_sessao not in ("admin", "olympus"):
+                negado = (403, "Sem acesso a esta aba.")
+            if negado:
+                body = json.dumps({"erro": negado[1], "login_necessario": negado[0] == 401}, ensure_ascii=False).encode("utf-8")
+                self.send_response(negado[0])
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(body)
+                return
 
             if rota == "metas_ba":
                 payload = montar_resposta_metas_ba(mes_param, ano_param)
