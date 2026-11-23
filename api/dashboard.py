@@ -252,31 +252,85 @@ def _sha256_senha(txt):
     return hashlib.sha256(txt.encode("utf-8")).hexdigest()
 
 
-def _carregar_usuarios_painel():
-    raw = os.environ.get("USUARIOS_PAINEL", "") or ""
-    raw = raw.strip().strip('"').strip("'").strip()
+_ACESSOS_CACHE = {"t": 0.0, "dados": None}
+_ACESSOS_TTL = 120  # segundos: mudança na planilha vale em até 2 minutos, sem deploy
+
+
+def _chave_coluna(txt):
+    return "".join(c for c in unicodedata.normalize("NFD", str(txt or "").lower().strip())
+                   if not unicodedata.combining(c))
+
+
+def _usuarios_da_planilha(url):
+    """Lê a planilha de acessos (CSV). Colunas: Usuario, Senha, Papel, Ativo (SIM/NAO).
+    Linha com Ativo = NAO (ou vazio de usuário/senha) não entra. Devolve {usuario: {senha, papel}}."""
+    r = requests.get(url, timeout=15)
+    r.raise_for_status()
+    linhas = list(csv.reader(io.StringIO(r.content.decode("utf-8-sig"))))
+    if not linhas:
+        return {}
+    cab = [_chave_coluna(c) for c in linhas[0]]
+    idx = {nome: cab.index(nome) for nome in ("usuario", "senha", "papel") if nome in cab}
+    if len(idx) < 3:
+        raise ValueError("Planilha de acessos precisa das colunas Usuario, Senha, Papel (e Ativo).")
+    i_ativo = cab.index("ativo") if "ativo" in cab else None
+    usuarios = {}
+    for l in linhas[1:]:
+        def cel(i):
+            return l[i].strip() if i is not None and i < len(l) else ""
+        u, senha, papel = cel(idx["usuario"]).lower(), cel(idx["senha"]), cel(idx["papel"]).lower()
+        if not u or not senha or papel not in PAPEIS_VALIDOS:
+            continue
+        if i_ativo is not None and _chave_coluna(cel(i_ativo)) not in ("sim", "s", "1", "true", "x"):
+            continue
+        usuarios[u] = {"senha": senha, "papel": papel}
+    return usuarios
+
+
+def _usuarios_da_variavel():
+    """Plano B (antigo): USUARIOS_PAINEL = usuario:hash_sha256:papel, separados por vírgula."""
+    raw = (os.environ.get("USUARIOS_PAINEL", "") or "").strip().strip('"').strip("'").strip()
     usuarios = {}
     for par in raw.split(","):
-        par = par.strip()
-        if not par:
-            continue
-        partes = par.split(":")
+        partes = par.strip().split(":")
         if len(partes) != 3:
             continue
         u, h, papel = partes
         papel = papel.strip().lower()
-        if papel not in PAPEIS_VALIDOS:
-            continue
-        usuarios[u.strip().lower()] = {"hash": h.strip().lower(), "papel": papel}
+        if papel in PAPEIS_VALIDOS:
+            usuarios[u.strip().lower()] = {"hash": h.strip().lower(), "papel": papel}
     return usuarios
 
 
+def _carregar_usuarios_painel():
+    """Planilha de acessos (URL_ACESSOS) com cache de 2 min. Se a planilha falhar, usa o último cache bom;
+    sem planilha configurada, usa a variável USUARIOS_PAINEL."""
+    url = (os.environ.get("URL_ACESSOS", "") or "").strip()
+    if not url:
+        return _usuarios_da_variavel()
+    agora = _time.time()
+    if _ACESSOS_CACHE["dados"] is not None and agora - _ACESSOS_CACHE["t"] < _ACESSOS_TTL:
+        return _ACESSOS_CACHE["dados"]
+    try:
+        dados = _usuarios_da_planilha(url)
+        _ACESSOS_CACHE.update(t=agora, dados=dados)
+        return dados
+    except Exception as e:
+        print(f"[acessos] falha ao ler a planilha: {e}")
+        if _ACESSOS_CACHE["dados"] is not None:
+            return _ACESSOS_CACHE["dados"]
+        return _usuarios_da_variavel()
+
+
 def checa_login(usuario, senha):
-    usuarios = _carregar_usuarios_painel()
-    info = usuarios.get(str(usuario).strip().lower())
-    if info and hmac.compare_digest(info["hash"], _sha256_senha(str(senha))):
-        return info["papel"]
-    return None
+    info = _carregar_usuarios_painel().get(str(usuario).strip().lower())
+    if not info:
+        return None
+    if "senha" in info:
+        ok = hmac.compare_digest(info["senha"].encode("utf-8"), str(senha).encode("utf-8"))
+    else:
+        ok = hmac.compare_digest(info["hash"], _sha256_senha(str(senha)))
+    return info["papel"] if ok else None
 
 
 def gera_token(usuario, papel):
