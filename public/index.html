@@ -618,6 +618,7 @@
     <h2 class="titulo-tabela">CLOSERS — VENDIDO E FALTA PARA A META</h2>
     <div class="tabela-wrap"><table id="tabelaClosers"></table></div>
     <div id="closersObs" style="font-size:11px; color:var(--muted); margin-top:8px;"></div>
+    <div id="closersVendasDia" style="margin-top:22px;"></div>
     <div id="closersCarimbo" style="font-size:11px; color:var(--muted); margin-top:4px;"></div>
   </div>
 </div>
@@ -965,6 +966,30 @@ async function carregarClosers() {
   }
 }
 
+
+function renderizarVendasDoDia(vd) {
+  const el = document.getElementById("closersVendasDia");
+  if (!vd || !vd.data) { el.innerHTML = ""; return; }
+  const m = v => fmtMoedaBA(v);
+  const [a, mm, d] = vd.data.split("-");
+  const titulo = `VENDAS DE HOJE (${d}/${mm}/${a}) — POR CLOSER`;
+  if (!vd.closers.length) {
+    el.innerHTML = `<h2 class="titulo-tabela">${titulo}</h2><div class="status-vazio" style="padding:12px 0;">Nenhuma venda de closer hoje até agora.</div>`;
+    return;
+  }
+  const blocos = vd.closers.map(c => `
+    <details class="colaborador-dropdown" open>
+      <summary><span class="colaborador-nome">${c.nome}</span> <span class="colaborador-qtd">${c.qtd}</span>
+        <span style="margin-left:12px;color:var(--muted);font-size:12px;">bruto ${m(c.bruto)} · c/ mult. ${m(c.multi)}</span></summary>
+      <div class="tabela-wrap" style="margin:6px 0 10px;"><table>
+        <thead><tr><th>Hora</th><th>Negócio</th><th style="text-align:right">Bruto</th><th style="text-align:right">C/ multiplicador</th></tr></thead>
+        <tbody>${c.vendas.map(v => `<tr><td>${v.hora}</td><td><a href="${v.url}" target="_blank" rel="noopener">#${v.id}</a> ${v.titulo}</td><td style="text-align:right">${m(v.bruto)}</td><td style="text-align:right">${m(v.multi)}</td></tr>`).join("")}</tbody>
+      </table></div>
+    </details>`).join("");
+  el.innerHTML = `<h2 class="titulo-tabela">${titulo}</h2>
+    <div style="margin:4px 0 8px;font-size:13px;"><strong>${vd.total.qtd} venda(s)</strong> · bruto ${m(vd.total.bruto)} · c/ multiplicador ${m(vd.total.multi)}</div>${blocos}`;
+}
+
 function renderizarClosers(c) {
   const m = v => fmtMoedaBA(v);
   const pill = v => v == null ? "—" : `<span class="pill ${pillClasseBA(v)}">${fmtPctBA(v)}</span>`;
@@ -979,6 +1004,7 @@ function renderizarClosers(c) {
     "Falta = meta − vendido (zero quando já bateu). A meta financeira é medida com multiplicador; a coluna bruto compara o bruto com a mesma meta." +
     (sm.qtd ? ` Fora da tabela, sem meta individual: ${sm.qtd} venda(s), ${m(sm.bruto)} bruto / ${m(sm.multi)} c/ mult.` : "") +
     (c.aviso ? " ⚠ " + c.aviso : "");
+  renderizarVendasDoDia(c.vendas_dia);
   const k = c.carimbo;
   document.getElementById("closersCarimbo").textContent =
     `CRN ${k.crn_versao} · Eixo: ${k.eixo} · Valor: ${k.valor} · Recorte: ${k.recorte} · Atualizado: ${k.atualizado}`;
