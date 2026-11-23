@@ -12,6 +12,7 @@ Sem cache: cada chamada refaz tudo (decisão do time, ver /areas/acompanhamento-
 
 import os
 import csv
+import requests
 import io
 import json
 import unicodedata
