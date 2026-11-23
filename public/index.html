@@ -483,14 +483,21 @@
   /* Closers: vendas do dia */
   .vd-resumo { margin: 4px 0 12px; font-size: 13px; }
   .vd-card { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; overflow: hidden; background: #fff; }
-  .vd-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #f7f7f8; border-bottom: 1px solid var(--border); }
-  .vd-nome { font-weight: 700; }
+  .vd-card > summary { list-style: none; cursor: pointer; display: flex; align-items: center; padding: 10px 0 10px 14px; background: #f7f7f8; }
+  .vd-card > summary::-webkit-details-marker { display: none; }
+  .vd-card > summary:hover { background: #f0f0f0; }
+  .vd-card[open] > summary { border-bottom: 1px solid var(--border); }
+  .vd-seta { font-size: 10px; color: var(--muted); width: 14px; transition: transform .15s; }
+  .vd-card[open] .vd-seta { transform: rotate(90deg); }
+  .vd-nome { font-size: 13px; font-weight: 600; text-decoration: underline; margin-right: 8px; }
   .vd-qtd { font-size: 11px; font-weight: 600; background: #e5e7eb; border-radius: 999px; padding: 2px 8px; color: #374151; }
-  .vd-tot { margin-left: auto; font-size: 12px; color: var(--muted); }
-  .vd-tot strong { color: var(--ink); }
+  .vd-esp { flex: 1; }
+  .vd-tot { width: 150px; box-sizing: border-box; padding-right: 14px; text-align: right; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .vd-lbl { font-size: 10px; font-weight: 600; color: var(--muted); text-transform: uppercase; margin-right: 4px; }
   table.vd { width: 100%; table-layout: fixed; border-collapse: collapse; }
   table.vd th, table.vd td { padding: 8px 14px; font-size: 13px; border-bottom: 1px solid #f0f0f0; text-align: left; background: transparent; }
   table.vd thead th { font-size: 11px; text-transform: uppercase; color: var(--muted); background: #fff; }
+  table.vd td.c-val, table.vd th.c-val { padding-right: 14px; font-variant-numeric: tabular-nums; }
   table.vd tr:last-child td { border-bottom: none; }
   table.vd .c-hora { width: 80px; }
   table.vd .c-val { width: 150px; text-align: right; }
@@ -996,19 +1003,22 @@ function renderizarVendasDoDia(vd) {
     return;
   }
   const blocos = vd.closers.map(c => `
-    <div class="vd-card">
-      <div class="vd-head">
+    <details class="vd-card" open>
+      <summary>
+        <span class="vd-seta">▶</span>
         <span class="vd-nome">${esc(c.nome)}</span>
         <span class="vd-qtd">${c.qtd} ${c.qtd === 1 ? "venda" : "vendas"}</span>
-        <span class="vd-tot">bruto <strong>${m(c.bruto)}</strong> · c/ mult. <strong>${m(c.multi)}</strong></span>
-      </div>
+        <span class="vd-esp"></span>
+        <span class="vd-tot"><span class="vd-lbl">Bruto</span>${m(c.bruto)}</span>
+        <span class="vd-tot"><span class="vd-lbl">C/ mult.</span>${m(c.multi)}</span>
+      </summary>
       <table class="vd">
         <thead><tr><th class="c-hora">Hora</th><th>Negócio</th><th class="c-val">Bruto</th><th class="c-val">C/ multiplicador</th></tr></thead>
         <tbody>${c.vendas.map(v => `<tr><td class="c-hora">${v.hora}</td><td class="c-neg"><a href="${v.url}" target="_blank" rel="noopener">#${v.id}</a>${esc(v.titulo)}</td><td class="c-val">${m(v.bruto)}</td><td class="c-val">${m(v.multi)}</td></tr>`).join("")}</tbody>
       </table>
-    </div>`).join("");
+    </details>`).join("");
   el.innerHTML = `<h2 class="titulo-tabela">${titulo}</h2>
-    <div class="vd-resumo"><strong>${vd.total.qtd} ${vd.total.qtd === 1 ? "venda" : "vendas"}</strong> · bruto ${m(vd.total.bruto)} · c/ multiplicador ${m(vd.total.multi)}</div>${blocos}`;
+    <div class="vd-resumo"><strong>${vd.total.qtd} ${vd.total.qtd === 1 ? "venda" : "vendas"}</strong> · <span class="vd-lbl">Bruto</span><strong>${m(vd.total.bruto)}</strong> · <span class="vd-lbl">C/ multiplicador</span><strong>${m(vd.total.multi)}</strong></div>${blocos}`;
 }
 
 function renderizarClosers(c) {
