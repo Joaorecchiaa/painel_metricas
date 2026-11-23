@@ -68,6 +68,8 @@
   }
   .aba-btn.ativa { color: var(--ink); border-bottom-color: #0b0b0f; }
   .aba-btn:hover { color: var(--ink); }
+  body.sem-login nav.abas, body.sem-login #paginaMetricas, body.sem-login #paginaProdutos, body.sem-login #paginaPerdidos,
+  body.sem-login #paginaClosers, body.sem-login #paginaMetasBA { display: none !important; }
   .sub { color: rgba(255,255,255,0.55); font-size: 10px; margin-top: 2px; letter-spacing: 0.03em; text-transform: uppercase; }
   .badge-dias-uteis {
     font-size: 11px;
@@ -488,7 +490,7 @@
   thead tr:first-child th { border-bottom: 1px solid var(--border); }
 </style>
 </head>
-<body>
+<body class="sem-login">
 
 <header>
   <div class="header-esquerda">
@@ -537,6 +539,7 @@
 </nav>
 
 <div id="paginaMetricas">
+  <div id="blocoOlympus">
   <h2 class="titulo-tabela">OLYMPUS</h2>
   <div class="tabela-wrap">
     <table id="tabela-financeiro">
@@ -549,7 +552,9 @@
       <tbody id="tabelaFinanceiro"></tbody>
     </table>
   </div>
+  </div>
 
+  <div id="blocoSniper">
   <h2 class="titulo-tabela">SNIPER</h2>
   <div class="tabela-wrap tabela-wrap-estreita">
     <table>
@@ -563,6 +568,7 @@
     </table>
   </div>
   <div id="reunioesPorSdr"></div>
+  </div>
 </div>
 
 <div id="paginaProdutos" style="display:none;">
@@ -668,7 +674,24 @@ function abreLogin() {
   document.getElementById("loginModal").classList.add("show");
   document.getElementById("in-user").focus();
 }
-function fechaLogin() { document.getElementById("loginModal").classList.remove("show"); }
+function fechaLogin() { if (!estaLogado()) return; document.getElementById("loginModal").classList.remove("show"); }
+
+// Segmentação por equipe (a barreira real é o servidor; aqui só esconde o que o papel não usa).
+function aplicarPapelNaUI() {
+  const admin = PAPEL === "admin", oly = PAPEL === "olympus", sni = PAPEL === "sniper";
+  const mostra = (id, v) => { const el = document.getElementById(id); if (el) el.style.display = v ? "" : "none"; };
+  mostra("btnAbaMetasBA", admin);
+  mostra("btnAbaClosers", admin || oly);
+  mostra("blocoOlympus", admin || oly);
+  mostra("blocoSniper", admin || sni);
+  document.body.classList.toggle("sem-login", !estaLogado());
+  const cancel = document.getElementById("loginCancel");
+  if (cancel) cancel.style.display = estaLogado() ? "" : "none";
+}
+function exigeLogin() {
+  aplicarPapelNaUI();
+  if (!estaLogado()) abreLogin();
+}
 
 async function fazLogin() {
   const usuario = document.getElementById("in-user").value.trim();
@@ -688,8 +711,10 @@ async function fazLogin() {
     sessionStorage.setItem("dash_token", TOKEN);
     sessionStorage.setItem("dash_papel", PAPEL);
     sessionStorage.setItem("dash_usuario", USUARIO);
-    fechaLogin();
     atualizaAuthUI();
+    fechaLogin();
+    aplicarPapelNaUI();
+    mostrarPagina("metricas");
     atualizar();
   } catch (e) {
     document.getElementById("loginErro").textContent = "Erro de conexão";
@@ -701,8 +726,7 @@ function logout() {
   sessionStorage.removeItem("dash_token");
   sessionStorage.removeItem("dash_papel");
   sessionStorage.removeItem("dash_usuario");
-  atualizaAuthUI();
-  atualizar();
+  location.reload();
 }
 
 function atualizaAuthUI() {
@@ -732,6 +756,15 @@ async function validaTokenSalvo() {
 }
 
 document.getElementById("btnAuth").addEventListener("click", () => { estaLogado() ? logout() : abreLogin(); });
+function tratarErroAcesso(data) {
+  if (data && data.login_necessario) {
+    sessionStorage.removeItem("dash_token"); sessionStorage.removeItem("dash_papel"); sessionStorage.removeItem("dash_usuario");
+    TOKEN = null; PAPEL = null; USUARIO = null;
+    atualizaAuthUI(); exigeLogin();
+    return true;
+  }
+  return false;
+}
 document.getElementById("loginCancel").addEventListener("click", fechaLogin);
 document.getElementById("loginOk").addEventListener("click", fazLogin);
 document.getElementById("in-pass").addEventListener("keydown", e => { if (e.key === "Enter") fazLogin(); });
@@ -1342,6 +1375,7 @@ async function atualizar() {
   try {
     const resp = await fetch(`${API_URL}?mes=${mesSelecionado}&ano=${anoSelecionado}`, { cache: "no-store", headers: authHeaders() });
     const data = await resp.json();
+    if (tratarErroAcesso(data)) return;
     if (data.erro) throw new Error(data.erro);
     premissasAtual = data.premissas || {};
     const nomeMes = MESES[(data.mes || 1) - 1];
@@ -1356,12 +1390,12 @@ async function atualizar() {
       if (data.squads[s]) data.squads[s]._previsto_hoje_buckets = previstoHojeDet[s] || null;
     });
 
-    document.getElementById("tabelaFinanceiro").innerHTML = tabelaTransposta(METRICAS_FINANCEIRO, [
+    if (data.squads.Olympus) document.getElementById("tabelaFinanceiro").innerHTML = tabelaTransposta(METRICAS_FINANCEIRO, [
       { dados: data.squads.Olympus },
     ]);
     document.getElementById("tabelaFinanceiro").classList.toggle("previsto-aberto", previstoHojeAberto);
 
-    document.getElementById("tabelaSniper").innerHTML = tabelaTransposta(METRICAS_SNIPER, [
+    if (data.squads.Sniper) document.getElementById("tabelaSniper").innerHTML = tabelaTransposta(METRICAS_SNIPER, [
       { dados: data.squads.Sniper },
     ]);
 
@@ -1475,9 +1509,7 @@ async function atualizar() {
       <details class="produto-card">
         <summary>${p} <span class="produto-total-abertos">Total aberto: ${totalAbertosProduto(p)}</span></summary>
         <div class="produto-squads produto-squads-4">
-          ${blocoSquad("Olympus", p)}
-          ${blocoSquad("Sniper", p)}
-          ${blocoSquad("Navigator", p)}
+          ${["Olympus", "Sniper", "Navigator"].filter(sq => numeros[sq]).map(sq => blocoSquad(sq, p)).join("")}
         </div>
       </details>`).join("");
 
@@ -1499,7 +1531,7 @@ async function atualizar() {
 }
 
 atualizaAuthUI();
-validaTokenSalvo().then(atualizar);
+validaTokenSalvo().then(() => { exigeLogin(); if (estaLogado()) atualizar(); });
 setInterval(atualizar, INTERVALO_MS);
 </script>
 
