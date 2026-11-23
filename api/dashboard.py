@@ -1187,11 +1187,33 @@ def montar_closers(ano_param, mes_param):
             "falta_bruto": round(max(0, meta - bruto), 2), "falta_multi": round(max(0, meta - multi), 2),
             "pct_bruto": _m3.atingimento(bruto, meta), "pct_multi": _m3.atingimento(multi, meta),
         })
+    # Detalhamento das vendas do dia (hoje, em Brasília), por closer do Olympus que vendeu — só no mês atual.
+    vendas_dia = {"data": None, "closers": []}
+    if (ano, mes) == (hoje.year, hoje.month):
+        vendas_dia["data"] = hoje.isoformat()
+        for nome, c in colaboradores.items():
+            if c["subarea"] != "mgm":
+                continue
+            do_dia = [d for d in por.get(nome, {}).get("deals", []) if _fuso.data_brasil(d.get("won_time")) == hoje]
+            if not do_dia:
+                continue
+            do_dia.sort(key=lambda d: str(d.get("won_time")))
+            itens = [{"id": d.get("id"), "url": f"https://{PD_DOMAIN}/deal/{d.get('id')}",
+                      "titulo": d.get("title") or f"Negócio {d.get('id')}",
+                      "hora": _fuso.para_brasil(d.get("won_time")).strftime("%H:%M"),
+                      "bruto": round(_m2.bruto([d]), 2), "multi": round(_m2.multiplicador([d]), 2)} for d in do_dia]
+            vendas_dia["closers"].append({"nome": c["nome_exibicao"], "qtd": len(itens),
+                                          "bruto": round(sum(i["bruto"] for i in itens), 2),
+                                          "multi": round(sum(i["multi"] for i in itens), 2), "vendas": itens})
+        vendas_dia["closers"].sort(key=lambda r: -r["multi"])
+        vendas_dia["total"] = {"qtd": sum(r["qtd"] for r in vendas_dia["closers"]),
+                               "bruto": round(sum(r["bruto"] for r in vendas_dia["closers"]), 2),
+                               "multi": round(sum(r["multi"] for r in vendas_dia["closers"]), 2)}
     linhas.sort(key=lambda r: -r["multi"])
     tot = {k: round(sum(r[k] for r in linhas), 2) for k in ("meta", "bruto", "multi", "falta_bruto", "falta_multi")}
     tot["vendas"] = sum(r["vendas"] for r in linhas)
     return {"closers": {"mes": mes, "ano": ano, "aviso": aviso, "linhas": linhas, "total": tot,
-                        "sem_meta": {k: round(v, 2) for k, v in sem_meta.items()},
+                        "sem_meta": {k: round(v, 2) for k, v in sem_meta.items()}, "vendas_dia": vendas_dia,
                         "carimbo": {"crn_versao": crn.versao(), "eixo": "data de ganho", "valor": "bruto e c/ multiplicador",
                                     "recorte": "closers do Olympus com meta", "atualizado": _fuso.agora_brasil().strftime("%d/%m/%Y %H:%M")}}}
 
