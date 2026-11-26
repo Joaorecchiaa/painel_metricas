@@ -382,6 +382,10 @@
   }
   #btnFiltrarPerdidos { background: var(--accent); color: #fff; }
   #btnLimparFiltroPerdidos { background: #f3f4f6; color: var(--ink); }
+  .sub-abas { display: flex; gap: 8px; margin: 4px 0 14px; }
+  .sub-aba-btn { border: 1px solid var(--border); background: #fff; color: var(--muted); font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; padding: 8px 14px; border-radius: 8px; cursor: pointer; }
+  .sub-aba-btn:hover { color: var(--ink); }
+  .sub-aba-btn.ativa { background: var(--ink); color: #fff; border-color: var(--ink); }
   .perdidos-resumo {
     display: flex;
     flex-wrap: wrap;
@@ -609,7 +613,10 @@
     <button class="btn-auth" onclick="abreLogin()">Entrar</button>
   </div>
   <div id="perdidosConteudo">
-    <h2 class="titulo-tabela">PERDIDOS — GERAL</h2>
+    <div class="sub-abas">
+      <button class="sub-aba-btn ativa" id="btnSubPerdGeral" onclick="mostrarSubPerdidos('geral')">Perdidos — Geral</button>
+      <button class="sub-aba-btn" id="btnSubPerdValidadas" onclick="mostrarSubPerdidos('validadas')">Perdidos — Reuniões validadas</button>
+    </div>
     <div class="filtro-perdidos">
       <label>De <input type="date" id="perdidosDataInicio"></label>
       <label>Até <input type="date" id="perdidosDataFim"></label>
@@ -619,6 +626,8 @@
       <button id="btnFiltrarPerdidos" onclick="aplicarFiltroPerdidos()">Filtrar</button>
       <button id="btnLimparFiltroPerdidos" onclick="limparFiltroPerdidos()" style="display:none;">Limpar filtro</button>
     </div>
+    <div id="perdidosSubGeral">
+    <h2 class="titulo-tabela">PERDIDOS — GERAL</h2>
     <div id="resumoPerdidosGeral" class="perdidos-resumo"></div>
     <div id="motivosPerdidosGeral"></div>
 
@@ -629,6 +638,16 @@
     <div class="sub" style="color:var(--muted); margin-bottom:10px;">Motivos de perda fora do esperado pra etapa em que o negócio estava</div>
     <div id="auditoriaPerdidosGeral"></div>
     <div id="cardsAuditoriaFunil" class="perdidos-funis"></div>
+    </div>
+
+    <div id="perdidosSubValidadas" style="display:none;">
+      <h2 class="titulo-tabela">PERDIDOS — REUNIÕES VALIDADAS</h2>
+      <div class="sub" style="color:var(--muted); margin-bottom:10px;">Negócios perdidos com o campo "Reunião validada?" = Sim, pelo motivo de perda. Respeita o período e o responsável do filtro acima.</div>
+      <div id="resumoPerdidosValidadas" class="perdidos-resumo"></div>
+      <div id="motivosPerdidosValidadas"></div>
+      <h2 class="titulo-tabela">REUNIÕES VALIDADAS — POR FUNIL</h2>
+      <div id="cardsPerdidosValidadasFunil" class="perdidos-funis"></div>
+    </div>
   </div>
 </div>
 
@@ -857,6 +876,19 @@ async function aplicarFiltroPerdidos() {
       </div>`;
     document.getElementById("motivosPerdidosGeral").innerHTML =
       `<div class="motivos-lista">${listaMotivos(p.motivos)}</div>`;
+    const pv = p.validadas || { total: 0, motivos: [] };
+    document.getElementById("resumoPerdidosValidadas").innerHTML = `
+      <div class="perdidos-resumo-card">
+        <div class="rotulo">Perdidos no Período (reunião validada)</div>
+        <div class="valor">${pv.total ?? 0}</div>
+      </div>
+      <div class="perdidos-resumo-card">
+        <div class="rotulo">% dos perdidos do período</div>
+        <div class="valor">${p.total ? ((pv.total / p.total) * 100).toFixed(1).replace(".", ",") : "0"}%</div>
+      </div>`;
+    document.getElementById("motivosPerdidosValidadas").innerHTML =
+      `<div class="motivos-lista">${listaMotivos(pv.motivos)}</div>`;
+    document.getElementById("cardsPerdidosValidadasFunil").innerHTML = "";
     document.getElementById("btnLimparFiltroPerdidos").style.display = "";
   } catch (e) {
     alert("Erro ao filtrar: " + e.message);
@@ -875,6 +907,13 @@ function limparFiltroPerdidos() {
 }
 
 let ultimaAnalisePerdidos = null;
+
+function mostrarSubPerdidos(qual) {
+  document.getElementById("perdidosSubGeral").style.display = qual === "geral" ? "" : "none";
+  document.getElementById("perdidosSubValidadas").style.display = qual === "validadas" ? "" : "none";
+  document.getElementById("btnSubPerdGeral").classList.toggle("ativa", qual === "geral");
+  document.getElementById("btnSubPerdValidadas").classList.toggle("ativa", qual === "validadas");
+}
 
 function renderizarPerdidos(analise) {
   ultimaAnalisePerdidos = analise;
@@ -910,6 +949,36 @@ function renderizarPerdidos(analise) {
 
   document.getElementById("motivosPerdidosGeral").innerHTML =
     `<div class="motivos-lista">${listaMotivos(geral.motivos)}</div>`;
+
+  // Perdidos com "Reunião validada?" = Sim
+  const valG = geral.validadas || { total_mes: 0, total_hoje: 0, motivos: [] };
+  document.getElementById("resumoPerdidosValidadas").innerHTML = `
+    <div class="perdidos-resumo-card">
+      <div class="rotulo">Perdidos Hoje (reunião validada)</div>
+      <div class="valor">${valG.total_hoje ?? 0}</div>
+    </div>
+    <div class="perdidos-resumo-card">
+      <div class="rotulo">Perdidos no Mês (reunião validada)</div>
+      <div class="valor">${valG.total_mes ?? 0}</div>
+    </div>
+    <div class="perdidos-resumo-card">
+      <div class="rotulo">% dos perdidos do mês</div>
+      <div class="valor">${geral.total_mes ? ((valG.total_mes / geral.total_mes) * 100).toFixed(1).replace(".", ",") : "0"}%</div>
+    </div>`;
+  document.getElementById("motivosPerdidosValidadas").innerHTML =
+    `<div class="motivos-lista">${listaMotivos(valG.motivos)}</div>`;
+  document.getElementById("cardsPerdidosValidadasFunil").innerHTML = Object.keys(analise.por_funil || {}).map(squad => {
+    const v = ((analise.por_funil || {})[squad] || {}).validadas || { total_mes: 0, total_hoje: 0, motivos: [] };
+    return `
+      <div class="perdidos-funil-card">
+        <div class="perdidos-funil-titulo">${squad}</div>
+        <div class="perdidos-funil-resumo">
+          <span>Hoje: <strong>${v.total_hoje ?? 0}</strong></span>
+          <span>Mês: <strong>${v.total_mes ?? 0}</strong></span>
+        </div>
+        <div class="motivos-lista">${listaMotivos(v.motivos)}</div>
+      </div>`;
+  }).join("");
 
   const porFunil = analise.por_funil || {};
   const funis = Object.keys(porFunil); // 1 funil (papel restrito) ou os 3 (admin)
