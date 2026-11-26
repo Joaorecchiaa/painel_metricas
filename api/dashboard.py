@@ -1374,14 +1374,67 @@ def _motivos_permitidos_na_etapa(etapa_norm):
     return None
 
 
-@functools.lru_cache(maxsize=1)
-def _opcoes_reuniao_validada():
-    return _pd.opcoes_campo(_campo("reuniao_validada"))
+def analisar_perdidos_reunioes_closer(ini, fim, colaboradores, metas, users_map):
+    """Perdidos — Reuniões validadas (visão dos closers do Olympus).
+    Universo: reuniões de closer FEITAS no período (RC1: atividade meeting, no dia do agendamento em Brasília,
+    com deal, sem duplicada e sem IA) cujo deal tem "Reunião Validada?" = Sim (M6: status_validacao).
+    Dessas, os negócios hoje perdidos e o motivo de perda. O closer é quem fez a reunião."""
+    from collections import Counter
+    from crn.regras._atividades import do_tipo
+    from crn.base.texto import responsavel_id
+    id_por_nome = {norm(n): i for i, n in users_map.items()}
+    closer_ids = {id_por_nome[norm(n)] for n, c in colaboradores.items()
+                  if c["subarea"] == "mgm" and (metas.get(n) or {}).get("papel") == "closer" and norm(n) in id_por_nome}
+    atividades = _pd.atividades_do_periodo(ini, fim, tipos=["meeting"], done=True)
+    reunioes = do_tipo(atividades, ["reuniao"], ini, fim, so_feitas=True, responsaveis=closer_ids, sem_ia=True)
+    deals = {d["id"]: d for d in _pd.deals_por_ids({a["deal_id"] for a in reunioes})}
+    status = {i: _m6.status_validacao(d) for i, d in deals.items()}
+    contagem = Counter(status.get(a["deal_id"], "sem_deal") for a in reunioes)  # sim / vazio / nao
+    validadas = sorted((a for a in reunioes if status.get(a["deal_id"]) == "sim"),
+                       key=lambda a: (str(a.get("due_date")), str(a.get("due_time"))))
+    closer_do_deal = {}          # deal → closer da última reunião validada
+    reunioes_por_closer = Counter()
+    for a in validadas:
+        cid = responsavel_id(a)
+        closer_do_deal[a["deal_id"]] = cid
+        reunioes_por_closer[cid] += 1
+    deals_val = list(closer_do_deal)
+    perdidos = [i for i in deals_val if deals[i].get("status") == "lost"]
 
+    def motivos_de(ids):
+        por_motivo = {}
+        for i in ids:
+            por_motivo.setdefault((deals[i].get("lost_reason") or "").strip() or "Sem motivo", []).append(i)
+        itens = []
+        for motivo, lista in por_motivo.items():
+            por_closer = {}
+            for i in lista:
+                por_closer.setdefault(users_map.get(closer_do_deal[i], "—"), []).append(
+                    {"id": i, "url": f"https://{PD_DOMAIN}/deal/{i}"})
+            itens.append({
+                "motivo": motivo, "quantidade": len(lista),
+                "percentual": round(safe_div(len(lista), len(ids)) * 100, 1),
+                "colaboradores": {"Closer": sorted(
+                    [{"nome": n, "quantidade": len(v), "negocios": v[:MAX_NEGOCIOS_POR_COLABORADOR]} for n, v in por_closer.items()],
+                    key=lambda x: -x["quantidade"]), "SDR": [], "Outro": []},
+            })
+        return sorted(itens, key=lambda x: -x["quantidade"])
 
-def reuniao_validada_sim(deal):
-    """Campo "Reunião Validada?" do negócio = Sim (M6: status_validacao). Vazio e Não ficam de fora."""
-    return _m6.status_validacao(deal, _opcoes_reuniao_validada()) == "sim"
+    por_closer = []
+    for cid, qtd in reunioes_por_closer.most_common():
+        meus = [i for i in deals_val if closer_do_deal[i] == cid]
+        perd = [i for i in meus if i in set(perdidos)]
+        por_closer.append({"nome": users_map.get(cid, str(cid)), "reunioes": qtd, "negocios": len(meus),
+                           "perdidos": len(perd), "pct_perdidos": round(safe_div(len(perd), len(meus)) * 100, 1),
+                           "motivos": motivos_de(perd)})
+    return {
+        "periodo_inicio": ini.isoformat(), "periodo_fim": fim.isoformat(),
+        "reunioes_feitas": len(reunioes), "status_campo": {"sim": contagem.get("sim", 0), "vazio": contagem.get("vazio", 0),
+                                                           "nao": contagem.get("nao", 0)},
+        "reunioes_validadas": len(validadas), "negocios": len(deals_val), "perdidos": len(perdidos),
+        "pct_perdidos": round(safe_div(len(perdidos), len(deals_val)) * 100, 1),
+        "motivos": motivos_de(perdidos), "por_closer": por_closer,
+    }
 
 
 def analisar_perdidos_periodo(data_inicio, data_fim, colaboradores, users_map, responsavel_norm=None, squad_unico=None):
@@ -1392,7 +1445,6 @@ def analisar_perdidos_periodo(data_inicio, data_fim, colaboradores, users_map, r
     ate_iso = f"{data_fim.isoformat()}T23:59:59Z"
 
     motivos_geral = {}
-    motivos_val = {}
     total = 0
     squads_para_buscar = [squad_unico] if squad_unico else SQUADS_PRODUTOS
     for squad_interno in squads_para_buscar:
@@ -1412,14 +1464,10 @@ def analisar_perdidos_periodo(data_inicio, data_fim, colaboradores, users_map, r
             total += 1
             motivo = (d.get("lost_reason") or "").strip() or "Sem motivo"
             motivos_geral.setdefault(motivo, []).append(d)
-            if reuniao_validada_sim(d):
-                motivos_val.setdefault(motivo, []).append(d)
 
-    total_val = sum(len(v) for v in motivos_val.values())
     return {
         "total": total,
         "motivos": _motivos_com_percentual(motivos_geral, total, colaboradores, users_map),
-        "validadas": {"total": total_val, "motivos": _motivos_com_percentual(motivos_val, total_val, colaboradores, users_map)},
         "periodo_inicio": data_inicio.isoformat(),
         "periodo_fim": data_fim.isoformat(),
     }
@@ -1437,14 +1485,12 @@ def analisar_perdidos(ano, mes, hoje, colaboradores, users_map):
     motivos_geral = {}  # motivo -> [negócio, ...]
     total_mes_geral = 0
     total_hoje_geral = 0
-    motivos_val_geral, val_mes_geral, val_hoje_geral = {}, 0, 0   # perdidos com "Reunião Validada?" = Sim
     auditoria_geral = {}  # etapa -> {motivo: [negócio, ...]}
     responsaveis_vistos = set()
 
     for squad_interno in SQUADS_PRODUTOS:
         pipeline_id = _pipeline_id_do_squad(squad_interno)
         motivos_funil = {}
-        motivos_val_funil, val_mes, val_hoje = {}, 0, 0
         total_mes = 0
         total_hoje = 0
         auditoria_funil = {}
@@ -1462,12 +1508,6 @@ def analisar_perdidos(ano, mes, hoje, colaboradores, users_map):
                 motivo = (d.get("lost_reason") or "").strip() or "Sem motivo"
                 motivos_funil.setdefault(motivo, []).append(d)
                 motivos_geral.setdefault(motivo, []).append(d)
-                if reuniao_validada_sim(d):
-                    val_mes += 1
-                    if lost_brt.date() == hoje:
-                        val_hoje += 1
-                    motivos_val_funil.setdefault(motivo, []).append(d)
-                    motivos_val_geral.setdefault(motivo, []).append(d)
 
                 # Auditoria: o motivo faz sentido pra etapa em que o negócio estava?
                 motivo_norm = norm(motivo)
@@ -1488,8 +1528,6 @@ def analisar_perdidos(ano, mes, hoje, colaboradores, users_map):
             "total_mes": total_mes,
             "total_hoje": total_hoje,
             "motivos": _motivos_com_percentual(motivos_funil, total_mes, colaboradores, users_map),
-            "validadas": {"total_mes": val_mes, "total_hoje": val_hoje,
-                          "motivos": _motivos_com_percentual(motivos_val_funil, val_mes, colaboradores, users_map)},
             "auditoria": [
                 {
                     "etapa": etapa,
@@ -1501,16 +1539,12 @@ def analisar_perdidos(ano, mes, hoje, colaboradores, users_map):
         }
         total_mes_geral += total_mes
         total_hoje_geral += total_hoje
-        val_mes_geral += val_mes
-        val_hoje_geral += val_hoje
 
     return {
         "geral": {
             "total_mes": total_mes_geral,
             "total_hoje": total_hoje_geral,
             "motivos": _motivos_com_percentual(motivos_geral, total_mes_geral, colaboradores, users_map),
-            "validadas": {"total_mes": val_mes_geral, "total_hoje": val_hoje_geral,
-                          "motivos": _motivos_com_percentual(motivos_val_geral, val_mes_geral, colaboradores, users_map)},
             "auditoria": [
                 {
                     "etapa": etapa,
@@ -2240,7 +2274,7 @@ class handler(BaseHTTPRequestHandler):
                 negado = (401, "Login necessário.")
             elif rota in ("metas_ba", "historico_mql_ganhos", "atingimento_historico") and papel_sessao != "admin":
                 negado = (403, "Sem acesso a esta aba.")
-            elif rota == "closers" and papel_sessao not in ("admin", "olympus"):
+            elif rota in ("closers", "perdidos_reunioes") and papel_sessao not in ("admin", "olympus"):
                 negado = (403, "Sem acesso a esta aba.")
             if negado:
                 body = json.dumps({"erro": negado[1], "login_necessario": negado[0] == 401}, ensure_ascii=False).encode("utf-8")
@@ -2253,6 +2287,27 @@ class handler(BaseHTTPRequestHandler):
 
             if rota == "metas_ba":
                 payload = montar_resposta_metas_ba(mes_param, ano_param)
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            if rota == "perdidos_reunioes":
+                hoje_r = hoje_brt()
+                a_, m_ = ano_param or hoje_r.year, mes_param or hoje_r.month
+                ini_r = dt.date(a_, m_, 1)
+                fim_r = min(dt.date(a_, m_, calendar.monthrange(a_, m_)[1]), hoje_r) if (a_, m_) == (hoje_r.year, hoje_r.month) \
+                    else dt.date(a_, m_, calendar.monthrange(a_, m_)[1])
+                di, df = query.get("perdidos_inicio", [None])[0], query.get("perdidos_fim", [None])[0]
+                if di and df:
+                    ini_r, fim_r = dt.date.fromisoformat(di), dt.date.fromisoformat(df)
+                _, _, colab_r, metas_r, _ = carregar_mes_com_fallback(a_, m_)
+                payload = {"perdidos_reunioes": analisar_perdidos_reunioes_closer(ini_r, fim_r, colab_r, metas_r, pd_users())}
+                payload["perdidos_reunioes"]["carimbo"] = {"crn_versao": crn.versao(), "regra": "RC1 + M6 (Reunião Validada? = Sim)",
+                                                           "atualizado": _fuso.agora_brasil().strftime("%d/%m/%Y %H:%M")}
                 body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
