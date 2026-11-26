@@ -642,7 +642,7 @@
 
     <div id="perdidosSubValidadas" style="display:none;">
       <h2 class="titulo-tabela">PERDIDOS — REUNIÕES VALIDADAS (CLOSERS)</h2>
-      <div class="sub" style="color:var(--muted); margin-bottom:10px;">Reuniões feitas pelos closers no período, com "Reunião validada?" = Sim no negócio. Desses negócios, os que hoje estão perdidos e o motivo. Respeita as datas do filtro acima (sem datas = mês selecionado).</div>
+      <div class="sub" style="color:var(--muted); margin-bottom:10px;">Reuniões validadas do período (as mesmas das Métricas do Sniper: campo "Reunião validada?" = Sim ou vazio). Desses negócios, os que hoje estão perdidos e o motivo. Respeita as datas do filtro acima (sem datas = mês selecionado).</div>
       <div id="perdidosValidadasCarregando" class="status-vazio" style="padding:14px 0;">Clique em "Perdidos — Reuniões validadas" pra carregar</div>
       <div id="perdidosValidadasConteudo" style="display:none;">
         <div id="resumoPerdidosValidadas" class="perdidos-resumo"></div>
@@ -947,7 +947,7 @@ function renderizarPerdidosReunioes(r) {
     <div class="perdidos-resumo-card"><div class="rotulo">% perdidos</div><div class="valor">${String(r.pct_perdidos).replace(".", ",")}%</div></div>`;
   const s = r.status_campo;
   document.getElementById("statusCampoValidadas").textContent =
-    `Período ${fmt(r.periodo_inicio)} a ${fmt(r.periodo_fim)} · Reuniões feitas dos closers: ${r.reunioes_feitas} (campo "Reunião validada?": Sim ${s.sim} · vazio ${s.vazio} · Não ${s.nao}). Só entram as com Sim.`;
+    `Período ${fmt(r.periodo_inicio)} a ${fmt(r.periodo_fim)} · Reuniões feitas do Sniper: ${r.reunioes_feitas} (campo "Reunião validada?": Sim ${s.sim} · vazio ${s.vazio} · Não ${s.nao}). Entram Sim e vazio, igual às Métricas.`;
   document.getElementById("motivosPerdidosValidadas").innerHTML = `<div class="motivos-lista">${listaMotivos(r.motivos)}</div>`;
   document.getElementById("cardsPerdidosValidadasFunil").innerHTML = r.por_closer.map(c => `
     <div class="perdidos-funil-card">
