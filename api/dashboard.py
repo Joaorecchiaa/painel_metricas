@@ -1375,29 +1375,34 @@ def _motivos_permitidos_na_etapa(etapa_norm):
 
 
 def analisar_perdidos_reunioes_closer(ini, fim, colaboradores, metas, users_map):
-    """Perdidos — Reuniões validadas (visão dos closers do Olympus).
-    Universo: reuniões de closer FEITAS no período (RC1: atividade meeting, no dia do agendamento em Brasília,
-    com deal, sem duplicada e sem IA) cujo deal tem "Reunião Validada?" = Sim (M6: status_validacao).
-    Dessas, os negócios hoje perdidos e o motivo de perda. O closer é quem fez a reunião."""
+    """Perdidos — Reuniões validadas. Universo = o MESMO das Métricas do Sniper (M6, CRN): reuniões feitas
+    do SDR, no período, com deal validado (Sim ou vazio). Dessas, os negócios hoje perdidos e o motivo.
+    Visão closer: o negócio é do closer que é dono dele hoje."""
     from collections import Counter
-    from crn.regras._atividades import do_tipo
-    from crn.base.texto import responsavel_id
-    id_por_nome = {norm(n): i for i, n in users_map.items()}
-    closer_ids = {id_por_nome[norm(n)] for n, c in colaboradores.items()
-                  if c["subarea"] == "mgm" and (metas.get(n) or {}).get("papel") == "closer" and norm(n) in id_por_nome}
-    atividades = _pd.atividades_do_periodo(ini, fim, tipos=["meeting"], done=True)
-    reunioes = do_tipo(atividades, ["reuniao"], ini, fim, so_feitas=True, responsaveis=closer_ids, sem_ia=True)
-    deals = {d["id"]: d for d in _pd.deals_por_ids({a["deal_id"] for a in reunioes})}
-    status = {i: _m6.status_validacao(d) for i, d in deals.items()}
-    contagem = Counter(status.get(a["deal_id"], "sem_deal") for a in reunioes)  # sim / vazio / nao
-    validadas = sorted((a for a in reunioes if status.get(a["deal_id"]) == "sim"),
-                       key=lambda a: (str(a.get("due_date")), str(a.get("due_time"))))
-    closer_do_deal = {}          # deal → closer da última reunião validada
+    colab_lista = next(iter(colaboradores.values()))["_colab"] if colaboradores else []
+    uid_por_nome = {norm(n): i for i, n in users_map.items()}
+    sdr_ids = {uid_por_nome[n] for n, m in metas.items() if m.get("papel") == "sdr" and n in uid_por_nome}
+    lideranca_ids = {uid_por_nome[p["nome_norm"]] for p in colab_lista
+                     if p["nome_norm"] in uid_por_nome and _h1.nivel(p, colab_lista) in ("head", "team_leader", "gerente")}
+    lider_agenda_ids = _m6.lideranca_que_agenda(colab_lista, uid_por_nome)
+    sdr_sniper_nomes = {n for n, m in metas.items() if m.get("papel") == "sdr" and colaboradores.get(n, {}).get("subarea") == SQUAD_SDR}
+    ids_excluidos = {uid_por_nome[n] for n in EXCLUIDOS_PAINEL if n in uid_por_nome}
+    ids_sniper = ({uid_por_nome[n] for n in sdr_sniper_nomes if n in uid_por_nome} | set(lider_agenda_ids)) - ids_excluidos
+    dados = _m6.carregar_periodo(ini, fim)
+    kw = dict(dono_do_deal=dados["dono_do_deal"], sdr_ids=sdr_ids, lideranca_ids=lideranca_ids,
+              lideranca_que_agenda_ids=lider_agenda_ids)
+    universo = [it for it in _m6.reunioes_com_status(dados["atividades"], ini, fim, status_do_deal=dados["status_do_deal"], **kw)
+                if it["responsavel"] in ids_sniper]
+    contagem = Counter(it["status"] for it in universo)
+    validadas = [it for it in universo if it["validada"]]      # = as validadas das Métricas do Sniper
+    deals = {d["id"]: d for d in dados["deals"]}
+    closer_do_deal = {}          # deal → closer (quem fez a reunião na reabertura, senão o dono atual do deal)
     reunioes_por_closer = Counter()
-    for a in validadas:
-        cid = responsavel_id(a)
-        closer_do_deal[a["deal_id"]] = cid
-        reunioes_por_closer[cid] += 1
+    for it in validadas:
+        i = it["deal_id"]
+        cid = it["closer_reabertura"] or dados["dono_do_deal"].get(i)
+        closer_do_deal.setdefault(i, cid)
+        reunioes_por_closer[closer_do_deal[i]] += 1
     deals_val = list(closer_do_deal)
     perdidos = [i for i in deals_val if deals[i].get("status") == "lost"]
 
@@ -1429,7 +1434,7 @@ def analisar_perdidos_reunioes_closer(ini, fim, colaboradores, metas, users_map)
                            "motivos": motivos_de(perd)})
     return {
         "periodo_inicio": ini.isoformat(), "periodo_fim": fim.isoformat(),
-        "reunioes_feitas": len(reunioes), "status_campo": {"sim": contagem.get("sim", 0), "vazio": contagem.get("vazio", 0),
+        "reunioes_feitas": sum(contagem.values()), "status_campo": {"sim": contagem.get("sim", 0), "vazio": contagem.get("vazio", 0),
                                                            "nao": contagem.get("nao", 0)},
         "reunioes_validadas": len(validadas), "negocios": len(deals_val), "perdidos": len(perdidos),
         "pct_perdidos": round(safe_div(len(perdidos), len(deals_val)) * 100, 1),
@@ -2306,7 +2311,7 @@ class handler(BaseHTTPRequestHandler):
                     ini_r, fim_r = dt.date.fromisoformat(di), dt.date.fromisoformat(df)
                 _, _, colab_r, metas_r, _ = carregar_mes_com_fallback(a_, m_)
                 payload = {"perdidos_reunioes": analisar_perdidos_reunioes_closer(ini_r, fim_r, colab_r, metas_r, pd_users())}
-                payload["perdidos_reunioes"]["carimbo"] = {"crn_versao": crn.versao(), "regra": "RC1 + M6 (Reunião Validada? = Sim)",
+                payload["perdidos_reunioes"]["carimbo"] = {"crn_versao": crn.versao(), "regra": "M6 (mesmas reuniões validadas das Métricas: Sim ou vazio)",
                                                            "atualizado": _fuso.agora_brasil().strftime("%d/%m/%Y %H:%M")}
                 body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 self.send_response(200)
