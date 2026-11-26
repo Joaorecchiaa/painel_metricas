@@ -1374,6 +1374,16 @@ def _motivos_permitidos_na_etapa(etapa_norm):
     return None
 
 
+@functools.lru_cache(maxsize=1)
+def _opcoes_reuniao_validada():
+    return _pd.opcoes_campo(_campo("reuniao_validada"))
+
+
+def reuniao_validada_sim(deal):
+    """Campo "Reunião Validada?" do negócio = Sim (M6: status_validacao). Vazio e Não ficam de fora."""
+    return _m6.status_validacao(deal, _opcoes_reuniao_validada()) == "sim"
+
+
 def analisar_perdidos_periodo(data_inicio, data_fim, colaboradores, users_map, responsavel_norm=None, squad_unico=None):
     """Versão da análise 'Perdidos — Geral' com período customizado (não o mês inteiro)
     e filtro opcional por responsável (dono do negócio). squad_unico restringe a busca
@@ -1382,6 +1392,7 @@ def analisar_perdidos_periodo(data_inicio, data_fim, colaboradores, users_map, r
     ate_iso = f"{data_fim.isoformat()}T23:59:59Z"
 
     motivos_geral = {}
+    motivos_val = {}
     total = 0
     squads_para_buscar = [squad_unico] if squad_unico else SQUADS_PRODUTOS
     for squad_interno in squads_para_buscar:
@@ -1401,10 +1412,14 @@ def analisar_perdidos_periodo(data_inicio, data_fim, colaboradores, users_map, r
             total += 1
             motivo = (d.get("lost_reason") or "").strip() or "Sem motivo"
             motivos_geral.setdefault(motivo, []).append(d)
+            if reuniao_validada_sim(d):
+                motivos_val.setdefault(motivo, []).append(d)
 
+    total_val = sum(len(v) for v in motivos_val.values())
     return {
         "total": total,
         "motivos": _motivos_com_percentual(motivos_geral, total, colaboradores, users_map),
+        "validadas": {"total": total_val, "motivos": _motivos_com_percentual(motivos_val, total_val, colaboradores, users_map)},
         "periodo_inicio": data_inicio.isoformat(),
         "periodo_fim": data_fim.isoformat(),
     }
@@ -1422,12 +1437,14 @@ def analisar_perdidos(ano, mes, hoje, colaboradores, users_map):
     motivos_geral = {}  # motivo -> [negócio, ...]
     total_mes_geral = 0
     total_hoje_geral = 0
+    motivos_val_geral, val_mes_geral, val_hoje_geral = {}, 0, 0   # perdidos com "Reunião Validada?" = Sim
     auditoria_geral = {}  # etapa -> {motivo: [negócio, ...]}
     responsaveis_vistos = set()
 
     for squad_interno in SQUADS_PRODUTOS:
         pipeline_id = _pipeline_id_do_squad(squad_interno)
         motivos_funil = {}
+        motivos_val_funil, val_mes, val_hoje = {}, 0, 0
         total_mes = 0
         total_hoje = 0
         auditoria_funil = {}
@@ -1445,6 +1462,12 @@ def analisar_perdidos(ano, mes, hoje, colaboradores, users_map):
                 motivo = (d.get("lost_reason") or "").strip() or "Sem motivo"
                 motivos_funil.setdefault(motivo, []).append(d)
                 motivos_geral.setdefault(motivo, []).append(d)
+                if reuniao_validada_sim(d):
+                    val_mes += 1
+                    if lost_brt.date() == hoje:
+                        val_hoje += 1
+                    motivos_val_funil.setdefault(motivo, []).append(d)
+                    motivos_val_geral.setdefault(motivo, []).append(d)
 
                 # Auditoria: o motivo faz sentido pra etapa em que o negócio estava?
                 motivo_norm = norm(motivo)
@@ -1465,6 +1488,8 @@ def analisar_perdidos(ano, mes, hoje, colaboradores, users_map):
             "total_mes": total_mes,
             "total_hoje": total_hoje,
             "motivos": _motivos_com_percentual(motivos_funil, total_mes, colaboradores, users_map),
+            "validadas": {"total_mes": val_mes, "total_hoje": val_hoje,
+                          "motivos": _motivos_com_percentual(motivos_val_funil, val_mes, colaboradores, users_map)},
             "auditoria": [
                 {
                     "etapa": etapa,
@@ -1476,12 +1501,16 @@ def analisar_perdidos(ano, mes, hoje, colaboradores, users_map):
         }
         total_mes_geral += total_mes
         total_hoje_geral += total_hoje
+        val_mes_geral += val_mes
+        val_hoje_geral += val_hoje
 
     return {
         "geral": {
             "total_mes": total_mes_geral,
             "total_hoje": total_hoje_geral,
             "motivos": _motivos_com_percentual(motivos_geral, total_mes_geral, colaboradores, users_map),
+            "validadas": {"total_mes": val_mes_geral, "total_hoje": val_hoje_geral,
+                          "motivos": _motivos_com_percentual(motivos_val_geral, val_mes_geral, colaboradores, users_map)},
             "auditoria": [
                 {
                     "etapa": etapa,
